@@ -1,4 +1,13 @@
-export type Tool = "rectangle" | "ellipse" | "line" | "freehand" | "eraser";
+export type Tool =
+  | "rectangle"
+  | "ellipse"
+  | "line"
+  | "freehand"
+  | "highlighter"
+  | "eraser"
+  | "text"
+  | "image"
+  | "select";
 export type FillStyle = "none" | "hachure" | "solid";
 export type Point = { x: number; y: number };
 
@@ -14,5 +23,11 @@ export type SketchElement = {
   fillColor: string;
   fillStyle: FillStyle;
   strokeWidth: number;
+  opacity?: number;
+  text?: string;
   points?: Point[];
+  src?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: "normal" | "bold";
 };
