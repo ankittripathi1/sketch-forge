@@ -5,36 +5,56 @@ import { Point } from "@repo/canvas-core/types";
 
 interface SketchCanvasProps {
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>;
-  interactiveCanvasRef: RefObject<HTMLCanvasElement | null>;
+  interactionCanvasRef: RefObject<HTMLCanvasElement | null>;
+  isPanning: boolean;
   onPointerDown: (p: Point) => void;
   onPointerMove: (p: Point) => void;
   onPointerUp: () => void;
+  onZoom: (delta: number, cursor: Point) => void;
 }
 
 export function SketchCanvas({
-  sceneCanvasRef: staticCanvasRef,
-  interactiveCanvasRef: dynamicCanvasRef,
+  sceneCanvasRef,
+  interactionCanvasRef,
+  isPanning,
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onZoom,
 }: SketchCanvasProps) {
   useEffect(() => {
-    [staticCanvasRef, dynamicCanvasRef].forEach((ref) => {
+    [sceneCanvasRef, interactionCanvasRef].forEach((ref) => {
       const canvas = ref.current!;
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     });
-  }, [staticCanvasRef, dynamicCanvasRef]);
+  }, [sceneCanvasRef, interactionCanvasRef]);
+
+  useEffect(() => {
+    const canvas = interactionCanvasRef.current;
+    if (!canvas) return;
+    function handleWheel(e: WheelEvent) {
+      e.preventDefault();
+      onZoom(-e.deltaY * 0.001, { x: e.clientX, y: e.clientY });
+    }
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, [interactionCanvasRef, onZoom]);
 
   return (
     <div className="absolute inset-0">
-      <canvas ref={staticCanvasRef} className="absolute inset-0" />
+      <canvas ref={sceneCanvasRef} className="absolute inset-0" />
       <canvas
-        ref={dynamicCanvasRef}
+        ref={interactionCanvasRef}
         className="absolute inset-0"
-        onMouseDown={(e) => onPointerDown({ x: e.clientX, y: e.clientY })}
-        onMouseMove={(e) => onPointerMove({ x: e.clientX, y: e.clientY })}
-        onMouseUp={onPointerUp}
+        onPointerDown={(e) => onPointerDown({ x: e.clientX, y: e.clientY })}
+        onPointerMove={(e) => onPointerMove({ x: e.clientX, y: e.clientY })}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        style={{
+          touchAction: "none",
+          cursor: isPanning ? "grab" : "crosshair",
+        }}
       />
     </div>
   );
