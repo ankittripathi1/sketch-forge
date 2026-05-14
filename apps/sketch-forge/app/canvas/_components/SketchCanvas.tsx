@@ -6,10 +6,11 @@ import { Point } from "@repo/canvas-core/types";
 interface SketchCanvasProps {
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>;
   interactionCanvasRef: RefObject<HTMLCanvasElement | null>;
-  onPointerDown: (p: Point) => void;
+  onPointerDown: (p: Point, e: React.PointerEvent) => void;
   onPointerMove: (p: Point) => void;
   onPointerUp: () => void;
   onZoom: (delta: number, p: Point) => void;
+  onPan: (dx: number, dy: number) => void;
   getCursorForPoint: (p: Point) => string;
   onDrop: (e: DragEvent, p: Point) => void;
   onDoubleClick: (p: Point) => void;
@@ -24,6 +25,7 @@ export function SketchCanvas({
   onPointerMove,
   onPointerUp,
   onZoom,
+  onPan,
   getCursorForPoint,
   onDrop,
   onDoubleClick,
@@ -55,7 +57,7 @@ export function SketchCanvas({
       className="absolute inset-0 w-full h-full touch-none"
       onPointerDown={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
-        onPointerDown({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        onPointerDown({ x: e.clientX - rect.left, y: e.clientY - rect.top }, e);
       }}
       onPointerMove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -69,7 +71,13 @@ export function SketchCanvas({
         const rect = e.currentTarget.getBoundingClientRect();
         const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const delta = e.deltaY * -0.001;
-        onZoom(delta, p);
+        if (e.ctrlKey || e.metaKey) {
+          onZoom(delta, p);
+        } else if (e.shiftKey) {
+          onPan(e.deltaX, 0);
+        } else {
+          onPan(0, e.deltaY);
+        }
       }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {

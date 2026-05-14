@@ -1,0 +1,33 @@
+{
+  "name": "api",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir ./dist",
+    "start": "bun dist/index.js",
+    "lint": "eslint . --max-warning 0",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@repo/db": "*",
+    "@repo/schema": "*",
+    "arctic": "^3.7.0",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.18",
+    "jose": "^6.2.3",
+    "oslo": "^1.2.1",
+    "resend": "^6.12.3",
+    "zod": "^4.4.3"
+  }
+}

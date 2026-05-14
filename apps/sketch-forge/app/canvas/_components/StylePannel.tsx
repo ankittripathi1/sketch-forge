@@ -4,16 +4,34 @@ import { Pipette, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Tool, FillStyle } from "@repo/canvas-core/types";
 
-const COLORS = [
-  { label: "Black",  value: "#1a1a2e" },
-  { label: "Gray",   value: "#6c7086" },
-  { label: "Red",    value: "#e05c7a" },
+/**
+ * Colors ordered for a light canvas — dark anchors first, light last.
+ */
+const COLORS_LIGHT = [
+  { label: "Black", value: "#1a1a2e" },
+  { label: "Gray", value: "#6c7086" },
+  { label: "Red", value: "#e05c7a" },
   { label: "Orange", value: "#e8845a" },
-  { label: "Amber",  value: "#e8a830" },
-  { label: "Green",  value: "#5ab98a" },
-  { label: "Blue",   value: "#5a8ae8" },
+  { label: "Amber", value: "#e8a830" },
+  { label: "Green", value: "#5ab98a" },
+  { label: "Blue", value: "#5a8ae8" },
   { label: "Purple", value: "#a06ae8" },
-  { label: "White",  value: "#f5f5f0" },
+  { label: "White", value: "#f5f5f0" },
+];
+
+/**
+ * Colors ordered for a dark canvas — light anchors first, dark last.
+ */
+const COLORS_DARK = [
+  { label: "White", value: "#e8e6d8" },
+  { label: "Light Gray", value: "#b0b3c6" },
+  { label: "Red", value: "#e05c7a" },
+  { label: "Orange", value: "#e8845a" },
+  { label: "Amber", value: "#e8a830" },
+  { label: "Green", value: "#5ab98a" },
+  { label: "Blue", value: "#5a8ae8" },
+  { label: "Purple", value: "#a06ae8" },
+  { label: "Black", value: "#1a1a2e" },
 ];
 
 const FILL_STYLES: { value: FillStyle; label: string; icon: ReactNode }[] = [
@@ -22,8 +40,24 @@ const FILL_STYLES: { value: FillStyle; label: string; icon: ReactNode }[] = [
     label: "No fill",
     icon: (
       <svg width="13" height="13" viewBox="0 0 14 14">
-        <rect x="1" y="1" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" strokeWidth="1.3" />
+        <rect
+          x="1"
+          y="1"
+          width="12"
+          height="12"
+          rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+        <line
+          x1="2"
+          y1="12"
+          x2="12"
+          y2="2"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
       </svg>
     ),
   },
@@ -32,10 +66,40 @@ const FILL_STYLES: { value: FillStyle; label: string; icon: ReactNode }[] = [
     label: "Hachure",
     icon: (
       <svg width="13" height="13" viewBox="0 0 14 14">
-        <rect x="1" y="1" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <line x1="3" y1="11" x2="11" y2="3" stroke="currentColor" strokeWidth="1" />
-        <line x1="1" y1="9"  x2="9"  y2="1" stroke="currentColor" strokeWidth="1" />
-        <line x1="5" y1="13" x2="13" y2="5" stroke="currentColor" strokeWidth="1" />
+        <rect
+          x="1"
+          y="1"
+          width="12"
+          height="12"
+          rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+        <line
+          x1="3"
+          y1="11"
+          x2="11"
+          y2="3"
+          stroke="currentColor"
+          strokeWidth="1"
+        />
+        <line
+          x1="1"
+          y1="9"
+          x2="9"
+          y2="1"
+          stroke="currentColor"
+          strokeWidth="1"
+        />
+        <line
+          x1="5"
+          y1="13"
+          x2="13"
+          y2="5"
+          stroke="currentColor"
+          strokeWidth="1"
+        />
       </svg>
     ),
   },
@@ -44,29 +108,49 @@ const FILL_STYLES: { value: FillStyle; label: string; icon: ReactNode }[] = [
     label: "Solid",
     icon: (
       <svg width="13" height="13" viewBox="0 0 14 14">
-        <rect x="1" y="1" width="12" height="12" rx="1.5" fill="currentColor" stroke="currentColor" strokeWidth="1.3" />
+        <rect
+          x="1"
+          y="1"
+          width="12"
+          height="12"
+          rx="1.5"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
       </svg>
     ),
   },
 ];
 
 const WIDTHS = [
-  { value: 1.5, label: "Thin",   thickness: 1 },
-  { value: 3,   label: "Medium", thickness: 2.5 },
-  { value: 5,   label: "Bold",   thickness: 4 },
+  { value: 1.5, label: "Thin", thickness: 1 },
+  { value: 3, label: "Medium", thickness: 2.5 },
+  { value: 5, label: "Bold", thickness: 4 },
 ];
 
 const FONTS = [
-  { label: "Caveat",        value: '"Caveat", cursive',             group: "Handwriting" },
-  { label: "Kalam",         value: "Kalam, cursive",               group: "Handwriting" },
-  { label: "Indie Flower",  value: '"Indie Flower", cursive',      group: "Handwriting" },
-  { label: "Patrick Hand",  value: '"Patrick Hand", cursive',      group: "Handwriting" },
-  { label: "Inter",         value: "Inter, sans-serif",            group: "Simple" },
-  { label: "Poppins",       value: "Poppins, sans-serif",          group: "Simple" },
-  { label: "Nunito",        value: "Nunito, sans-serif",           group: "Clean" },
-  { label: "Lato",          value: "Lato, sans-serif",             group: "Clean" },
-  { label: "Merriweather",  value: "Merriweather, serif",          group: "Clean" },
-  { label: "Courier Prime", value: '"Courier Prime", monospace',   group: "Clean" },
+  { label: "Kalam", value: "Kalam, cursive", group: "Handwriting" },
+  {
+    label: "Indie Flower",
+    value: '"Indie Flower", cursive',
+    group: "Handwriting",
+  },
+  {
+    label: "Patrick Hand",
+    value: '"Patrick Hand", cursive',
+    group: "Handwriting",
+  },
+  { label: "Inter", value: "Inter, sans-serif", group: "Simple" },
+  { label: "Poppins", value: "Poppins, sans-serif", group: "Simple" },
+  { label: "Nunito", value: "Nunito, sans-serif", group: "Clean" },
+  { label: "Lato", value: "Lato, sans-serif", group: "Clean" },
+  { label: "Merriweather", value: "Merriweather, serif", group: "Clean" },
+  {
+    label: "Courier Prime",
+    value: '"Courier Prime", monospace',
+    group: "Clean",
+  },
 ];
 
 const RECENT_COLORS_KEY = "sketch-forge:recent-colors";
@@ -93,6 +177,8 @@ interface StylePanelProps {
   onFontFamily: (v: string) => void;
   onFontSize: (v: number) => void;
   onFontWeight: (v: "normal" | "bold") => void;
+  /** Drives which color palette is shown: dark canvas → light-first colors */
+  canvasMode?: "light" | "dark";
 }
 
 export function StylePanel({
@@ -112,10 +198,13 @@ export function StylePanel({
   onFontFamily,
   onFontSize,
   onFontWeight,
+  canvasMode = "light",
 }: StylePanelProps) {
+  const COLORS = canvasMode === "dark" ? COLORS_DARK : COLORS_LIGHT;
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const activeTool = selectedTool ?? tool;
+  // Keep the COLORS variable in scope for the JSX below (derived above in function body)
 
   useEffect(() => {
     try {
@@ -171,16 +260,16 @@ export function StylePanel({
         type="button"
         title="Style controls"
         onClick={() => setIsOpen(true)}
-        className="absolute bottom-[76px] right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl bg-[oklch(0.18_0.012_260)] text-[oklch(0.72_0.01_260)] shadow-[0_6px_20px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] sm:hidden"
+        className="absolute bottom-19 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl bg-[oklch(0.18_0.012_260)] text-[oklch(0.72_0.01_260)] shadow-[0_6px_20px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] sm:hidden"
       >
         <SlidersHorizontal size={19} strokeWidth={1.7} />
       </button>
 
       <div
         className={[
-          "absolute bottom-[76px] left-3 right-3 z-30 max-h-[48vh] flex-col gap-3.5 overflow-y-auto overflow-x-hidden rounded-2xl bg-[oklch(0.18_0.012_260)] p-3.5 shadow-[0_8px_32px_oklch(0_0_0/0.45),inset_0_1px_0_oklch(1_0_0/0.07)] scrollbar-hide",
+          "absolute bottom-19 left-3 right-3 z-30 max-h-[48vh] flex-col gap-3.5 overflow-y-auto overflow-x-hidden rounded-2xl bg-[oklch(0.18_0.012_260)] p-3.5 shadow-[0_8px_32px_oklch(0_0_0/0.45),inset_0_1px_0_oklch(1_0_0/0.07)] scrollbar-hide",
           isOpen ? "flex" : "hidden",
-          "sm:bottom-auto sm:left-auto sm:right-3 sm:top-1/2 sm:flex sm:max-h-[90vh] sm:w-[164px] sm:-translate-y-1/2",
+          "sm:bottom-auto sm:left-auto sm:right-3 sm:top-1/2 sm:flex sm:max-h-[90vh] sm:w-41 sm:-translate-y-1/2",
         ].join(" ")}
       >
         <div className="flex items-center justify-between sm:hidden">
@@ -197,138 +286,153 @@ export function StylePanel({
           </button>
         </div>
 
-      {hasTextOptions && (
-        <>
-          <Section label="Font">
-            <select
-              value={fontFamily}
-              onChange={(e) => onFontFamily(e.target.value)}
-              style={{ fontFamily }}
-              className="h-8 w-full rounded-lg border border-[oklch(1_0_0/0.08)] bg-[oklch(0.13_0.01_260)] px-2 text-[12px] font-medium text-[oklch(0.82_0.005_260)] outline-none transition-colors hover:bg-[oklch(0.16_0.01_260)] focus:border-[oklch(0.82_0.14_88)]"
-            >
-              {["Handwriting", "Simple", "Clean"].map((group) => (
-                <optgroup key={group} label={group}>
-                  {FONTS.filter((font) => font.group === group).map((font) => (
-                    <option key={font.value} value={font.value}>
-                      {font.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </Section>
+        {hasTextOptions && (
+          <>
+            <Section label="Font">
+              <select
+                value={fontFamily}
+                onChange={(e) => onFontFamily(e.target.value)}
+                style={{ fontFamily }}
+                className="h-8 w-full rounded-lg border border-[oklch(1_0_0/0.08)] bg-[oklch(0.13_0.01_260)] px-2 text-[12px] font-medium text-[oklch(0.82_0.005_260)] outline-none transition-colors hover:bg-[oklch(0.16_0.01_260)] focus:border-[oklch(0.82_0.14_88)]"
+              >
+                {["Handwriting", "Simple", "Clean"].map((group) => (
+                  <optgroup key={group} label={group}>
+                    {FONTS.filter((font) => font.group === group).map(
+                      (font) => (
+                        <option key={font.value} value={font.value}>
+                          {font.label}
+                        </option>
+                      ),
+                    )}
+                  </optgroup>
+                ))}
+              </select>
+            </Section>
 
-          <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+            <div className="h-px bg-[oklch(1_0_0/0.07)]" />
 
-          <Section label="Size & Weight">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => onFontSize(Math.max(8, fontSize - 2))}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-[oklch(0.6_0.01_260)] transition-all hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)] sm:h-6 sm:w-6"
-              >-</button>
-              <span className="w-8 text-center text-[12px] font-medium tabular-nums text-[oklch(0.7_0.01_260)] sm:w-6">{fontSize}</span>
-              <button
-                onClick={() => onFontSize(Math.min(200, fontSize + 2))}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-[oklch(0.6_0.01_260)] transition-all hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)] sm:h-6 sm:w-6"
-              >+</button>
-              <button
-                onClick={() => onFontWeight(fontWeight === "bold" ? "normal" : "bold")}
-                className={[
-                  "h-9 w-10 rounded-md text-[12px] font-bold transition-all sm:h-6 sm:w-7",
-                  fontWeight === "bold"
-                    ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)]"
-                    : "text-[oklch(0.55_0.01_260)] hover:bg-[oklch(0.25_0.012_260)]",
-                ].join(" ")}
-              >B</button>
-            </div>
-          </Section>
-
-          <div className="h-px bg-[oklch(1_0_0/0.07)]" />
-        </>
-      )}
-
-      <Section label="Stroke">
-        <ColorGrid
-          colors={COLORS}
-          recentColors={recentColors}
-          selected={strokeColor}
-          onSelect={onStrokeColor}
-          onCustomColor={handleStrokeColor}
-        />
-      </Section>
-
-      {showFill && (
-        <>
-          <div className="h-px bg-[oklch(1_0_0/0.07)]" />
-          <Section label="Fill">
-            <div className="flex items-center gap-1">
-              {FILL_STYLES.map((fs) => (
+            <Section label="Size & Weight">
+              <div className="flex items-center gap-1.5">
                 <button
-                  key={fs.value}
-                  title={fs.label}
-                  onClick={() => onFillStyle(fs.value)}
+                  onClick={() => onFontSize(Math.max(8, fontSize - 2))}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-[oklch(0.6_0.01_260)] transition-all hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)] sm:h-6 sm:w-6"
+                >
+                  -
+                </button>
+                <span className="w-8 text-center text-[12px] font-medium tabular-nums text-[oklch(0.7_0.01_260)] sm:w-6">
+                  {fontSize}
+                </span>
+                <button
+                  onClick={() => onFontSize(Math.min(200, fontSize + 2))}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-[oklch(0.6_0.01_260)] transition-all hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)] sm:h-6 sm:w-6"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() =>
+                    onFontWeight(fontWeight === "bold" ? "normal" : "bold")
+                  }
                   className={[
-                    "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
-                    fillStyle === fs.value
+                    "h-9 w-10 rounded-md text-[12px] font-bold transition-all sm:h-6 sm:w-7",
+                    fontWeight === "bold"
                       ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)]"
-                      : "text-[oklch(0.52_0.01_260)] hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.82_0.005_260)]",
+                      : "text-[oklch(0.55_0.01_260)] hover:bg-[oklch(0.25_0.012_260)]",
                   ].join(" ")}
                 >
-                  {fs.icon}
+                  B
                 </button>
-              ))}
-            </div>
-          </Section>
+              </div>
+            </Section>
 
-          {fillStyle !== "none" && (
-            <>
-              <div className="h-px bg-[oklch(1_0_0/0.07)]" />
-              <Section label="Fill color">
-                <ColorGrid
-                  colors={COLORS}
-                  recentColors={recentColors}
-                  selected={fillColor}
-                  onSelect={onFillColor}
-                  onCustomColor={handleFillColor}
-                />
-              </Section>
-            </>
-          )}
-        </>
-      )}
+            <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+          </>
+        )}
 
-      {activeTool !== "text" && (
-        <>
-          <div className="h-px bg-[oklch(1_0_0/0.07)]" />
-          <Section label="Width">
-            <div className="flex items-center gap-1">
-              {WIDTHS.map((w) => {
-                const active = strokeWidth === w.value;
-                const activeCls = "bg-[oklch(0.15_0.01_88)]";
-                const inactiveCls = "bg-[oklch(0.6_0.01_260)]";
-                return (
+        <Section label="Stroke">
+          <ColorGrid
+            colors={COLORS}
+            recentColors={recentColors}
+            selected={strokeColor}
+            onSelect={onStrokeColor}
+            onCustomColor={handleStrokeColor}
+          />
+        </Section>
+
+        {showFill && (
+          <>
+            <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+            <Section label="Fill">
+              <div className="flex items-center gap-1">
+                {FILL_STYLES.map((fs) => (
                   <button
-                    key={w.value}
-                    title={w.label}
-                    onClick={() => onStrokeWidth(w.value)}
+                    key={fs.value}
+                    title={fs.label}
+                    onClick={() => onFillStyle(fs.value)}
                     className={[
                       "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
-                      active
-                        ? "bg-[oklch(0.82_0.14_88)]"
-                        : "hover:bg-[oklch(0.25_0.012_260)]",
+                      fillStyle === fs.value
+                        ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)]"
+                        : "text-[oklch(0.52_0.01_260)] hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.82_0.005_260)]",
                     ].join(" ")}
                   >
-                    <div
-                      style={{ height: w.thickness }}
-                      className={"w-4 rounded-full " + (active ? activeCls : inactiveCls)}
-                    />
+                    {fs.icon}
                   </button>
-                );
-              })}
-            </div>
-          </Section>
-        </>
-      )}
+                ))}
+              </div>
+            </Section>
+
+            {fillStyle !== "none" && (
+              <>
+                <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+                <Section label="Fill color">
+                  <ColorGrid
+                    colors={COLORS}
+                    recentColors={recentColors}
+                    selected={fillColor}
+                    onSelect={onFillColor}
+                    onCustomColor={handleFillColor}
+                  />
+                </Section>
+              </>
+            )}
+          </>
+        )}
+
+        {activeTool !== "text" && (
+          <>
+            <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+            <Section label="Width">
+              <div className="flex items-center gap-1">
+                {WIDTHS.map((w) => {
+                  const active = strokeWidth === w.value;
+                  const activeCls = "bg-[oklch(0.15_0.01_88)]";
+                  const inactiveCls = "bg-[oklch(0.6_0.01_260)]";
+                  return (
+                    <button
+                      key={w.value}
+                      title={w.label}
+                      onClick={() => onStrokeWidth(w.value)}
+                      className={[
+                        "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
+                        active
+                          ? "bg-[oklch(0.82_0.14_88)]"
+                          : "hover:bg-[oklch(0.25_0.012_260)]",
+                      ].join(" ")}
+                    >
+                      <div
+                        style={{ height: w.thickness }}
+                        className={
+                          "w-4 rounded-full " +
+                          (active ? activeCls : inactiveCls)
+                        }
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </Section>
+          </>
+        )}
       </div>
     </>
   );
@@ -352,7 +456,7 @@ function ColorGrid({
   onSelect,
   onCustomColor,
 }: {
-  colors: typeof COLORS;
+  colors: typeof COLORS_LIGHT;
   recentColors: string[];
   selected: string;
   onSelect: (v: string) => void;
@@ -367,7 +471,9 @@ function ColorGrid({
   const displayColors = [
     ...colors,
     ...recentColors.map((value) => ({ value, label: "Recent color" })),
-    ...(customSelected ? [{ value: selected, label: "Current custom color" }] : []),
+    ...(customSelected
+      ? [{ value: selected, label: "Current custom color" }]
+      : []),
   ];
 
   return (

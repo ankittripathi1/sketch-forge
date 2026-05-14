@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -32,7 +32,7 @@ export default function RootLayout({
         />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Kalam:wght@400;700&family=Indie+Flower&family=Patrick+Hand&family=Inter:wght@400;700&family=Poppins:wght@400;700&family=Nunito:wght@400;700&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Courier+Prime:wght@400;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Indie+Flower&family=Patrick+Hand&family=Inter:wght@400;700&family=Poppins:wght@400;700&family=Nunito:wght@400;700&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Courier+Prime:wght@400;700&display=swap"
           rel="stylesheet"
         />
       </head>

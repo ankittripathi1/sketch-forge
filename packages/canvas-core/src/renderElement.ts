@@ -1,5 +1,5 @@
 import rough from "roughjs";
-import { SketchElement } from "./types";
+import type { SketchElement } from "./types";
 import { getBoundingBox } from "./hitDetection";
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -68,11 +68,23 @@ export function drawElement(
     );
   } else if (el.tool === "line") {
     rc.line(el.x1, el.y1, el.x2, el.y2, opts);
-  } else if (
-    (el.tool === "freehand" || el.tool === "highlighter") &&
-    el.points &&
-    el.points.length > 1
-  ) {
+  } else if (el.tool === "highlighter" && el.points && el.points.length > 1) {
+    const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
+    ctx.save();
+    ctx.globalAlpha = el.opacity ?? 0.35;
+    ctx.globalCompositeOperation = "multiply";
+    ctx.strokeStyle = el.strokeColor;
+    ctx.lineWidth = el.strokeWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(el.points[0]!.x, el.points[0]!.y);
+    for (const point of el.points.slice(1)) {
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  } else if (el.tool === "freehand" && el.points && el.points.length > 1) {
     const path = el.points
       .map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`)
       .join(" ");
@@ -80,7 +92,7 @@ export function drawElement(
   } else if (el.tool === "text" && el.text) {
     const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
     const fontSz = el.fontSize ?? el.strokeWidth * 10 + 4;
-    const fontFam = el.fontFamily ?? '"Caveat", cursive';
+    const fontFam = el.fontFamily ?? "Kalam, cursive";
     const fontWt = el.fontWeight ?? "normal";
     const LINE_HEIGHT = 1.2;
     ctx.save();
@@ -89,8 +101,6 @@ export function drawElement(
     ctx.fillStyle = el.strokeColor;
 
     const maxWidth = Math.abs(el.x2 - el.x1);
-    // If width is very small (newly created or minimal resize), don't wrap or wrap by content
-    // Otherwise, use wrapText for multi-line support during resize
     const lines =
       maxWidth > 20 ? wrapText(ctx, el.text, maxWidth) : el.text.split("\n");
 
@@ -114,7 +124,6 @@ export function drawElement(
     }
   }
 
-  // Draw label text wrapped and centered inside any shape that has one
   if (
     el.text &&
     el.tool !== "text" &&
@@ -125,7 +134,7 @@ export function drawElement(
     const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
     const { x, y, w, h } = getBoundingBox(el);
     const fontSize = el.fontSize ?? el.strokeWidth * 10 + 4;
-    const fontFam = el.fontFamily ?? '"Caveat", cursive';
+    const fontFam = el.fontFamily ?? "Kalam, cursive";
     const fontWt = el.fontWeight ?? "normal";
     ctx.save();
     ctx.font = `${fontWt} ${fontSize}px ${fontFam}`;
@@ -163,6 +172,7 @@ export function drawSelectionBox(
   ctx.setLineDash([5 / zoom, 3 / zoom]);
   ctx.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
   ctx.setLineDash([]);
+
   const handles: [number, number][] = [
     [x - pad, y - pad],
     [x + w / 2, y - pad],
@@ -173,6 +183,7 @@ export function drawSelectionBox(
     [x + w / 2, y + h + pad],
     [x + w + pad, y + h + pad],
   ];
+
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#6366f1";
   ctx.lineWidth = lw;
