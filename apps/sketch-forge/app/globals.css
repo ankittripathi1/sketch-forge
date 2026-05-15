@@ -1,1 +1,148 @@
 @import "tailwindcss";
+
+@theme {
+  /* ─── Surfaces — near-black dark ─── */
+  --color-surface-base: oklch(0.06 0.006 75);
+  --color-surface-raised: oklch(0.10 0.008 75);
+  --color-surface-overlay: oklch(0.13 0.010 75);
+  --color-surface-hover: oklch(0.17 0.012 75);
+  --color-surface-sunken: oklch(0.04 0.004 75);
+
+  /* ─── Borders ─── */
+  --color-border-default: oklch(0.18 0.012 75);
+  --color-border-subtle: oklch(0.14 0.010 75);
+  --color-border-faint: oklch(0.20 0.010 75 / 0.5);
+  --color-border-accent: oklch(0.82 0.14 88 / 0.28);
+  --color-border-accent-strong: oklch(0.82 0.14 88 / 0.50);
+
+  /* ─── Text — warm-tinted whites ─── */
+  --color-text-heading: oklch(0.97 0.008 88);
+  --color-text-primary: oklch(0.94 0.008 88);
+  --color-text-body: oklch(0.80 0.012 80);
+  --color-text-secondary: oklch(0.58 0.012 75);
+  --color-text-muted: oklch(0.44 0.010 75);
+  --color-text-dim: oklch(0.32 0.010 75);
+
+  /* ─── Accent — golden yellow ─── */
+  --color-accent: oklch(0.82 0.14 88);
+  --color-accent-hover: oklch(0.87 0.15 88);
+  --color-accent-text: oklch(0.12 0.02 75);
+  --color-accent-glow: oklch(0.82 0.14 88 / 0.22);
+  --color-accent-subtle: oklch(0.82 0.14 88 / 0.10);
+
+  /* ─── Status ─── */
+  --color-status-new: oklch(0.44 0.010 75);
+  --color-status-learning: oklch(0.80 0.14 88);
+  --color-status-mastered: oklch(0.72 0.19 155);
+  --color-status-success: oklch(0.72 0.19 155);
+  --color-status-success-subtle: oklch(0.72 0.19 155 / 0.12);
+  --color-status-warning: oklch(0.80 0.14 88);
+  --color-status-warning-subtle: oklch(0.80 0.14 88 / 0.12);
+  --color-status-danger: oklch(0.65 0.20 25);
+  --color-status-danger-subtle: oklch(0.65 0.20 25 / 0.12);
+  --color-status-info: oklch(0.65 0.18 240);
+  --color-status-info-subtle: oklch(0.65 0.18 240 / 0.12);
+
+  /* ─── Elevation shadows ─── */
+  --shadow-elev-1: 0 1px 4px oklch(0 0 0 / 0.30), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --shadow-elev-2: 0 4px 16px oklch(0 0 0 / 0.40), inset 0 1px 0 oklch(1 0 0 / 0.07);
+  --shadow-elev-3: 0 8px 32px oklch(0 0 0 / 0.50), inset 0 1px 0 oklch(1 0 0 / 0.07);
+  --shadow-elev-4: 0 12px 48px oklch(0 0 0 / 0.60), inset 0 1px 0 oklch(1 0 0 / 0.08);
+
+  /* ─── Brand gradient (warm amber → gold) ─── */
+  --gradient-brand: linear-gradient(135deg, oklch(0.72 0.18 55), oklch(0.82 0.14 88));
+}
+
+/* ─── Dark Theme — near-black surfaces ─── */
+[data-theme="dark"] {
+  --color-surface-base: oklch(0.06 0.006 75);
+  --color-surface-raised: oklch(0.10 0.008 75);
+  --color-surface-overlay: oklch(0.13 0.010 75);
+  --color-surface-hover: oklch(0.17 0.012 75);
+  --color-surface-sunken: oklch(0.04 0.004 75);
+
+  --color-border-default: oklch(0.18 0.012 75);
+  --color-border-subtle: oklch(0.14 0.010 75);
+  --color-border-faint: oklch(0.20 0.010 75 / 0.5);
+  --color-border-accent: oklch(0.82 0.14 88 / 0.28);
+  --color-border-accent-strong: oklch(0.82 0.14 88 / 0.50);
+
+  --color-text-heading: oklch(0.97 0.008 88);
+  --color-text-primary: oklch(0.94 0.008 88);
+  --color-text-body: oklch(0.80 0.012 80);
+  --color-text-secondary: oklch(0.58 0.012 75);
+  --color-text-muted: oklch(0.44 0.010 75);
+  --color-text-dim: oklch(0.32 0.010 75);
+
+  --color-accent: oklch(0.82 0.14 88);
+  --color-accent-hover: oklch(0.87 0.15 88);
+  --color-accent-text: oklch(0.12 0.02 75);
+  --color-accent-glow: oklch(0.82 0.14 88 / 0.22);
+  --color-accent-subtle: oklch(0.82 0.14 88 / 0.10);
+
+  --color-status-success: oklch(0.72 0.19 155);
+  --color-status-success-subtle: oklch(0.72 0.19 155 / 0.12);
+  --color-status-warning: oklch(0.80 0.14 88);
+  --color-status-warning-subtle: oklch(0.80 0.14 88 / 0.12);
+  --color-status-danger: oklch(0.65 0.20 25);
+  --color-status-danger-subtle: oklch(0.65 0.20 25 / 0.12);
+  --color-status-info: oklch(0.65 0.18 240);
+  --color-status-info-subtle: oklch(0.65 0.18 240 / 0.12);
+}
+
+/* ─── Light Theme — warm cream surfaces ─── */
+[data-theme="light"] {
+  --color-surface-base: oklch(0.97 0.006 80);
+  --color-surface-raised: oklch(0.99 0.003 80);
+  --color-surface-overlay: oklch(1 0 0);
+  --color-surface-hover: oklch(0.94 0.008 80);
+  --color-surface-sunken: oklch(0.95 0.007 80);
+
+  --color-border-default: oklch(0.87 0.010 80);
+  --color-border-subtle: oklch(0.92 0.006 80);
+  --color-border-faint: oklch(0.88 0.008 80 / 0.6);
+  --color-border-accent: oklch(0.68 0.16 80 / 0.28);
+  --color-border-accent-strong: oklch(0.68 0.16 80 / 0.55);
+
+  --color-text-heading: oklch(0.16 0.020 75);
+  --color-text-primary: oklch(0.22 0.016 75);
+  --color-text-body: oklch(0.34 0.012 75);
+  --color-text-secondary: oklch(0.48 0.010 75);
+  --color-text-muted: oklch(0.58 0.008 75);
+  --color-text-dim: oklch(0.72 0.006 75);
+
+  --color-accent: oklch(0.68 0.16 80);
+  --color-accent-hover: oklch(0.62 0.17 80);
+  --color-accent-text: oklch(0.99 0 0);
+  --color-accent-glow: oklch(0.68 0.16 80 / 0.20);
+  --color-accent-subtle: oklch(0.68 0.16 80 / 0.08);
+
+  --color-status-new: oklch(0.58 0.008 75);
+  --color-status-learning: oklch(0.64 0.14 80);
+  --color-status-mastered: oklch(0.60 0.20 155);
+  --color-status-success: oklch(0.60 0.20 155);
+  --color-status-success-subtle: oklch(0.60 0.20 155 / 0.10);
+  --color-status-warning: oklch(0.64 0.14 80);
+  --color-status-warning-subtle: oklch(0.64 0.14 80 / 0.10);
+  --color-status-danger: oklch(0.55 0.20 25);
+  --color-status-danger-subtle: oklch(0.55 0.20 25 / 0.10);
+  --color-status-info: oklch(0.52 0.18 240);
+  --color-status-info-subtle: oklch(0.52 0.18 240 / 0.10);
+
+  --shadow-elev-1: 0 1px 4px oklch(0 0 0 / 0.08), inset 0 1px 0 oklch(1 0 0 / 0.80);
+  --shadow-elev-2: 0 4px 16px oklch(0 0 0 / 0.10), inset 0 1px 0 oklch(1 0 0 / 0.80);
+  --shadow-elev-3: 0 8px 32px oklch(0 0 0 / 0.12), inset 0 1px 0 oklch(1 0 0 / 0.80);
+  --shadow-elev-4: 0 12px 48px oklch(0 0 0 / 0.15), inset 0 1px 0 oklch(1 0 0 / 0.80);
+
+  --gradient-brand: linear-gradient(135deg, oklch(0.62 0.18 55), oklch(0.68 0.16 80));
+}
+
+/* ─── Utility classes for elevation + brand gradient ─── */
+@layer utilities {
+  .shadow-elev-1 { box-shadow: var(--shadow-elev-1); }
+  .shadow-elev-2 { box-shadow: var(--shadow-elev-2); }
+  .shadow-elev-3 { box-shadow: var(--shadow-elev-3); }
+  .shadow-elev-4 { box-shadow: var(--shadow-elev-4); }
+  .bg-gradient-brand { background: var(--gradient-brand); }
+  .font-handwriting { font-family: Kalam, cursive; }
+}

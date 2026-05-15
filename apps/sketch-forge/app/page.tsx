@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight, PenLine, Smartphone, Sparkles, Users } from "lucide-react";
+import { ThemeSelector } from "../components/theme-selector";
 
 export const metadata: Metadata = {
   title: "Sketch Forge — Draw, Write, Organize",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[oklch(0.09_0.01_260)] text-[oklch(0.92_0.005_260)]">
+    <div className="min-h-screen bg-surface-base text-text-primary">
       <Nav />
       <Hero />
       <Features />
@@ -25,13 +26,13 @@ export default function Home() {
 
 function Nav() {
   return (
-    <nav className="fixed inset-x-0 top-0 z-50 flex items-center justify-between border-b border-[oklch(0.18_0.01_260/0.8)] bg-[oklch(0.09_0.01_260/0.75)] px-6 py-4 backdrop-blur-xl">
+    <nav className="fixed inset-x-0 top-0 z-50 flex items-center justify-between border-b border-border-default bg-surface-base/80 px-6 py-4 backdrop-blur-xl">
       <div className="flex items-center gap-2.5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[oklch(0.82_0.14_88)] shadow-[0_2px_8px_oklch(0.82_0.14_88/0.4)]">
-          <PenLine size={13} strokeWidth={2.5} className="text-[oklch(0.15_0.01_88)]" />
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent shadow-[0_2px_8px_var(--color-accent-glow)]">
+          <PenLine size={13} strokeWidth={2.5} className="text-accent-text" />
         </div>
         <span
-          className="text-[18px] font-bold tracking-tight text-[oklch(0.94_0.005_260)]"
+          className="text-[18px] font-bold tracking-tight text-text-heading"
           style={{ fontFamily: "Kalam, cursive" }}
         >
           sketch forge
@@ -40,14 +41,21 @@ function Nav() {
 
       <div className="flex items-center gap-3">
         <Link
-          href="/canvas"
-          className="hidden text-[13px] text-[oklch(0.55_0.01_260)] transition-colors hover:text-[oklch(0.82_0.14_88)] sm:block"
+          href="/dashboard"
+          className="hidden text-[13px] text-text-secondary transition-colors hover:text-accent sm:block"
         >
-          Try the canvas
+          Dashboard
         </Link>
         <Link
           href="/canvas"
-          className="flex items-center gap-1.5 rounded-xl bg-[oklch(0.82_0.14_88)] px-4 py-2 text-[13px] font-semibold text-[oklch(0.12_0.01_88)] shadow-[0_4px_16px_oklch(0.82_0.14_88/0.25)] transition-all hover:bg-[oklch(0.88_0.15_88)] active:scale-95"
+          className="hidden text-[13px] text-text-secondary transition-colors hover:text-accent sm:block"
+        >
+          Try the canvas
+        </Link>
+        <ThemeSelector isCollapsed />
+        <Link
+          href="/canvas"
+          className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-[13px] font-semibold text-accent-text shadow-[0_4px_16px_var(--color-accent-glow)] transition-all hover:bg-accent-hover active:scale-95"
         >
           Open Canvas
           <ArrowRight size={12} strokeWidth={2.5} />
@@ -65,34 +73,33 @@ function Hero() {
       className="relative flex min-h-screen items-center overflow-hidden pt-16"
       style={{
         backgroundImage: `
-          linear-gradient(oklch(0.22 0.01 260 / 0.45) 1px, transparent 1px),
-          linear-gradient(90deg, oklch(0.22 0.01 260 / 0.45) 1px, transparent 1px)
+          linear-gradient(var(--color-border-faint) 1px, transparent 1px),
+          linear-gradient(90deg, var(--color-border-faint) 1px, transparent 1px)
         `,
         backgroundSize: "40px 40px",
       }}
     >
       {/* ambient glows */}
-      <div className="pointer-events-none absolute left-[10%] top-1/3 h-[600px] w-[600px] rounded-full bg-[oklch(0.82_0.14_88/0.05)] blur-[130px]" />
-      <div className="pointer-events-none absolute bottom-1/4 right-[5%] h-[500px] w-[500px] rounded-full bg-[oklch(0.55_0.18_280/0.06)] blur-[100px]" />
+      <div className="pointer-events-none absolute left-[10%] top-1/3 h-[600px] w-[600px] rounded-full bg-accent-subtle blur-[130px]" />
 
       <div className="relative mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-6 py-24 lg:grid-cols-2 lg:gap-8">
         {/* Left: copy */}
         <div className="flex flex-col">
-          <div className="mb-7 inline-flex items-center gap-2 self-start rounded-full border border-[oklch(0.82_0.14_88/0.25)] bg-[oklch(0.82_0.14_88/0.07)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[oklch(0.82_0.14_88)]">
+          <div className="mb-7 inline-flex items-center gap-2 self-start rounded-full border border-border-accent bg-accent-subtle px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
             <Sparkles size={10} strokeWidth={2.5} />
-            Free · Open source · No signup
+            Open source · Account-backed sync
           </div>
 
           <h1
-            className="mb-5 text-[clamp(48px,6vw,72px)] font-bold leading-[1.05] text-[oklch(0.96_0.005_260)]"
+            className="mb-5 text-[clamp(48px,6vw,72px)] font-bold leading-[1.05] text-text-heading"
             style={{ fontFamily: "Kalam, cursive" }}
           >
             Sketch freely.
             <br />
-            <span className="text-[oklch(0.82_0.14_88)]">Think clearly.</span>
+            <span className="text-accent">Think clearly.</span>
           </h1>
 
-          <p className="mb-8 max-w-[420px] text-[17px] leading-[1.7] text-[oklch(0.55_0.01_260)]">
+          <p className="mb-8 max-w-[420px] text-[17px] leading-[1.7] text-text-secondary">
             Draw diagrams and write notes in one infinite canvas. Works
             beautifully on your phone, tablet, and desktop.
           </p>
@@ -100,21 +107,21 @@ function Hero() {
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/canvas"
-              className="flex items-center gap-2 rounded-2xl bg-[oklch(0.82_0.14_88)] px-6 py-3.5 text-[15px] font-bold text-[oklch(0.12_0.01_88)] shadow-[0_8px_32px_oklch(0.82_0.14_88/0.3)] transition-all hover:bg-[oklch(0.88_0.15_88)] active:scale-95"
+              className="flex items-center gap-2 rounded-2xl bg-accent px-6 py-3.5 text-[15px] font-bold text-accent-text shadow-[0_8px_32px_var(--color-accent-glow)] transition-all hover:bg-accent-hover active:scale-95"
             >
               Start sketching free
               <ArrowRight size={15} strokeWidth={2.5} />
             </Link>
             <a
-              href="#how-it-works"
-              className="rounded-2xl border border-[oklch(0.25_0.012_260)] px-6 py-3.5 text-[15px] font-medium text-[oklch(0.58_0.01_260)] transition-all hover:border-[oklch(0.38_0.012_260)] hover:text-[oklch(0.82_0.005_260)]"
+              href="/dashboard"
+              className="rounded-2xl border border-border-default px-6 py-3.5 text-[15px] font-medium text-text-secondary transition-all hover:border-border-accent hover:text-text-primary"
             >
-              See how it works
+              Open dashboard
             </a>
           </div>
 
           {/* Stats */}
-          <div className="mt-10 flex items-center gap-8 border-t border-[oklch(0.18_0.01_260)] pt-8">
+          <div className="mt-10 flex items-center gap-8 border-t border-border-default pt-8">
             {[
               { num: "∞", label: "Canvas size" },
               { num: "0s", label: "Setup needed" },
@@ -122,12 +129,12 @@ function Hero() {
             ].map(({ num, label }) => (
               <div key={label} className="flex flex-col">
                 <span
-                  className="text-[28px] font-bold text-[oklch(0.92_0.005_260)]"
+                  className="text-[28px] font-bold text-text-primary"
                   style={{ fontFamily: "Kalam, cursive" }}
                 >
                   {num}
                 </span>
-                <span className="mt-0.5 text-[12px] text-[oklch(0.42_0.008_260)]">
+                <span className="mt-0.5 text-[12px] text-text-muted">
                   {label}
                 </span>
               </div>
@@ -185,10 +192,7 @@ function CanvasMockup() {
       </div>
 
       {/* drawing */}
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox="0 0 520 390"
-      >
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 520 390">
         {/* rough rect — selected */}
         <path
           d="M 50 88 C 55 85,185 84,190 88 C 193 93,194 175,190 179 C 185 183,52 184,48 180 C 45 175,47 93,50 88 Z"
@@ -201,7 +205,11 @@ function CanvasMockup() {
           x="120"
           y="128"
           textAnchor="middle"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "14px", fill: "#2a2a4a" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "14px",
+            fill: "#2a2a4a",
+          }}
         >
           User Auth
         </text>
@@ -209,7 +217,11 @@ function CanvasMockup() {
           x="120"
           y="148"
           textAnchor="middle"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "11px", fill: "#8888a8" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "11px",
+            fill: "#8888a8",
+          }}
         >
           login / signup
         </text>
@@ -225,11 +237,18 @@ function CanvasMockup() {
           strokeWidth="1"
           strokeDasharray="4 3"
         />
-        {([
-          [43, 82], [119, 82], [195, 82],
-          [43, 133], [195, 133],
-          [43, 184], [119, 184], [195, 184],
-        ] satisfies [number, number][]).map(([x, y], i) => (
+        {(
+          [
+            [43, 82],
+            [119, 82],
+            [195, 82],
+            [43, 133],
+            [195, 133],
+            [43, 184],
+            [119, 184],
+            [195, 184],
+          ] satisfies [number, number][]
+        ).map(([x, y], i) => (
           <rect
             key={i}
             x={x - 4}
@@ -272,7 +291,11 @@ function CanvasMockup() {
           x="315"
           y="127"
           textAnchor="middle"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "14px", fill: "#2a2a4a" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "14px",
+            fill: "#2a2a4a",
+          }}
         >
           Dashboard
         </text>
@@ -306,7 +329,11 @@ function CanvasMockup() {
           x="315"
           y="238"
           textAnchor="middle"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "14px", fill: "#2a2a4a" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "14px",
+            fill: "#2a2a4a",
+          }}
         >
           Analytics
         </text>
@@ -344,21 +371,33 @@ function CanvasMockup() {
         <text
           x="52"
           y="244"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "11px", fill: "oklch(0.72 0.01 260)" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "11px",
+            fill: "oklch(0.72 0.01 260)",
+          }}
         >
           📝 Notes
         </text>
         <text
           x="52"
           y="260"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "11px", fill: "oklch(0.52 0.01 260)" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "11px",
+            fill: "oklch(0.52 0.01 260)",
+          }}
         >
           Add JWT refresh logic
         </text>
         <text
           x="52"
           y="276"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "11px", fill: "oklch(0.52 0.01 260)" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "11px",
+            fill: "oklch(0.52 0.01 260)",
+          }}
         >
           Rate limit auth endpoint
         </text>
@@ -385,7 +424,11 @@ function CanvasMockup() {
           x="440"
           y="94"
           textAnchor="middle"
-          style={{ fontFamily: "Kalam, cursive", fontSize: "13px", fill: "#2a2a4a" }}
+          style={{
+            fontFamily: "Kalam, cursive",
+            fontSize: "13px",
+            fill: "#2a2a4a",
+          }}
         >
           Key decisions
         </text>
@@ -411,7 +454,7 @@ function CanvasMockup() {
                 {txt}
               </text>
             </g>
-          )
+          ),
         )}
       </svg>
 
@@ -452,16 +495,14 @@ function Features() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-16 text-center">
           <h2
-            className="mb-4 text-[clamp(36px,4vw,52px)] font-bold text-[oklch(0.94_0.005_260)]"
+            className="mb-4 text-[clamp(36px,4vw,52px)] font-bold text-text-heading"
             style={{ fontFamily: "Kalam, cursive" }}
           >
             Everything you need.
             <br />
-            <span className="text-[oklch(0.62_0.01_260)]">
-              Nothing you don&apos;t.
-            </span>
+            <span className="text-text-secondary">Nothing you don&apos;t.</span>
           </h2>
-          <p className="mx-auto max-w-sm text-[15px] text-[oklch(0.5_0.01_260)]">
+          <p className="mx-auto max-w-sm text-[15px] text-text-secondary">
             Built for the way you actually think — messy, nonlinear, full of
             connections.
           </p>
@@ -471,8 +512,8 @@ function Features() {
           {/* Card 1 */}
           <FeatureCard
             icon={<PenLine size={20} strokeWidth={1.8} />}
-            iconBg="bg-[oklch(0.82_0.14_88/0.1)]"
-            iconColor="text-[oklch(0.82_0.14_88)]"
+            iconBg="bg-accent-subtle"
+            iconColor="text-accent"
             title="Draw + Write"
             description="Mix hand-drawn diagrams with written notes in one infinite canvas. No more switching between apps."
           />
@@ -515,7 +556,7 @@ function FeatureCard({
   badge?: string;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-3xl border border-[oklch(0.2_0.01_260)] bg-[oklch(0.13_0.01_260)] p-7 transition-all duration-300 hover:-translate-y-1 hover:border-[oklch(0.3_0.012_260)]">
+    <div className="group relative overflow-hidden rounded-3xl border border-border-default bg-surface-raised p-7 transition-all duration-300 hover:-translate-y-1 hover:border-border-accent">
       <div
         className={`mb-5 flex h-10 w-10 items-center justify-center rounded-2xl ${iconBg} ${iconColor}`}
       >
@@ -523,7 +564,7 @@ function FeatureCard({
       </div>
       <div className="mb-2 flex items-center gap-2">
         <h3
-          className="text-[22px] font-bold text-[oklch(0.92_0.005_260)]"
+          className="text-[22px] font-bold text-text-heading"
           style={{ fontFamily: "Kalam, cursive" }}
         >
           {title}
@@ -534,7 +575,7 @@ function FeatureCard({
           </span>
         )}
       </div>
-      <p className="text-[14px] leading-relaxed text-[oklch(0.5_0.01_260)]">
+      <p className="text-[14px] leading-relaxed text-text-secondary">
         {description}
       </p>
     </div>
@@ -545,26 +586,23 @@ function FeatureCard({
 
 function HowItWorks() {
   return (
-    <section
-      className="px-6 py-28 bg-[oklch(0.11_0.01_260)]"
-      id="how-it-works"
-    >
+    <section className="bg-surface-sunken px-6 py-28" id="how-it-works">
       <div className="mx-auto max-w-5xl">
         <div className="mb-16 text-center">
           <h2
-            className="mb-4 text-[clamp(36px,4vw,52px)] font-bold text-[oklch(0.94_0.005_260)]"
+            className="mb-4 text-[clamp(36px,4vw,52px)] font-bold text-text-heading"
             style={{ fontFamily: "Kalam, cursive" }}
           >
             How it works
           </h2>
-          <p className="text-[15px] text-[oklch(0.5_0.01_260)]">
+          <p className="text-[15px] text-text-secondary">
             Three steps from chaos to clarity.
           </p>
         </div>
 
         <div className="relative grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-8">
           {/* connector line */}
-          <div className="absolute left-[33%] right-[33%] top-8 hidden h-px bg-gradient-to-r from-transparent via-[oklch(0.82_0.14_88/0.4)] to-transparent md:block" />
+          <div className="absolute left-[33%] right-[33%] top-8 hidden h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent md:block" />
 
           {[
             {
@@ -588,9 +626,9 @@ function HowItWorks() {
               className="flex flex-col items-center text-center"
             >
               <div className="relative mb-6">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[oklch(0.28_0.012_260)] bg-[oklch(0.18_0.012_260)] shadow-[0_8px_32px_oklch(0_0_0/0.35)]">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border-default bg-surface-raised shadow-elev-2">
                   <span
-                    className="text-[32px] font-bold text-[oklch(0.82_0.14_88)]"
+                    className="text-[32px] font-bold text-accent"
                     style={{ fontFamily: "Kalam, cursive" }}
                   >
                     {step.num}
@@ -598,12 +636,12 @@ function HowItWorks() {
                 </div>
               </div>
               <h3
-                className="mb-3 text-[22px] font-bold text-[oklch(0.92_0.005_260)]"
+                className="mb-3 text-[22px] font-bold text-text-heading"
                 style={{ fontFamily: "Kalam, cursive" }}
               >
                 {step.title}
               </h3>
-              <p className="max-w-[220px] text-[14px] leading-relaxed text-[oklch(0.5_0.01_260)]">
+              <p className="max-w-[220px] text-[14px] leading-relaxed text-text-secondary">
                 {step.desc}
               </p>
             </div>
@@ -626,32 +664,28 @@ function ComingSoon() {
         </div>
 
         <h2
-          className="mb-4 text-[clamp(36px,4vw,52px)] font-bold leading-tight text-[oklch(0.94_0.005_260)]"
+          className="mb-4 text-[clamp(36px,4vw,52px)] font-bold leading-tight text-text-heading"
           style={{ fontFamily: "Kalam, cursive" }}
         >
           Real-time collaboration
           <br />
-          <span className="text-[oklch(0.62_0.01_260)]">is coming.</span>
+          <span className="text-text-secondary">is coming.</span>
         </h2>
 
-        <p className="mb-10 text-[16px] leading-relaxed text-[oklch(0.52_0.01_260)]">
+        <p className="mb-10 text-[16px] leading-relaxed text-text-secondary">
           Sketch with your team in real time. Share a canvas, draw together,
           leave comments. Get notified when it ships.
         </p>
 
-        <form
-          className="mx-auto flex max-w-sm gap-2"
-          action="#"
-          method="post"
-        >
+        <form className="mx-auto flex max-w-sm gap-2" action="#" method="post">
           <input
             type="email"
             placeholder="your@email.com"
-            className="flex-1 rounded-2xl border border-[oklch(0.25_0.012_260)] bg-[oklch(0.15_0.01_260)] px-4 py-3 text-[14px] text-[oklch(0.88_0.005_260)] placeholder-[oklch(0.38_0.01_260)] transition-colors focus:border-[oklch(0.82_0.14_88/0.5)] focus:outline-none"
+            className="flex-1 rounded-2xl border border-border-default bg-surface-raised px-4 py-3 text-[14px] text-text-primary placeholder:text-text-muted transition-colors focus:border-border-accent-strong focus:outline-none"
           />
           <button
             type="submit"
-            className="whitespace-nowrap rounded-2xl bg-[oklch(0.82_0.14_88)] px-5 py-3 text-[14px] font-semibold text-[oklch(0.12_0.01_88)] transition-all hover:bg-[oklch(0.88_0.15_88)] active:scale-95"
+            className="whitespace-nowrap rounded-2xl bg-accent px-5 py-3 text-[14px] font-semibold text-accent-text transition-all hover:bg-accent-hover active:scale-95"
           >
             Notify me
           </button>
@@ -665,33 +699,29 @@ function ComingSoon() {
 
 function Footer() {
   return (
-    <footer className="border-t border-[oklch(0.18_0.01_260)] px-6 py-8">
+    <footer className="border-t border-border-default px-6 py-8">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[oklch(0.82_0.14_88)]">
-            <PenLine
-              size={11}
-              strokeWidth={2.5}
-              className="text-[oklch(0.15_0.01_88)]"
-            />
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent">
+            <PenLine size={11} strokeWidth={2.5} className="text-accent-text" />
           </div>
           <span
-            className="text-[16px] text-[oklch(0.55_0.01_260)]"
+            className="text-[16px] text-text-secondary"
             style={{ fontFamily: "Kalam, cursive" }}
           >
             sketch forge
           </span>
         </div>
 
-        <span className="text-[13px] text-[oklch(0.35_0.01_260)]">
+        <span className="text-[13px] text-text-muted">
           Built for thinkers who draw.
         </span>
 
         <Link
-          href="/canvas"
-          className="text-[13px] text-[oklch(0.82_0.14_88)] transition-colors hover:text-[oklch(0.9_0.15_88)]"
+          href="/dashboard"
+          className="text-[13px] text-accent transition-colors hover:text-accent-hover"
         >
-          Open Canvas →
+          Open Dashboard →
         </Link>
       </div>
     </footer>

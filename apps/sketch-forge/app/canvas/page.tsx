@@ -1,14 +1,38 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTheme } from "next-themes";
 import { SketchCanvas } from "./_components/SketchCanvas";
 import { Toolbar } from "./_components/Toolbar";
+import { CanvasActions } from "./_components/CanvasActions";
 import { BackgroundPicker } from "./_components/BackgroundPicker";
 import { StylePanel } from "./_components/StylePannel";
 import { SettingsPanel } from "./_components/SettingsPanel";
 import type { FillStyle } from "@repo/canvas-core/types";
 import { isColorDark } from "@repo/canvas-core/colorUtils";
 import { useSketchEngine } from "@repo/canvas-engine";
+import { useCanvasSync } from "./_hooks/useCanvasSync";
+import { NotebookSidebar } from "./_components/NotebookSidebar";
+import { Suspense } from "react";
+import { Book, ChevronLeft } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+
+const CANVAS_THEME_DEFAULTS = {
+  light: {
+    backgroundColor: "#f9f9f7",
+    patternColor: "#dddfe8",
+  },
+  dark: {
+    backgroundColor: "#111012",
+    patternColor: "#27242c",
+  },
+} as const;
+
+interface FolderOption {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
 
 /**
  * CanvasPage
@@ -30,24 +54,89 @@ import { useSketchEngine } from "@repo/canvas-engine";
  *      hook values so UI panels don't need direct access to the hook.
  */
 export default function CanvasPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CanvasContent />
+    </Suspense>
+  );
+}
+
+function CanvasContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get("type");
+  const pageId =
+    searchParams.get("pageId") ||
+    (typeParam === "page" ? searchParams.get("id") : null);
+  const isPage = typeParam !== "canvas";
+  const canvasPrefsKey = `sketch-forge-canvas-prefs-${pageId ?? "default"}`;
+
   // ─── Background appearance ─────────────────────────────────────────────────
-  // These three state values drive the CSS background of the container div.
-  // They are kept separate from the engine because the canvas elements
-  // themselves are transparent — the background is purely presentational.
   const [background, setBackground] = useState<"plain" | "dots" | "grid">(
     "grid",
   );
   const [backgroundColor, setBackgroundColor] = useState("#f9f9f7");
   const [gridColor, setGridColor] = useState("#dddfe8");
   const [dotColor, setDotColor] = useState("#dddfe8");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [folders, setFolders] = useState<FolderOption[]>([]);
 
-  /**
-   * canvasMode tracks whether the current background is light or dark.
-   * It is derived from backgroundColor whenever the user changes it (see
-   * handleBackgroundColor / handleThemeApplied below) and is passed down to:
-   *   - StylePanel: to reorder the colour palette (dark canvas → light colours first)
-   */
+  const { resolvedTheme, setTheme } = useTheme();
+  const initialCanvasMode = useRef<"light" | "dark">(
+    resolvedTheme === "dark" ? "dark" : "light",
+  );
+
+  // canvasMode: derived from backgroundColor, drives StylePanel palette order.
   const [canvasMode, setCanvasMode] = useState<"light" | "dark">("light");
+  const [hasLoadedCanvasPrefs, setHasLoadedCanvasPrefs] = useState(false);
+
+  // Load persisted canvas settings on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(canvasPrefsKey);
+      if (!saved) {
+        const savedAppTheme = localStorage.getItem("sketch-forge-theme");
+        const mode =
+          savedAppTheme === "dark" || savedAppTheme === "light"
+            ? savedAppTheme
+            : initialCanvasMode.current;
+        const defaults = CANVAS_THEME_DEFAULTS[mode];
+        setBackgroundColor(defaults.backgroundColor);
+        setGridColor(defaults.patternColor);
+        setDotColor(defaults.patternColor);
+        setCanvasMode(mode);
+        setHasLoadedCanvasPrefs(true);
+        return;
+      }
+      const prefs = JSON.parse(saved);
+      if (prefs.background) setBackground(prefs.background);
+      if (prefs.backgroundColor) {
+        setBackgroundColor(prefs.backgroundColor);
+        setCanvasMode(isColorDark(prefs.backgroundColor) ? "dark" : "light");
+      }
+      if (prefs.gridColor) setGridColor(prefs.gridColor);
+      if (prefs.dotColor) setDotColor(prefs.dotColor);
+      setHasLoadedCanvasPrefs(true);
+    } catch {
+      setHasLoadedCanvasPrefs(true);
+    }
+  }, [canvasPrefsKey]);
+
+  // Persist canvas settings whenever they change
+  useEffect(() => {
+    if (!hasLoadedCanvasPrefs) return;
+    localStorage.setItem(
+      canvasPrefsKey,
+      JSON.stringify({ background, backgroundColor, gridColor, dotColor }),
+    );
+  }, [
+    hasLoadedCanvasPrefs,
+    canvasPrefsKey,
+    background,
+    backgroundColor,
+    gridColor,
+    dotColor,
+  ]);
 
   // setIsPanningMode is intentionally not read — it exists solely to trigger
   // a re-render that updates the cursor when the user holds Space.
@@ -61,6 +150,8 @@ export default function CanvasPage() {
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const {
+    elements,
+    setElements,
     tool,
     setTool,
     strokeColor,
@@ -110,6 +201,71 @@ export default function CanvasPage() {
     recognitionApiKey,
     setRecognitionApiKey,
   } = useSketchEngine(sceneCanvasRef, interactiveCanvasRef);
+
+  const {
+    canvasId,
+    entityType,
+    folderId,
+    title,
+    setTitle,
+    triggerSave,
+    isSaving,
+    isDirty,
+    movePageToFolder,
+    saveNow,
+  } = useCanvasSync({
+    elementsRef: elements,
+    setElements,
+  });
+
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
+  const [dialogTitle, setDialogTitle] = useState("Untitled");
+
+  useEffect(() => {
+    async function fetchFolders() {
+      try {
+        const response = await fetch("http://localhost:4001/folders", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          setFolders(await response.json());
+        }
+      } catch (error) {
+        console.error("Failed to fetch folders:", error);
+      }
+    }
+
+    fetchFolders();
+
+    const refreshOnPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) fetchFolders();
+    };
+    window.addEventListener("pageshow", refreshOnPageShow);
+    return () => window.removeEventListener("pageshow", refreshOnPageShow);
+  }, []);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  function handleBack() {
+    const dest = folderId ? `/dashboard/folder/${folderId}` : "/dashboard";
+    if (isDirty) {
+      setDialogTitle(title || "Untitled");
+      setPendingNav(dest);
+      setShowSaveDialog(true);
+    } else {
+      router.push(dest);
+    }
+  }
 
   // ─── Derived UI flags ──────────────────────────────────────────────────────
 
@@ -164,7 +320,9 @@ export default function CanvasPage() {
    * should update the palette but should never silently recolour elements.
    */
   function handleThemeApplied(isDark: boolean) {
-    setCanvasMode(isDark ? "dark" : "light");
+    const nextMode = isDark ? "dark" : "light";
+    setCanvasMode(nextMode);
+    setTheme(nextMode);
     applyThemeColors(isDark);
   }
 
@@ -177,8 +335,10 @@ export default function CanvasPage() {
    * should never overwrite element colours the user might have carefully chosen.
    */
   function handleBackgroundColor(color: string) {
+    const nextMode = isColorDark(color) ? "dark" : "light";
     setBackgroundColor(color);
-    setCanvasMode(isColorDark(color) ? "dark" : "light");
+    setCanvasMode(nextMode);
+    setTheme(nextMode);
   }
 
   /**
@@ -307,11 +467,15 @@ export default function CanvasPage() {
         onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
-        onSettingsClick={() => setIsSettingsOpen(true)}
+      />
+
+      <CanvasActions
+        elements={elements.current}
         onBeautify={handleBeautify}
         isBeautifying={isBeautifying}
         hasElements={hasElements}
         hasApiKey={hasApiKey}
+        onSettingsClick={() => setIsSettingsOpen(true)}
       />
 
       <SettingsPanel
@@ -349,7 +513,10 @@ export default function CanvasPage() {
         interactionCanvasRef={interactiveCanvasRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={finalizeElement}
+        onPointerUp={() => {
+          finalizeElement();
+          triggerSave();
+        }}
         onZoom={handleZoom}
         onPan={onPan}
         getCursorForPoint={getCursorForPoint}
@@ -363,6 +530,7 @@ export default function CanvasPage() {
         backgroundColor={backgroundColor}
         gridColor={gridColor}
         dotColor={dotColor}
+        canvasMode={canvasMode}
         onChange={setBackground}
         onBackgroundColor={handleBackgroundColor}
         onGridColor={setGridColor}
@@ -370,25 +538,130 @@ export default function CanvasPage() {
         onThemeApplied={handleThemeApplied}
       />
 
-      <div className="absolute left-4 top-4 z-10 hidden select-none items-center gap-2 pointer-events-none sm:flex">
-        <span className="text-[13px] font-semibold tracking-tight text-[oklch(0.45_0.01_260)]">
-          sketch forge
+      <NotebookSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      <div className="absolute left-4 top-4 z-10 hidden select-none items-center gap-4 sm:flex pointer-events-auto">
+        {isPage && (
+          <button
+            onClick={handleBack}
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-surface-raised px-3 text-[11px] font-semibold text-text-secondary hover:text-text-primary shadow-[0_4px_16px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] transition-all"
+          >
+            <ChevronLeft size={14} />
+            <span>Back to folder</span>
+          </button>
+        )}
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+            isSidebarOpen
+              ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
+              : "bg-surface-raised text-text-secondary hover:text-accent shadow-[0_4px_16px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)]"
+          }`}
+          title="Toggle Notebooks"
+        >
+          <Book size={18} strokeWidth={2} />
+        </button>
+        <span className="text-[13px] font-semibold tracking-tight text-text-muted">
+          Sketch Forge
         </span>
+        <div className="h-4 w-px bg-border-subtle" />
+        <input
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            triggerSave();
+          }}
+          onBlur={triggerSave}
+          className="bg-transparent text-[13px] font-medium text-text-body outline-none border-none p-0 w-48 focus:text-text-primary transition-colors"
+          placeholder="Untitled"
+        />
+        {entityType === "pages" && (
+          <select
+            value={folderId ?? ""}
+            onChange={(event) =>
+              movePageToFolder(event.target.value || null).then((saved) => {
+                if (!saved) router.refresh();
+              })
+            }
+            className="h-9 max-w-44 rounded-xl border border-border-default bg-surface-raised px-2 text-[11px] font-medium text-text-secondary outline-none transition-colors hover:text-text-primary focus:border-border-accent"
+            title="Save location"
+          >
+            <option value="">Root dashboard</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {isSaving && (
+          <span className="text-[10px] text-text-secondary animate-pulse">
+            Saving...
+          </span>
+        )}
       </div>
 
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-2 sm:bottom-4 sm:top-auto">
+      {showSaveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-80 rounded-2xl border border-border-default bg-surface-raised p-6 shadow-2xl">
+            <h2 className="mb-1 text-sm font-semibold text-text-primary">Save before leaving?</h2>
+            <p className="mb-4 text-xs text-text-muted">Give your canvas a name to save it.</p>
+            <input
+              autoFocus
+              value={dialogTitle}
+              onChange={(e) => setDialogTitle(e.target.value)}
+              className="mb-4 w-full rounded-lg border border-border-default bg-surface-overlay px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
+              placeholder="Untitled"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  saveNow(dialogTitle || "Untitled").then(() => {
+                    setShowSaveDialog(false);
+                    if (pendingNav) router.push(pendingNav);
+                  });
+                }
+              }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  await saveNow(dialogTitle || "Untitled");
+                  setShowSaveDialog(false);
+                  if (pendingNav) router.push(pendingNav);
+                }}
+                className="flex-1 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-text hover:bg-accent-hover"
+              >
+                Save &amp; Exit
+              </button>
+              <button
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  if (pendingNav) router.push(pendingNav);
+                }}
+                className="flex-1 rounded-lg border border-border-default px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="absolute right-4 top-[72px] z-10 flex items-center gap-2 sm:bottom-4 sm:top-auto">
         {/* Scribble "recognizing" badge */}
         {scribblePending && (
-          <div className="flex items-center gap-1.5 rounded-xl bg-[oklch(0.18_0.012_260)] px-2.5 py-1.5 shadow-[0_4px_16px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)]">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[oklch(0.82_0.14_88)]" />
-            <span className="text-[10px] font-medium text-[oklch(0.62_0.01_260)]">
+          <div className="flex items-center gap-1.5 rounded-xl bg-surface-raised px-2.5 py-1.5 shadow-[0_4px_16px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            <span className="text-[10px] font-medium text-text-secondary">
               recognizing
             </span>
           </div>
         )}
         {/* Zoom level */}
-        <div className="flex items-center gap-1.5 rounded-xl bg-[oklch(0.18_0.012_260)] px-3 py-1.5 shadow-[0_4px_16px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)]">
-          <span className="text-[11px] font-medium tabular-nums text-[oklch(0.55_0.01_260)]">
+        <div className="flex items-center gap-1.5 rounded-xl bg-surface-raised px-3 py-1.5 shadow-[0_4px_16px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)]">
+          <span className="text-[11px] font-medium tabular-nums text-text-secondary">
             {zoomLevel}%
           </span>
         </div>

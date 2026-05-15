@@ -1,4 +1,4 @@
-import { jwtVerify, SignJWT } from "jose";
+import { SignJWT } from "jose";
 
 export const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
@@ -7,6 +7,7 @@ export async function getJwtToken(userId: string) {
     .setProtectedHeader({
       alg: "HS256",
     })
+    .setSubject(userId)
     .setExpirationTime("7d")
     .sign(JWT_SECRET);
   return token;

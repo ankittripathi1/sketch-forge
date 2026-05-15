@@ -260,27 +260,27 @@ export function StylePanel({
         type="button"
         title="Style controls"
         onClick={() => setIsOpen(true)}
-        className="absolute bottom-19 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl bg-[oklch(0.18_0.012_260)] text-[oklch(0.72_0.01_260)] shadow-[0_6px_20px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] sm:hidden"
+        className="absolute bottom-19 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-hover text-text-secondary shadow-[0_6px_20px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] sm:hidden"
       >
         <SlidersHorizontal size={19} strokeWidth={1.7} />
       </button>
 
       <div
         className={[
-          "absolute bottom-19 left-3 right-3 z-30 max-h-[48vh] flex-col gap-3.5 overflow-y-auto overflow-x-hidden rounded-2xl bg-[oklch(0.18_0.012_260)] p-3.5 shadow-[0_8px_32px_oklch(0_0_0/0.45),inset_0_1px_0_oklch(1_0_0/0.07)] scrollbar-hide",
+          "absolute bottom-19 left-3 right-3 z-30 max-h-[48vh] flex-col gap-3.5 overflow-y-auto overflow-x-hidden rounded-2xl bg-surface-hover p-3.5 shadow-[0_8px_32px_oklch(0_0_0/0.45),inset_0_1px_0_oklch(1_0_0/0.07)] scrollbar-hide",
           isOpen ? "flex" : "hidden",
           "sm:bottom-auto sm:left-auto sm:right-3 sm:top-1/2 sm:flex sm:max-h-[90vh] sm:w-41 sm:-translate-y-1/2",
         ].join(" ")}
       >
         <div className="flex items-center justify-between sm:hidden">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-[oklch(0.48_0.008_260)]">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
             Style
           </span>
           <button
             type="button"
             title="Close style controls"
             onClick={() => setIsOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[oklch(0.58_0.01_260)] hover:bg-[oklch(0.25_0.012_260)]"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"
           >
             <X size={16} strokeWidth={1.8} />
           </button>
@@ -293,7 +293,7 @@ export function StylePanel({
                 value={fontFamily}
                 onChange={(e) => onFontFamily(e.target.value)}
                 style={{ fontFamily }}
-                className="h-8 w-full rounded-lg border border-[oklch(1_0_0/0.08)] bg-[oklch(0.13_0.01_260)] px-2 text-[12px] font-medium text-[oklch(0.82_0.005_260)] outline-none transition-colors hover:bg-[oklch(0.16_0.01_260)] focus:border-[oklch(0.82_0.14_88)]"
+                className="h-8 w-full rounded-lg border border-[oklch(1_0_0/0.08)] bg-surface-raised px-2 text-[12px] font-medium text-text-body outline-none transition-colors hover:bg-surface-overlay focus:border-accent"
               >
                 {["Handwriting", "Simple", "Clean"].map((group) => (
                   <optgroup key={group} label={group}>
@@ -315,16 +315,16 @@ export function StylePanel({
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => onFontSize(Math.max(8, fontSize - 2))}
-                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-[oklch(0.6_0.01_260)] transition-all hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)] sm:h-6 sm:w-6"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-text-secondary transition-all hover:bg-surface-hover hover:text-text-body sm:h-6 sm:w-6"
                 >
                   -
                 </button>
-                <span className="w-8 text-center text-[12px] font-medium tabular-nums text-[oklch(0.7_0.01_260)] sm:w-6">
+                <span className="w-8 text-center text-[12px] font-medium tabular-nums text-text-secondary sm:w-6">
                   {fontSize}
                 </span>
                 <button
                   onClick={() => onFontSize(Math.min(200, fontSize + 2))}
-                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-[oklch(0.6_0.01_260)] transition-all hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)] sm:h-6 sm:w-6"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-text-secondary transition-all hover:bg-surface-hover hover:text-text-body sm:h-6 sm:w-6"
                 >
                   +
                 </button>
@@ -335,8 +335,8 @@ export function StylePanel({
                   className={[
                     "h-9 w-10 rounded-md text-[12px] font-bold transition-all sm:h-6 sm:w-7",
                     fontWeight === "bold"
-                      ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)]"
-                      : "text-[oklch(0.55_0.01_260)] hover:bg-[oklch(0.25_0.012_260)]",
+                      ? "bg-accent text-accent-text"
+                      : "text-text-secondary hover:bg-surface-hover",
                   ].join(" ")}
                 >
                   B
@@ -371,8 +371,8 @@ export function StylePanel({
                     className={[
                       "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
                       fillStyle === fs.value
-                        ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)]"
-                        : "text-[oklch(0.52_0.01_260)] hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.82_0.005_260)]",
+                        ? "bg-accent text-accent-text"
+                        : "text-text-secondary hover:bg-surface-hover hover:text-text-body",
                     ].join(" ")}
                   >
                     {fs.icon}
@@ -405,8 +405,8 @@ export function StylePanel({
               <div className="flex items-center gap-1">
                 {WIDTHS.map((w) => {
                   const active = strokeWidth === w.value;
-                  const activeCls = "bg-[oklch(0.15_0.01_88)]";
-                  const inactiveCls = "bg-[oklch(0.6_0.01_260)]";
+                  const activeCls = "bg-accent-subtle";
+                  const inactiveCls = "bg-surface-hover";
                   return (
                     <button
                       key={w.value}
@@ -415,8 +415,8 @@ export function StylePanel({
                       className={[
                         "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
                         active
-                          ? "bg-[oklch(0.82_0.14_88)]"
-                          : "hover:bg-[oklch(0.25_0.012_260)]",
+                          ? "bg-accent"
+                          : "hover:bg-surface-hover",
                       ].join(" ")}
                     >
                       <div
@@ -441,7 +441,7 @@ export function StylePanel({
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[9px] font-semibold tracking-widest uppercase text-[oklch(0.38_0.008_260)]">
+      <span className="text-[9px] font-semibold tracking-widest uppercase text-text-dim">
         {label}
       </span>
       {children}
@@ -487,7 +487,7 @@ function ColorGrid({
           className={[
             "h-7 w-7 justify-self-center rounded-full transition-all duration-100 sm:h-5 sm:w-5",
             selected === c.value
-              ? "ring-2 ring-[oklch(0.82_0.14_88)] ring-offset-1 ring-offset-[oklch(0.18_0.012_260)] scale-110"
+              ? "ring-2 ring-accent ring-offset-1 ring-offset-surface-raised scale-110"
               : "hover:scale-110",
           ].join(" ")}
         />
@@ -498,7 +498,7 @@ function ColorGrid({
         onClick={() => inputRef.current?.click()}
         className="relative flex h-7 w-7 items-center justify-center justify-self-center overflow-hidden rounded-full bg-[conic-gradient(from_90deg,#e05c7a,#e8a830,#5ab98a,#5a8ae8,#a06ae8,#e05c7a)] transition-all duration-100 hover:scale-110 sm:h-5 sm:w-5"
       >
-        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[oklch(0.18_0.012_260)] text-white">
+        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface-hover text-white">
           <Pipette size={10} strokeWidth={2} />
         </span>
         <input

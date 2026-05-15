@@ -7,13 +7,13 @@ import { db, magicLinkTokens, oauthAccounts, userTable } from "@repo/db";
 import { and, eq, gt } from "drizzle-orm";
 import { loginSchema } from "@repo/schema";
 import { sendMagicLink } from "../lib/email.js";
-import { hash } from "bcryptjs";
+import { createHash } from "crypto";
 import { getJwtToken, JWT_SECRET } from "../lib/jwt.js";
 import { jwtVerify } from "jose";
 
 const auth = new Hono();
 
-auth.get("/login", async (c) => {
+auth.post("/login", async (c) => {
   const body = await c.req.json();
 
   const parsed = loginSchema.safeParse(body);
@@ -30,15 +30,16 @@ auth.get("/login", async (c) => {
 
   const { email } = parsed.data;
 
-  const user = await db.query.userTable.findFirst({
+  let user = await db.query.userTable.findFirst({
     where: eq(userTable.email, email),
   });
 
   if (!user) {
-    return c.json(
-      { message: "If this email exists, a magic link has been sent" },
-      200,
-    );
+    const [newUser] = await db
+      .insert(userTable)
+      .values({ email })
+      .returning();
+    user = newUser!;
   }
 
   await sendMagicLink(user.id, user.email);
@@ -56,7 +57,7 @@ auth.get("/verify", async (c) => {
     return c.json({ error: "Token required" }, 400);
   }
 
-  const tokenHash = await hash(token, process.env.HASH_SALT!);
+  const tokenHash = createHash("sha256").update(token).digest("hex");
 
   const validToken = await db.query.magicLinkTokens.findFirst({
     where: and(
@@ -90,6 +91,7 @@ auth.get("/verify", async (c) => {
 auth.get("/google", async (c) => {
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
+  const nextPath = c.req.query("next");
 
   const url = google.createAuthorizationURL(state, codeVerifier, [
     "openid",
@@ -111,6 +113,15 @@ auth.get("/google", async (c) => {
     path: "/",
   });
 
+  if (nextPath?.startsWith("/")) {
+    setCookie(c, "login_next", nextPath, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 10,
+      path: "/",
+    });
+  }
+
   return c.redirect(url.toString());
 });
 
@@ -126,11 +137,16 @@ auth.get("/google/callback", async (c) => {
 
   const tokens = await google.validateAuthorizationCode(code, storedVerifier);
 
-  const claims = decodeIdToken(tokens.idToken());
-  const googleId = claims.sub as string;
-  const email = claims.email as string;
-  const name = claims.name as string;
-  const avatarUrl = claims.picture as string;
+  const claims = decodeIdToken(tokens.idToken()) as {
+    sub: string;
+    email: string;
+    name: string;
+    picture: string;
+  };
+  const googleId = claims.sub;
+  const email = claims.email;
+  const name = claims.name;
+  const avatarUrl = claims.picture;
 
   const existingOauth = await db
     .select()
@@ -156,12 +172,29 @@ auth.get("/google/callback", async (c) => {
       providerAccountId: googleId,
     });
   }
-  return c.redirect(`${process.env.FRONTEND_URL}?userId=${userId}`);
+
+  const JWTtoken = await getJwtToken(userId);
+
+  setCookie(c, "session", JWTtoken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 24 * 7,
+    path: "/",
+  });
+
+  const nextPath = getCookie(c, "login_next");
+  deleteCookie(c, "login_next");
+
+  return c.redirect(
+    `${process.env.FRONTEND_URL}${nextPath?.startsWith("/") ? nextPath : "/dashboard"}`,
+  );
 });
 
 auth.post("/logout", (c) => {
   deleteCookie(c, "google_state");
   deleteCookie(c, "google_code_verifier");
+  deleteCookie(c, "login_next");
+  deleteCookie(c, "session");
   return c.json({ message: "Logged out" });
 });
 
@@ -174,7 +207,11 @@ auth.get("/me", async (c) => {
 
   try {
     const { payload } = await jwtVerify(cookie, JWT_SECRET);
-    const userId = payload.userId as string;
+    const userId = (payload.sub ?? payload.userId) as string | undefined;
+
+    if (!userId) {
+      return c.json({ error: "Invalid token" }, 401);
+    }
 
     const user = await db.query.userTable.findFirst({
       where: eq(userTable.id, userId),

@@ -1,13 +1,12 @@
 import { Resend } from "resend";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { db, magicLinkTokens } from "@repo/db";
-import { hash } from "bcryptjs";
 
-const resend = new Resend(process.env.RESENT_API_KEY);
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendMagicLink(userId: string, email: string) {
   const rawToken = randomBytes(32).toString("hex");
-  const tokenHash = await hash(rawToken, process.env.HASH_SALT!);
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -17,9 +16,12 @@ export async function sendMagicLink(userId: string, email: string) {
     expiresAt,
   });
 
-  const link = `${process.env.FRONTEND_URL}/auth/verify?token=${rawToken}`;
+  const link = `${process.env.API_URL}/auth/verify?token=${rawToken}`;
 
-  await resend.emails.send({
+  console.log("[magic-link] sending to:", email);
+  console.log("[magic-link] link:", link);
+
+  const result = await resend.emails.send({
     from: "SketchForge <onboarding@resend.dev>",
     to: email,
     subject: "Sign in to SketchForge",
@@ -37,4 +39,6 @@ export async function sendMagicLink(userId: string, email: string) {
     </html>
     `,
   });
+
+  console.log("[magic-link] resend result:", JSON.stringify(result));
 }

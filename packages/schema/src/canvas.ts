@@ -38,3 +38,14 @@ export const SketchElementSchema = z.object({
   fontWeight: z.enum(["normal", "bold"]).optional(),
 });
 export type SketchElement = z.infer<typeof SketchElementSchema>;
+
+export const CreateCanvasSchema = z.object({
+  title: z.string().min(1).optional(),
+  elements: z.array(SketchElementSchema).optional(),
+});
+
+export const UpdateCanvasSchema = z.object({
+  title: z.string().min(1).optional(),
+  elements: z.array(SketchElementSchema).optional(),
+  thumbnail: z.string().optional(),
+});

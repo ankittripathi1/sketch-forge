@@ -1,6 +1,15 @@
 "use client";
 
-import { Grip, Grid2X2, Palette, Pipette, Square, X } from "lucide-react";
+import {
+  Grip,
+  Grid2X2,
+  Moon,
+  Palette,
+  Pipette,
+  Square,
+  Sun,
+  X,
+} from "lucide-react";
 import { useRef, useState } from "react";
 
 type Background = "plain" | "dots" | "grid";
@@ -14,6 +23,7 @@ interface BackgroundPickerProps {
   onBackgroundColor: (color: string) => void;
   onGridColor: (color: string) => void;
   onDotColor: (color: string) => void;
+  canvasMode: "light" | "dark";
   /** Called when a preset theme is applied; isDark reflects the new paper color. */
   onThemeApplied?: (isDark: boolean) => void;
 }
@@ -30,12 +40,12 @@ const LIGHT_THEMES = [
 ] as const;
 
 const DARK_THEMES = [
-  { label: "Graphite", paper: "#1b1c22", pattern: "#363844" },
-  { label: "Midnight", paper: "#0f1828", pattern: "#1e3050" },
   { label: "Noir", paper: "#111012", pattern: "#27242c" },
-  { label: "Forest", paper: "#121a13", pattern: "#223524" },
-  { label: "Obsidian", paper: "#15121e", pattern: "#2d2648" },
-  { label: "Ember", paper: "#1b1210", pattern: "#35241e" },
+  { label: "Ink", paper: "#111722", pattern: "#273246" },
+  { label: "Pine", paper: "#111a16", pattern: "#294137" },
+  { label: "Aubergine", paper: "#17121f", pattern: "#342948" },
+  { label: "Umber", paper: "#1b1411", pattern: "#3a2a22" },
+  { label: "Deep Sea", paper: "#0d1a20", pattern: "#21404b" },
 ] as const;
 
 const BG_OPTIONS = [
@@ -103,17 +113,26 @@ export function BackgroundPicker({
   onBackgroundColor,
   onGridColor,
   onDotColor,
+  canvasMode,
   onThemeApplied,
 }: BackgroundPickerProps) {
   const [isOpen, setIsOpen] = useState(true);
   const activePatternColor = background === "dots" ? dotColor : gridColor;
   const updatePatternColor = background === "dots" ? onDotColor : onGridColor;
 
+  const visibleThemes = canvasMode === "dark" ? DARK_THEMES : LIGHT_THEMES;
+
   function applyTheme(paper: string, pattern: string) {
     onBackgroundColor(paper);
     onGridColor(pattern);
     onDotColor(pattern);
     onThemeApplied?.(isDarkColor(paper));
+  }
+
+  function switchMode(next: "light" | "dark") {
+    if (next === canvasMode) return;
+    const first = next === "dark" ? DARK_THEMES[0] : LIGHT_THEMES[0];
+    applyTheme(first.paper, first.pattern);
   }
 
   function isThemeActive(paper: string, pattern: string) {
@@ -132,7 +151,7 @@ export function BackgroundPicker({
           type="button"
           title="Canvas appearance"
           onClick={() => setIsOpen(true)}
-          className="absolute bottom-4 left-4 z-20 flex h-9 w-9 items-center justify-center rounded-xl bg-[oklch(0.18_0.012_260)] text-[oklch(0.72_0.01_260)] shadow-[0_6px_20px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] transition-colors hover:bg-[oklch(0.22_0.012_260)]"
+          className="absolute bottom-4 left-4 z-20 flex h-9 w-9 items-center justify-center rounded-xl bg-surface-hover text-text-secondary shadow-[0_6px_20px_oklch(0_0_0/0.35),inset_0_1px_0_oklch(1_0_0/0.07)] transition-colors hover:bg-surface-hover"
         >
           <Palette size={16} strokeWidth={1.7} />
         </button>
@@ -140,21 +159,21 @@ export function BackgroundPicker({
 
       <div
         className={[
-          "absolute left-3 right-3 top-16 z-30 flex-col rounded-2xl bg-[oklch(0.18_0.012_260)] shadow-[0_12px_40px_oklch(0_0_0/0.48),inset_0_1px_0_oklch(1_0_0/0.08)]",
+          "absolute left-3 right-3 top-16 z-30 flex-col rounded-2xl bg-surface-hover shadow-[0_12px_40px_oklch(0_0_0/0.48),inset_0_1px_0_oklch(1_0_0/0.08)]",
           isOpen ? "flex" : "hidden",
           "sm:bottom-4 sm:left-4 sm:right-auto sm:top-auto sm:w-60",
         ].join(" ")}
       >
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-3.5 pt-3 pb-2.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[oklch(0.46_0.008_260)]">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
             Canvas
           </span>
           <button
             type="button"
             title="Close"
             onClick={() => setIsOpen(false)}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-[oklch(0.5_0.01_260)] transition-colors hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.8_0.005_260)]"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-body"
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -162,7 +181,7 @@ export function BackgroundPicker({
 
         {/* ── Background type segmented control ── */}
         <div className="px-3 pb-3">
-          <div className="flex rounded-xl bg-[oklch(0.13_0.01_260)] p-1 gap-0.5">
+          <div className="flex rounded-xl bg-surface-raised p-1 gap-0.5">
             {BG_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -171,8 +190,8 @@ export function BackgroundPicker({
                 className={[
                   "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium transition-all duration-150 sm:py-1.5",
                   background === opt.value
-                    ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)] shadow-sm"
-                    : "text-[oklch(0.56_0.01_260)] hover:bg-[oklch(0.22_0.012_260)] hover:text-[oklch(0.82_0.005_260)]",
+                    ? "bg-accent text-accent-text shadow-sm"
+                    : "text-text-secondary hover:bg-surface-hover hover:text-text-body",
                 ].join(" ")}
               >
                 {opt.icon}
@@ -184,28 +203,38 @@ export function BackgroundPicker({
 
         <div className="h-px bg-[oklch(1_0_0/0.06)]" />
 
-        {/* ── Light themes ── */}
-        <div className="px-3 pt-3 pb-2">
-          <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-[oklch(0.42_0.008_260)]">
-            Light
-          </p>
-          <ThemeGrid
-            themes={LIGHT_THEMES}
-            background={background}
-            isActive={isThemeActive}
-            onApply={applyTheme}
-          />
-        </div>
-
-        <div className="h-px bg-[oklch(1_0_0/0.06)]" />
-
-        {/* ── Dark themes ── */}
+        {/* ── Theme mode switcher + filtered theme grid ── */}
         <div className="px-3 pt-3 pb-3">
-          <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-[oklch(0.42_0.008_260)]">
-            Dark
-          </p>
+          {/* Light / Dark toggle */}
+          <div className="mb-3 flex rounded-xl bg-surface-raised p-1 gap-0.5">
+            <button
+              onClick={() => switchMode("light")}
+              className={[
+                "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-medium transition-all duration-150",
+                canvasMode === "light"
+                  ? "bg-[oklch(0.96_0.005_80)] text-[oklch(0.30_0.010_75)] shadow-sm"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-text-body",
+              ].join(" ")}
+            >
+              <Sun size={12} strokeWidth={2} />
+              <span>Light</span>
+            </button>
+            <button
+              onClick={() => switchMode("dark")}
+              className={[
+                "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-medium transition-all duration-150",
+                canvasMode === "dark"
+                  ? "bg-[oklch(0.18_0.014_75)] text-[oklch(0.82_0.010_80)] shadow-sm"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-text-body",
+              ].join(" ")}
+            >
+              <Moon size={12} strokeWidth={2} />
+              <span>Dark</span>
+            </button>
+          </div>
+
           <ThemeGrid
-            themes={DARK_THEMES}
+            themes={visibleThemes}
             background={background}
             isActive={isThemeActive}
             onApply={applyTheme}
@@ -217,7 +246,7 @@ export function BackgroundPicker({
           <>
             <div className="h-px bg-[oklch(1_0_0/0.06)]" />
             <div className="flex flex-col gap-2 px-3 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[oklch(0.42_0.008_260)]">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 Customize
               </p>
               <CustomColorRow
@@ -264,7 +293,7 @@ function ThemeGrid({
             className={[
               "group flex flex-col overflow-hidden rounded-xl border transition-all duration-150",
               active
-                ? "border-[oklch(0.82_0.14_88)] shadow-[0_0_0_1px_oklch(0.82_0.14_88/0.4)]"
+                ? "border-accent shadow-none"
                 : "border-[oklch(1_0_0/0.07)] hover:border-[oklch(1_0_0/0.18)]",
             ].join(" ")}
           >
@@ -278,8 +307,8 @@ function ThemeGrid({
               className={[
                 "px-1.5 py-1 text-center text-[9px] font-semibold leading-none tracking-wide transition-colors",
                 active
-                  ? "text-[oklch(0.86_0.06_88)] bg-[oklch(0.82_0.14_88/0.12)]"
-                  : "text-[oklch(0.52_0.008_260)] bg-[oklch(0.14_0.01_260)] group-hover:text-[oklch(0.72_0.005_260)]",
+                  ? "text-accent bg-accent-subtle"
+                  : "text-text-secondary bg-surface-raised group-hover:text-text-secondary",
               ].join(" ")}
             >
               {theme.label}
@@ -306,7 +335,7 @@ function CustomColorRow({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-10 shrink-0 text-[10px] font-medium text-[oklch(0.56_0.01_260)]">
+      <span className="w-10 shrink-0 text-[10px] font-medium text-text-secondary">
         {label}
       </span>
       {/* Current color preview */}
@@ -321,7 +350,7 @@ function CustomColorRow({
         onClick={() => inputRef.current?.click()}
         className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[conic-gradient(from_90deg,#e05c7a,#e8a830,#5ab98a,#5a8ae8,#a06ae8,#e05c7a)] transition-transform hover:scale-105 sm:h-6 sm:w-6"
       >
-        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[oklch(0.18_0.012_260)] text-white">
+        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface-hover text-white">
           <Pipette size={9} strokeWidth={2.2} />
         </span>
         <input

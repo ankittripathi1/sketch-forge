@@ -844,6 +844,11 @@ export function useSketchEngine(
         .reverse()
         .find((el) => hitTestElement(el, point, 8 / zoom.current));
       if (hit) {
+        // Commit previously selected elements back to scene before switching selection
+        elements.current = [
+          ...elements.current.filter((el) => el.id !== hit.id),
+          ...selectedElements.current.filter((el) => el.id !== hit.id),
+        ];
         selectedElements.current = [hit];
         setSelectedTool(hit.tool);
         setStrokeColor(hit.strokeColor);
@@ -853,7 +858,6 @@ export function useSketchEngine(
         if (hit.fontFamily) setFontFamily(hit.fontFamily);
         if (hit.fontSize) setFontSize(hit.fontSize);
         if (hit.fontWeight) setFontWeight(hit.fontWeight);
-        elements.current = elements.current.filter((el) => el.id !== hit.id);
         isDragging.current = true;
         dragStart.current = point;
         renderScene();
@@ -1050,6 +1054,7 @@ export function useSketchEngine(
 
     if (!isDrawing.current || !currentElement.current) return;
     isDrawing.current = false;
+    cancelAnimationFrame(rafId.current);
 
     if (tool === "eraser") {
       const eraser = currentElement.current;
@@ -1393,8 +1398,21 @@ export function useSketchEngine(
     isPanningDragging.current = false;
   }
 
+  function setElements(newElements: SketchElement[]) {
+    elements.current = newElements;
+    selectedElements.current = [];
+    history.current = createHistory();
+    history.current.push(newElements);
+    syncHistoryStatus();
+    renderScene();
+    renderSelection();
+  }
+
   return {
+    elements,
+    setElements,
     tool,
+
     setTool: applyTool,
     strokeColor,
     setStrokeColor: applyStrokeColor,

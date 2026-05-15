@@ -110,6 +110,9 @@ export function drawElement(
     ctx.restore();
   } else if (el.tool === "image" && el.src) {
     const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
+    // Image constructor is not available in Web Workers.
+    if (typeof Image === "undefined") return;
+
     let img = imageCache.get(el.src);
     if (!img) {
       img = new Image();

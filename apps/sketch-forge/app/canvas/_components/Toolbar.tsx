@@ -4,13 +4,10 @@ import {
   Circle,
   Eraser,
   Highlighter,
-  Loader2,
   Minus,
   MousePointer2,
   Pencil,
   Redo2,
-  Settings2,
-  Sparkles,
   Square,
   Type,
   Undo2,
@@ -82,11 +79,6 @@ interface ToolbarProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  onSettingsClick: () => void;
-  onBeautify: () => void;
-  isBeautifying: boolean;
-  hasElements: boolean;
-  hasApiKey: boolean;
 }
 
 export function Toolbar({
@@ -96,23 +88,9 @@ export function Toolbar({
   onRedo,
   canUndo,
   canRedo,
-  onSettingsClick,
-  onBeautify,
-  isBeautifying,
-  hasElements,
-  hasApiKey,
 }: ToolbarProps) {
-  const beautifyDisabled = isBeautifying || !hasElements;
-  const beautifyTitle = !hasApiKey
-    ? "Add a Gemini API key in Settings to enable"
-    : !hasElements
-      ? "Draw something first"
-      : isBeautifying
-        ? "Beautifying…"
-        : "Beautify — arrange with AI";
-
   return (
-    <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100vw-16px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl bg-[oklch(0.18_0.012_260)] p-1.5 shadow-[0_8px_32px_oklch(0_0_0/0.45),inset_0_1px_0_oklch(1_0_0/0.07)] sm:bottom-auto sm:top-3 sm:max-w-[calc(100vw-24px)]">
+    <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100vw-16px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl bg-surface-raised p-1.5 shadow-[0_8px_32px_oklch(0_0_0/0.50),inset_0_1px_0_oklch(1_0_0/0.07)] sm:bottom-auto sm:top-3 sm:max-w-[calc(100vw-24px)]">
       {TOOL_GROUPS.map((group, groupIdx) => (
         <div key={groupIdx} className="flex items-center gap-1">
           {group.items.map((t) => (
@@ -137,44 +115,12 @@ export function Toolbar({
       <ToolBtn onClick={onRedo} disabled={!canRedo} label="Redo · ⌘⇧Z">
         <Redo2 size={15} strokeWidth={1.75} />
       </ToolBtn>
-
-      <Divider />
-
-      {/* ── Beautify button ── */}
-      <button
-        onClick={beautifyDisabled ? undefined : onBeautify}
-        disabled={beautifyDisabled}
-        title={beautifyTitle}
-        className={[
-          "flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-semibold outline-none transition-all duration-150 sm:h-9 sm:px-2.5",
-          beautifyDisabled
-            ? "cursor-not-allowed text-[oklch(0.32_0.005_260)] opacity-50"
-            : !hasApiKey
-              ? "cursor-pointer text-[oklch(0.52_0.01_260)] hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.72_0.01_260)]"
-              : "cursor-pointer bg-[oklch(0.82_0.14_88/0.12)] text-[oklch(0.82_0.14_88)] hover:bg-[oklch(0.82_0.14_88/0.2)]",
-        ].join(" ")}
-      >
-        {isBeautifying ? (
-          <Loader2 size={15} strokeWidth={1.75} className="animate-spin" />
-        ) : (
-          <Sparkles size={15} strokeWidth={1.75} />
-        )}
-        <span className="hidden sm:inline">
-          {isBeautifying ? "Thinking…" : "Beautify"}
-        </span>
-      </button>
-
-      <Divider />
-
-      <ToolBtn onClick={onSettingsClick} label="Settings">
-        <Settings2 size={15} strokeWidth={1.75} />
-      </ToolBtn>
     </div>
   );
 }
 
 function Divider() {
-  return <div className="mx-0.5 h-5 w-px bg-[oklch(1_0_0/0.1)]" />;
+  return <div className="mx-0.5 h-5 w-px bg-border-subtle" />;
 }
 
 function ToolBtn({
@@ -198,10 +144,10 @@ function ToolBtn({
       className={[
         "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl outline-none transition-all duration-150 sm:h-9 sm:w-9",
         active
-          ? "bg-[oklch(0.82_0.14_88)] text-[oklch(0.15_0.01_88)] shadow-[0_1px_4px_oklch(0.82_0.14_88/0.35)]"
+          ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
           : disabled
-            ? "cursor-not-allowed text-[oklch(0.32_0.005_260)] opacity-50"
-            : "cursor-pointer text-[oklch(0.6_0.01_260)] hover:bg-[oklch(0.25_0.012_260)] hover:text-[oklch(0.88_0.005_260)]",
+            ? "cursor-not-allowed text-text-dim opacity-50"
+            : "cursor-pointer text-text-secondary hover:bg-surface-hover hover:text-text-body",
       ].join(" ")}
     >
       {children}

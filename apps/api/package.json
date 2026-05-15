@@ -5,15 +5,17 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir ./dist",
+    "build": "bun build src/index.ts --outdir ./dist --target=bun",
     "start": "bun dist/index.js",
-    "lint": "eslint . --max-warning 0",
+    "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@repo/eslint-config": "*",
-    "@repo/typescript-config": "*"
+    "@repo/typescript-config": "*",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -1,0 +1,26 @@
+{
+  "name": "Sketch Forge",
+  "short_name": "SketchForge",
+  "description": "Fast sketching and quick capture app.",
+  "start_url": "/capture",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/window.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Capture",
+      "short_name": "Capture",
+      "description": "Start a new quick sketch",
+      "url": "/capture",
+      "icons": [{ "src": "/file-text.svg", "sizes": "any" }]
+    }
+  ]
+}
