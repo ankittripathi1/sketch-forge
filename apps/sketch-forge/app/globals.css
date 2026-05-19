@@ -146,3 +146,15 @@
   .bg-gradient-brand { background: var(--gradient-brand); }
   .font-handwriting { font-family: Kalam, cursive; }
 }
+
+/* ─── Motion utility classes (consumed by motion components in page.tsx) ─── */
+@layer utilities {
+  .link-underline-on {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    transition: background-size 260ms cubic-bezier(0.23, 1, 0.32, 1), color 200ms ease;
+  }
+  .link-underline-on:hover { background-size: 0% 1px; }
+}

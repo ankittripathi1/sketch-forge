@@ -1,8 +1,21 @@
 // Types
-export type { Tool, FillStyle, Point, SketchElement } from "./types.js";
+export type {
+  Tool,
+  FillStyle,
+  Point,
+  SketchElement,
+  TextAlign,
+  TextVerticalAlign,
+  ArrowBinding,
+  AnchorSide,
+} from "./types.js";
 
 // Rendering
-export { drawElement, drawSelectionBox } from "./renderElement.js";
+export {
+  drawElement,
+  drawSelectionBox,
+  resolveArrowEndpoints,
+} from "./renderElement.js";
 export { renderCanvasToBlob } from "./renderToImage.js";
 export type { RenderOptions } from "./renderToImage.js";
 

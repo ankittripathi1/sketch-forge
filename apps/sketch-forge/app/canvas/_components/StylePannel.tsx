@@ -1,8 +1,20 @@
 "use client";
 
-import { Pipette, SlidersHorizontal, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Pipette,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Tool, FillStyle } from "@repo/canvas-core/types";
+import {
+  Tool,
+  FillStyle,
+  TextAlign,
+  TextVerticalAlign,
+} from "@repo/canvas-core/types";
 
 /**
  * Colors ordered for a light canvas — dark anchors first, light last.
@@ -155,6 +167,7 @@ const FONTS = [
 
 const RECENT_COLORS_KEY = "sketch-forge:recent-colors";
 const MAX_RECENT_COLORS = 5;
+type CodeLanguage = "javascript" | "typescript" | "python" | "java";
 
 function isHexColor(value: string) {
   return /^#[0-9a-f]{6}$/i.test(value);
@@ -177,6 +190,13 @@ interface StylePanelProps {
   onFontFamily: (v: string) => void;
   onFontSize: (v: number) => void;
   onFontWeight: (v: "normal" | "bold") => void;
+  textAlign: TextAlign;
+  textVerticalAlign: TextVerticalAlign;
+  onTextAlign: (v: TextAlign) => void;
+  onTextVerticalAlign: (v: TextVerticalAlign) => void;
+  codeLanguage: CodeLanguage;
+  onCodeLanguage: (v: CodeLanguage) => void;
+  onCopyCode: () => Promise<boolean>;
   /** Drives which color palette is shown: dark canvas → light-first colors */
   canvasMode?: "light" | "dark";
 }
@@ -198,11 +218,19 @@ export function StylePanel({
   onFontFamily,
   onFontSize,
   onFontWeight,
+  textAlign,
+  textVerticalAlign,
+  onTextAlign,
+  onTextVerticalAlign,
+  codeLanguage,
+  onCodeLanguage,
+  onCopyCode,
   canvasMode = "light",
 }: StylePanelProps) {
   const COLORS = canvasMode === "dark" ? COLORS_DARK : COLORS_LIGHT;
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const activeTool = selectedTool ?? tool;
   // Keep the COLORS variable in scope for the JSX below (derived above in function body)
 
@@ -246,13 +274,21 @@ export function StylePanel({
 
   const showFill =
     activeTool !== "line" &&
+    activeTool !== "arrow" &&
     activeTool !== "freehand" &&
     activeTool !== "highlighter" &&
-    activeTool !== "text";
+    activeTool !== "text" &&
+    activeTool !== "code";
   const hasTextOptions =
     activeTool === "text" ||
     activeTool === "rectangle" ||
-    activeTool === "ellipse";
+    activeTool === "ellipse" ||
+    activeTool === "diamond";
+
+  const showTextAlignGrid =
+    activeTool === "rectangle" ||
+    activeTool === "ellipse" ||
+    activeTool === "diamond";
 
   return (
     <>
@@ -285,6 +321,69 @@ export function StylePanel({
             <X size={16} strokeWidth={1.8} />
           </button>
         </div>
+
+        {activeTool === "code" && (
+          <>
+            <Section label="Code" defaultOpen>
+              <div className="flex flex-col gap-2">
+                <select
+                  value={codeLanguage}
+                  onChange={(e) =>
+                    onCodeLanguage(e.target.value as CodeLanguage)
+                  }
+                  className="h-8 w-full rounded-lg border border-[oklch(1_0_0/0.08)] bg-surface-raised px-2 text-[12px] font-medium text-text-body outline-none transition-colors hover:bg-surface-overlay focus:border-accent"
+                >
+                  <option value="javascript">JavaScript</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="python">Python</option>
+                  <option value="java">Java</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCopyCode().then((copied) => {
+                      if (!copied) return;
+                      setCodeCopied(true);
+                      window.setTimeout(() => setCodeCopied(false), 1200);
+                    });
+                  }}
+                  className="flex h-8 items-center justify-center gap-2 rounded-lg bg-surface-raised px-2 text-[12px] font-semibold text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-body"
+                >
+                  {codeCopied ? (
+                    <Check size={14} strokeWidth={2} />
+                  ) : (
+                    <Copy size={14} strokeWidth={1.8} />
+                  )}
+                  {codeCopied ? "Copied" : "Copy code"}
+                </button>
+              </div>
+            </Section>
+
+            <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+
+            <Section label="Size" defaultOpen>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => onFontSize(Math.max(10, fontSize - 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-text-secondary transition-all hover:bg-surface-hover hover:text-text-body sm:h-6 sm:w-6"
+                >
+                  -
+                </button>
+                <span className="w-8 text-center text-[12px] font-medium tabular-nums text-text-secondary sm:w-6">
+                  {fontSize}
+                </span>
+                <button
+                  onClick={() => onFontSize(Math.min(32, fontSize + 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-text-secondary transition-all hover:bg-surface-hover hover:text-text-body sm:h-6 sm:w-6"
+                >
+                  +
+                </button>
+              </div>
+            </Section>
+
+            <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+          </>
+        )}
 
         {hasTextOptions && (
           <>
@@ -344,19 +443,37 @@ export function StylePanel({
               </div>
             </Section>
 
+            {showTextAlignGrid && (
+              <>
+                <div className="h-px bg-[oklch(1_0_0/0.07)]" />
+                <Section label="Text position">
+                  <AlignGrid
+                    h={textAlign}
+                    v={textVerticalAlign}
+                    onChange={(h, v) => {
+                      onTextAlign(h);
+                      onTextVerticalAlign(v);
+                    }}
+                  />
+                </Section>
+              </>
+            )}
+
             <div className="h-px bg-[oklch(1_0_0/0.07)]" />
           </>
         )}
 
-        <Section label="Stroke">
-          <ColorGrid
-            colors={COLORS}
-            recentColors={recentColors}
-            selected={strokeColor}
-            onSelect={onStrokeColor}
-            onCustomColor={handleStrokeColor}
-          />
-        </Section>
+        {activeTool !== "code" && (
+          <Section label="Stroke" defaultOpen>
+            <ColorGrid
+              colors={COLORS}
+              recentColors={recentColors}
+              selected={strokeColor}
+              onSelect={onStrokeColor}
+              onCustomColor={handleStrokeColor}
+            />
+          </Section>
+        )}
 
         {showFill && (
           <>
@@ -398,15 +515,13 @@ export function StylePanel({
           </>
         )}
 
-        {activeTool !== "text" && (
+        {activeTool !== "text" && activeTool !== "code" && (
           <>
             <div className="h-px bg-[oklch(1_0_0/0.07)]" />
             <Section label="Width">
               <div className="flex items-center gap-1">
                 {WIDTHS.map((w) => {
                   const active = strokeWidth === w.value;
-                  const activeCls = "bg-accent-subtle";
-                  const inactiveCls = "bg-surface-hover";
                   return (
                     <button
                       key={w.value}
@@ -416,14 +531,14 @@ export function StylePanel({
                         "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
                         active
                           ? "bg-accent"
-                          : "hover:bg-surface-hover",
+                          : "bg-surface-raised hover:bg-surface-overlay",
                       ].join(" ")}
                     >
                       <div
                         style={{ height: w.thickness }}
                         className={
                           "w-4 rounded-full " +
-                          (active ? activeCls : inactiveCls)
+                          (active ? "bg-accent-text" : "bg-text-secondary")
                         }
                       />
                     </button>
@@ -438,13 +553,91 @@ export function StylePanel({
   );
 }
 
-function Section({ label, children }: { label: string; children: ReactNode }) {
+function AlignGrid({
+  h,
+  v,
+  onChange,
+}: {
+  h: TextAlign;
+  v: TextVerticalAlign;
+  onChange: (h: TextAlign, v: TextVerticalAlign) => void;
+}) {
+  const rows: TextVerticalAlign[] = ["top", "middle", "bottom"];
+  const cols: TextAlign[] = ["left", "center", "right"];
+  return (
+    <div className="grid grid-cols-3 gap-1 rounded-lg bg-surface-raised p-1.5 w-fit">
+      {rows.map((row) =>
+        cols.map((col) => {
+          const active = h === col && v === row;
+          return (
+            <button
+              key={`${row}-${col}`}
+              type="button"
+              title={`${row} ${col}`}
+              onClick={() => onChange(col, row)}
+              className={[
+                "h-5 w-5 rounded-sm border transition-colors",
+                active
+                  ? "border-accent bg-accent"
+                  : "border-[oklch(1_0_0/0.12)] bg-transparent hover:bg-surface-hover",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "block h-1 w-1 rounded-full",
+                  active ? "bg-accent-text" : "bg-text-dim",
+                  row === "top" ? "mt-0.5" : row === "bottom" ? "mt-2" : "mt-1",
+                  col === "left" ? "ml-0.5" : col === "right" ? "ml-2" : "ml-1",
+                ].join(" ")}
+              />
+            </button>
+          );
+        }),
+      )}
+    </div>
+  );
+}
+
+function Section({
+  label,
+  children,
+  defaultOpen = false,
+  collapsible = true,
+}: {
+  label: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  collapsible?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen || !collapsible);
+  if (!collapsible) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[9px] font-semibold tracking-widest uppercase text-text-dim">
+          {label}
+        </span>
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[9px] font-semibold tracking-widest uppercase text-text-dim">
-        {label}
-      </span>
-      {children}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center justify-between gap-1 text-left text-[9px] font-semibold tracking-widest uppercase text-text-dim transition-colors hover:text-text-secondary"
+      >
+        <span>{label}</span>
+        <ChevronDown
+          size={11}
+          strokeWidth={2}
+          className={[
+            "transition-transform duration-150",
+            open ? "rotate-0" : "-rotate-90",
+          ].join(" ")}
+        />
+      </button>
+      {open && children}
     </div>
   );
 }

@@ -32,6 +32,10 @@ interface ElementSnapshot {
   h: number; // |y2 - y1|
   fontSize?: number;
   fontWeight?: string;
+  /** Source element id for an arrow start (parent of the connection). */
+  startElementId?: string;
+  /** Target element id for an arrow end (child of the connection). */
+  endElementId?: string;
 }
 
 function snapshot(el: SketchElement): ElementSnapshot {
@@ -47,35 +51,89 @@ function snapshot(el: SketchElement): ElementSnapshot {
     h: Math.round(Math.abs(el.y2 - el.y1)),
     fontSize: el.fontSize,
     fontWeight: el.fontWeight,
+    startElementId: el.startBinding?.elementId,
+    endElementId: el.endBinding?.elementId,
   };
 }
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a whiteboard layout assistant. Rearrange the given canvas elements into a clean, beautiful notes layout and return ONLY a valid JSON array — no markdown, no explanation.
+const SYSTEM_PROMPT = `You are a whiteboard layout assistant. Rearrange the given canvas elements into a clean, well-organized layout and return ONLY a valid JSON array — no markdown, no explanation.
 
-LAYOUT RULES:
+STEP 1 — CLASSIFY THE CANVAS:
+
+Look at the input. Decide which mode best fits:
+
+A) DIAGRAM / MIND-MAP / FLOWCHART
+   Trigger: most labeled elements are shapes (rectangle, ellipse, diamond) containing short text,
+   OR arrows/lines connect labeled shapes, OR the layout is clearly spatial (nodes scattered,
+   not stacked into paragraphs).
+
+B) NOTES / DOCUMENT
+   Trigger: most elements are bare text (tool === "text") with sentence-like content arranged
+   top-to-bottom like a written page.
+
+C) MIXED — apply DIAGRAM rules to the labeled shapes and NOTES rules to bare text blocks,
+   placing the text section above the diagram.
+
+STEP 2 — INFER RELATIONSHIPS FROM THE INPUT POSITIONS:
+
+The input x1/y1/x2/y2 tell you what the user intended:
+- Elements close together → likely siblings or parent/child in a group
+- Element directly above another → likely a parent or heading
+- Elements in a horizontal row → likely siblings at the same level
+- Arrows (tool === "arrow") with startBinding/endBinding define explicit parent → child links;
+  preserve these connections — DO NOT change arrow endpoints, only reposition shapes so the
+  arrow makes geometric sense (parent above/left of child).
+
+STEP 3 — APPLY THE LAYOUT FOR THE CHOSEN MODE:
+
+═══ DIAGRAM MODE ═══
+Goal: a clean hierarchical tree or a tidy grid that preserves the spatial relationships.
+
+- Identify the root(s): topmost element(s) with no incoming arrow / nothing above them.
+- Build levels: row 0 = roots, row 1 = direct children (those pointed to by an arrow from row 0,
+  or those originally placed below a row-0 element), etc.
+- Render top-to-bottom, level by level. Vertical gap between levels: 80px.
+- Within a level, place siblings left-to-right, centered horizontally around their parent.
+  Horizontal gap between siblings: 40px.
+- All shapes in the same level get the SAME height. Width = enough to hold the text + 24px padding.
+- Keep all original shape dimensions PROPORTIONAL but uniform per level (snap level heights so the
+  layout looks tidy).
+- Start the root row at y=80. Center the entire diagram horizontally around x=480.
+- DO NOT collapse shapes into a single column. DO NOT change shape "tool" types.
+- For shapes: x2 = x1 + width, y2 = y1 + height.
+- For text inside a shape: keep the text field unchanged.
+
+═══ NOTES MODE ═══
 - Start content at x=60, y=60. Maximum content width: 860px.
-- Identify the role of each text element from its content:
+- Classify each bare text element by content:
     title      → fontSize 30, fontWeight "bold",  full 860px width row
     heading    → fontSize 22, fontWeight "bold",  full 860px width row
     subheading → fontSize 17, fontWeight "bold",  full 860px width row
     body/note  → fontSize 15, fontWeight "normal", full 860px width row
     bullet     → fontSize 14, fontWeight "normal", x indented +24px from body
-- Gap between items in the same section: 12px
-- Gap between sections: 36px
-- Shapes (rectangle, ellipse, line): place in a horizontal row below related text, or at bottom. Keep original aspect ratio.
-- Images: place in a row below text content, keep aspect ratio.
-- For non-text elements: set x2 = x1 + original_w, y2 = y1 + original_h.
-- Every input element id must appear in output.
-- y2 for text elements = y1 + fontSize * 1.4 (single line) or estimate multi-line height.
+- Gap between items in the same section: 12px. Between sections: 36px.
+- y2 for text = y1 + fontSize * 1.4 (single line) or estimate multi-line height.
+- Only include "fontSize" / "fontWeight" / "text" keys for tool === "text" elements.
+
+═══ MIXED MODE ═══
+Place notes block first (top), then diagram block underneath with a 60px gap.
+
+UNIVERSAL RULES:
+- Every input element id MUST appear in the output exactly once.
+- NEVER change an element's "tool" type.
+- For arrows: do NOT include x1/y1/x2/y2 in the output (they're derived from bindings). If an
+  arrow has no binding, leave its coordinates equal to the input.
+- Keep all original text content unchanged unless the input has obvious typos that hurt
+  readability (then fix minimally).
 
 OUTPUT: JSON array where each object has:
-{ "id": string, "x1": number, "y1": number, "x2": number, "y2": number,
-  "fontSize": number (text only), "fontWeight": "normal"|"bold" (text only),
-  "text": string (text only, cleaned/trimmed, preserve original wording) }
-
-Only include "fontSize", "fontWeight", "text" keys for text-type elements (tool === "text").`;
+{ "id": string,
+  "x1": number, "y1": number, "x2": number, "y2": number,
+  "fontSize": number (text-tool only, optional),
+  "fontWeight": "normal"|"bold" (text-tool only, optional),
+  "text": string (text-tool only, optional) }`;
 
 // ─── API call ─────────────────────────────────────────────────────────────────
 
@@ -100,7 +158,7 @@ export async function getAILayout(
   const userMessage = `INPUT ELEMENTS:\n${JSON.stringify(elements.map(snapshot), null, 2)}\n\nReturn the layout JSON array:`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,8 +173,14 @@ export async function getAILayout(
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 8192,
+          // Bumped from 8192 — Gemini 2.5 Flash spends a chunk of the budget
+          // on internal reasoning before emitting JSON, which truncated the
+          // output on larger canvases.
+          maxOutputTokens: 32768,
           responseMimeType: "application/json",
+          // Disable extended thinking; the layout task is straightforward
+          // and reasoning tokens just eat into the output budget.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     },
@@ -125,9 +189,19 @@ export async function getAILayout(
   if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+      finishReason?: string;
+    }[];
   };
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+  const candidate = data.candidates?.[0];
+  const rawText = candidate?.content?.parts?.[0]?.text?.trim() ?? "";
+
+  if (candidate?.finishReason === "MAX_TOKENS") {
+    throw new Error(
+      "Canvas is too large for Beautify — Gemini ran out of output tokens. Try selecting a smaller portion or simplifying the canvas.",
+    );
+  }
 
   // Strip markdown fences — some model versions still include them despite
   // responseMimeType: "application/json".

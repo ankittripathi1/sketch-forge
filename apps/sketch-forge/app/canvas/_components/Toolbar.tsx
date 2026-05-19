@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  ArrowRight,
   Circle,
+  Diamond,
   Eraser,
   Highlighter,
   Minus,
@@ -11,6 +13,7 @@ import {
   Square,
   Type,
   Undo2,
+  Code2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Tool } from "@repo/canvas-core/types";
@@ -40,9 +43,19 @@ const TOOL_GROUPS: {
         label: "Ellipse · E",
       },
       {
+        icon: <Diamond size={16} strokeWidth={1.6} />,
+        value: "diamond",
+        label: "Diamond · D",
+      },
+      {
         icon: <Minus size={16} strokeWidth={1.6} />,
         value: "line",
         label: "Line · L",
+      },
+      {
+        icon: <ArrowRight size={16} strokeWidth={1.6} />,
+        value: "arrow",
+        label: "Arrow · A",
       },
       {
         icon: <Pencil size={16} strokeWidth={1.6} />,
@@ -62,6 +75,11 @@ const TOOL_GROUPS: {
         icon: <Type size={16} strokeWidth={1.6} />,
         value: "text",
         label: "Text · T",
+      },
+      {
+        icon: <Code2 size={16} strokeWidth={1.6} />,
+        value: "code",
+        label: "Code · C",
       },
       {
         icon: <Eraser size={16} strokeWidth={1.6} />,

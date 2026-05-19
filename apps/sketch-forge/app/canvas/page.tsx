@@ -169,6 +169,13 @@ function CanvasContent() {
     setFontSize,
     fontWeight,
     setFontWeight,
+    textAlign,
+    setTextAlign,
+    textVerticalAlign,
+    setTextVerticalAlign,
+    codeLanguage,
+    setCodeLanguage,
+    copySelectedCode,
     applyThemeColors,
     beautifyLayout,
     isBeautifying,
@@ -185,6 +192,7 @@ function CanvasContent() {
     canUndo,
     canRedo,
     deleteSelected,
+    duplicateSelected,
     deselect,
     getCursorForPoint,
     handleDrop,
@@ -200,7 +208,7 @@ function CanvasContent() {
     setRecognitionBackend,
     recognitionApiKey,
     setRecognitionApiKey,
-  } = useSketchEngine(sceneCanvasRef, interactiveCanvasRef);
+  } = useSketchEngine(sceneCanvasRef, interactiveCanvasRef, canvasMode);
 
   const {
     canvasId,
@@ -362,6 +370,18 @@ function CanvasContent() {
 
       const mod = e.ctrlKey || e.metaKey;
 
+      if (mod && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
+
+      if (mod && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        void copySelectedCode();
+        return;
+      }
+
       if (e.key === "Enter" && tool === "select") {
         e.preventDefault();
         editSelected();
@@ -405,8 +425,14 @@ function CanvasContent() {
         case "e":
           setTool("ellipse");
           break;
+        case "d":
+          setTool("diamond");
+          break;
         case "l":
           setTool("line");
+          break;
+        case "a":
+          setTool("arrow");
           break;
         case "f":
           setTool("freehand");
@@ -437,8 +463,10 @@ function CanvasContent() {
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [
+    copySelectedCode,
     deleteSelected,
     deselect,
+    duplicateSelected,
     editSelected,
     isPanningRef,
     redo,
@@ -506,6 +534,13 @@ function CanvasContent() {
         onFontFamily={setFontFamily}
         onFontSize={setFontSize}
         onFontWeight={setFontWeight}
+        textAlign={textAlign}
+        textVerticalAlign={textVerticalAlign}
+        onTextAlign={setTextAlign}
+        onTextVerticalAlign={setTextVerticalAlign}
+        codeLanguage={codeLanguage}
+        onCodeLanguage={setCodeLanguage}
+        onCopyCode={copySelectedCode}
         canvasMode={canvasMode}
       />
       <SketchCanvas
@@ -607,8 +642,12 @@ function CanvasContent() {
       {showSaveDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-80 rounded-2xl border border-border-default bg-surface-raised p-6 shadow-2xl">
-            <h2 className="mb-1 text-sm font-semibold text-text-primary">Save before leaving?</h2>
-            <p className="mb-4 text-xs text-text-muted">Give your canvas a name to save it.</p>
+            <h2 className="mb-1 text-sm font-semibold text-text-primary">
+              Save before leaving?
+            </h2>
+            <p className="mb-4 text-xs text-text-muted">
+              Give your canvas a name to save it.
+            </p>
             <input
               autoFocus
               value={dialogTitle}

@@ -3,7 +3,16 @@
 import { RefObject, useRef, useState } from "react";
 import rough from "roughjs";
 import { SketchElement, Point, Tool, FillStyle } from "@repo/canvas-core/types";
-import { drawElement, drawSelectionBox } from "@repo/canvas-core/renderElement";
+import {
+  drawElement,
+  drawSelectionBox,
+  drawAnchorHints,
+  getAnchorPoint,
+  getAllAnchorPoints,
+  resolveArrowEndpoints,
+  getArrowControlPoint,
+} from "@repo/canvas-core/renderElement";
+import type { ArrowBinding, AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
 import {
   hitTestElement,
@@ -18,6 +27,7 @@ import {
 } from "@repo/canvas-core/lib/recognition";
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
 import { openTextEditor } from "@repo/canvas-core/textEditor";
+import { openCodeEditor } from "@repo/canvas-core/codeEditor";
 import {
   DEFAULT_DARK_STROKE,
   DEFAULT_LIGHT_STROKE,
@@ -25,6 +35,9 @@ import {
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
+const OFFSET = 24;
+const CODE_MIN_WIDTH = 280;
+type CodeLanguage = NonNullable<SketchElement["codeLanguage"]>;
 
 const HANDLE_CURSORS = [
   "nwse-resize",
@@ -75,6 +88,7 @@ const HANDLE_CURSORS = [
 export function useSketchEngine(
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>,
   interactionCavasRef: RefObject<HTMLCanvasElement | null>,
+  canvasMode: "light" | "dark" = "light",
 ) {
   const [tool, setTool] = useState<Tool>("rectangle");
   const [historyStatus, setHistoryStatus] = useState({
@@ -88,6 +102,14 @@ export function useSketchEngine(
   const [fontFamily, setFontFamily] = useState("Kalam, cursive");
   const [fontSize, setFontSize] = useState(16);
   const [fontWeight, setFontWeight] = useState<"normal" | "bold">("normal");
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">(
+    "center",
+  );
+  const [textVerticalAlign, setTextVerticalAlign] = useState<
+    "top" | "middle" | "bottom"
+  >("middle");
+  const [codeLanguage, setCodeLanguageState] =
+    useState<CodeLanguage>("javascript");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [zoomLevel, setZoomLevel] = useState(100);
   /** Whether the Scribble feature is active (freehand strokes convert to text). */
@@ -146,6 +168,15 @@ export function useSketchEngine(
   const rafId = useRef<number>(0);
   const viewportRafId = useRef<number>(0);
   const history = useRef(createHistory());
+  /**
+   * The shape + anchor side the cursor is currently snapping to while drawing
+   * or repositioning an arrow endpoint. Drives the anchor-hint overlay so the
+   * user can see exactly where the arrow will connect before releasing.
+   */
+  const hoveredAnchor = useRef<{
+    shape: SketchElement;
+    anchor: AnchorSide;
+  } | null>(null);
   /**
    * IDs of freehand stroke elements waiting to be recognised as a batch.
    * Strokes are accumulated here during the debounce window, then consumed
@@ -233,7 +264,8 @@ export function useSketchEngine(
     ctx.save();
     applyTransform(ctx, canvas);
     const rc = rough.canvas(canvas);
-    elements.current.forEach((el) => drawElement(rc, el, renderScene));
+    const all = [...elements.current, ...selectedElements.current];
+    elements.current.forEach((el) => drawElement(rc, el, renderScene, all));
     ctx.restore();
   }
 
@@ -242,11 +274,24 @@ export function useSketchEngine(
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
     clearCanvas(canvas);
-    if (!currentElement.current) return;
+    if (!currentElement.current && !hoveredAnchor.current) return;
     ctx.save();
     applyTransform(ctx, canvas);
-    const rc = rough.canvas(canvas);
-    drawElement(rc, currentElement.current);
+    if (currentElement.current) {
+      const rc = rough.canvas(canvas);
+      drawElement(rc, currentElement.current, undefined, [
+        ...elements.current,
+        ...selectedElements.current,
+      ]);
+    }
+    if (hoveredAnchor.current) {
+      drawAnchorHints(
+        ctx,
+        hoveredAnchor.current.shape,
+        hoveredAnchor.current.anchor,
+        zoom.current,
+      );
+    }
     ctx.restore();
   }
 
@@ -280,10 +325,20 @@ export function useSketchEngine(
       );
     }
 
+    const all = [...elements.current, ...selectedElements.current];
     selectedElements.current.forEach((el) => {
-      drawElement(rc, el);
-      drawSelectionBox(ctx, el, zoom.current);
+      drawElement(rc, el, undefined, all);
+      drawSelectionBox(ctx, el, zoom.current, all);
     });
+
+    if (hoveredAnchor.current) {
+      drawAnchorHints(
+        ctx,
+        hoveredAnchor.current.shape,
+        hoveredAnchor.current.anchor,
+        zoom.current,
+      );
+    }
 
     ctx.restore();
   }
@@ -478,6 +533,32 @@ export function useSketchEngine(
     updateSelectedElements({ fontWeight: weight });
   }
 
+  function applyTextAlign(align: "left" | "center" | "right") {
+    setTextAlign(align);
+    updateSelectedElements({ textAlign: align });
+  }
+
+  function applyTextVerticalAlign(v: "top" | "middle" | "bottom") {
+    setTextVerticalAlign(v);
+    updateSelectedElements({ textVerticalAlign: v });
+  }
+
+  function applyCodeLanguage(language: CodeLanguage) {
+    setCodeLanguageState(language);
+    updateSelectedElements({ codeLanguage: language });
+  }
+
+  async function copySelectedCode() {
+    const code = selectedElements.current.find((el) => el.tool === "code");
+    if (!code) return false;
+    try {
+      await navigator.clipboard.writeText(code.text ?? "");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Swap every element whose strokeColor is the "opposite" theme default to
    * the new theme default.  Elements with custom colours are left untouched.
@@ -562,6 +643,18 @@ export function useSketchEngine(
       elements.current = elements.current.map(apply);
       selectedElements.current = selectedElements.current.map(apply);
 
+      // Any arrow bound to a shape that just moved should follow it. We pass
+      // the full id set so all bindings get re-resolved against the new positions.
+      const allIds = new Set([
+        ...elements.current.map((e) => e.id),
+        ...selectedElements.current.map((e) => e.id),
+      ]);
+      elements.current = syncBoundArrows(allIds, elements.current);
+      selectedElements.current = syncBoundArrows(
+        allIds,
+        selectedElements.current,
+      );
+
       // Commit as one history entry so ⌘Z undoes the entire beautify at once.
       history.current.push(snapshotWithSelection());
       syncHistoryStatus();
@@ -644,6 +737,7 @@ export function useSketchEngine(
   function normalizeElement(el: SketchElement): SketchElement {
     if (
       el.tool === "line" ||
+      el.tool === "arrow" ||
       el.tool === "freehand" ||
       el.tool === "highlighter"
     ) {
@@ -663,6 +757,58 @@ export function useSketchEngine(
     handle: number,
     to: Point,
   ): SketchElement {
+    if (el.tool === "arrow") {
+      const ends = resolveArrowEndpoints(el, [
+        ...elements.current,
+        ...selectedElements.current,
+      ]);
+      if (handle === 0) {
+        // Start endpoint — rebind if dropped on a shape, else unbind.
+        const target = findBindableShape(to, new Set([el.id]));
+        if (target) {
+          const p = getAnchorPoint(target.shape, target.anchor);
+          return {
+            ...el,
+            x1: p.x,
+            y1: p.y,
+            startBinding: {
+              elementId: target.shape.id,
+              anchor: target.anchor,
+            },
+          };
+        }
+        return { ...el, x1: to.x, y1: to.y, startBinding: undefined };
+      }
+      if (handle === 2) {
+        const exclude = new Set<string>([el.id]);
+        if (el.startBinding) exclude.add(el.startBinding.elementId);
+        const target = findBindableShape(to, exclude);
+        if (target) {
+          const p = getAnchorPoint(target.shape, target.anchor);
+          return {
+            ...el,
+            x2: p.x,
+            y2: p.y,
+            endBinding: {
+              elementId: target.shape.id,
+              anchor: target.anchor,
+            },
+          };
+        }
+        return { ...el, x2: to.x, y2: to.y, endBinding: undefined };
+      }
+      // handle === 1: bend midpoint. Compute signed perpendicular distance
+      // from the chord (x1,y1)→(x2,y2) to `to`.
+      const dx = ends.x2 - ends.x1;
+      const dy = ends.y2 - ends.y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const mx = (ends.x1 + ends.x2) / 2;
+      const my = (ends.y1 + ends.y2) / 2;
+      // Perpendicular unit vector matches getArrowControlPoint: (-dy, dx) / len
+      const bend = ((to.x - mx) * -dy + (to.y - my) * dx) / len;
+      return { ...el, bend };
+    }
+
     const { x, y, w, h } = getBoundingBox(el);
     let nx1 = el.x1,
       ny1 = el.y1,
@@ -679,7 +825,8 @@ export function useSketchEngine(
         Math.abs(to.x - anchorX) / w,
         Math.abs(to.y - anchorY) / h,
       );
-      const nextW = w * scale;
+      const nextW =
+        el.tool === "code" ? Math.max(w * scale, CODE_MIN_WIDTH) : w * scale;
       const nextH = h * scale;
       const nextX = movesLeft ? anchorX - nextW : anchorX;
       const nextY = movesTop ? anchorY - nextH : anchorY;
@@ -751,6 +898,15 @@ export function useSketchEngine(
         break;
     }
 
+    if (el.tool === "code") {
+      const movesLeft = [0, 3, 5].includes(handle);
+      const currentWidth = Math.abs(nx2 - nx1);
+      if (currentWidth < CODE_MIN_WIDTH) {
+        if (movesLeft) nx1 = nx2 - CODE_MIN_WIDTH;
+        else nx2 = nx1 + CODE_MIN_WIDTH;
+      }
+    }
+
     if (el.tool === "freehand" || el.tool === "highlighter") {
       return {
         ...el,
@@ -766,6 +922,75 @@ export function useSketchEngine(
     }
 
     return { ...el, x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
+  }
+
+  /**
+   * Returns the topmost shape eligible for arrow binding (rectangle, ellipse,
+   * diamond) under a given canvas-space point — or null if none.
+   * Excludes elements in the exclude set so we don't bind an arrow to itself
+   * or to the shape on its other end during draw.
+   */
+  function findBindableShape(
+    point: Point,
+    exclude: Set<string> = new Set(),
+  ): { shape: SketchElement; anchor: AnchorSide } | null {
+    const all = [...elements.current, ...selectedElements.current];
+    for (let i = all.length - 1; i >= 0; i--) {
+      const el = all[i]!;
+      if (exclude.has(el.id)) continue;
+      if (
+        el.tool !== "rectangle" &&
+        el.tool !== "ellipse" &&
+        el.tool !== "diamond"
+      )
+        continue;
+      if (hitTestElement(el, point, 8 / zoom.current)) {
+        // Pick the anchor on this shape whose point is closest to the cursor.
+        const anchors = getAllAnchorPoints(el);
+        let best = anchors[0]!;
+        let bestDist = Infinity;
+        for (const a of anchors) {
+          const d = Math.hypot(point.x - a.x, point.y - a.y);
+          if (d < bestDist) {
+            bestDist = d;
+            best = a;
+          }
+        }
+        return { shape: el, anchor: best.side };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * After a shape has moved or resized, walk all elements and update the stored
+   * endpoint of any arrow bound to the shape so its data stays consistent with
+   * the visual (arrows are also re-resolved at render time, but hit-testing
+   * uses the stored coords).
+   */
+  function syncBoundArrows(shapeIds: Set<string>, list: SketchElement[]) {
+    const allShapes = [...elements.current, ...selectedElements.current];
+    return list.map((el) => {
+      if (el.tool !== "arrow") return el;
+      let next = el;
+      if (el.startBinding && shapeIds.has(el.startBinding.elementId)) {
+        const target = allShapes.find(
+          (e) => e.id === el.startBinding!.elementId,
+        );
+        if (target) {
+          const p = getAnchorPoint(target, el.startBinding.anchor);
+          next = { ...next, x1: p.x, y1: p.y };
+        }
+      }
+      if (el.endBinding && shapeIds.has(el.endBinding.elementId)) {
+        const target = allShapes.find((e) => e.id === el.endBinding!.elementId);
+        if (target) {
+          const p = getAnchorPoint(target, el.endBinding.anchor);
+          next = { ...next, x2: p.x, y2: p.y };
+        }
+      }
+      return next;
+    });
   }
 
   function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
@@ -821,6 +1046,56 @@ export function useSketchEngine(
       return;
     }
 
+    if (tool === "code") {
+      const codeStrokeColor =
+        canvasMode === "dark" ? DEFAULT_DARK_STROKE : DEFAULT_LIGHT_STROKE;
+      const codeFillColor =
+        canvasMode === "dark"
+          ? "rgba(12, 12, 18, 0.82)"
+          : "rgba(255, 255, 255, 0.92)";
+      const opts = {
+        x: screenPoint.x,
+        y: screenPoint.y,
+        width: Math.max(420, CODE_MIN_WIDTH),
+        fontSize: 14,
+        color: codeStrokeColor,
+        zoom: zoom.current,
+        language: "javascript" as const,
+        theme: canvasMode,
+      };
+      openCodeEditor(opts).then((result) => {
+        if (!result) return;
+
+        const el: SketchElement = {
+          id: crypto.randomUUID(),
+          tool: "code",
+          seed: Math.floor(Math.random() * 100000),
+          strokeColor: codeStrokeColor,
+          fillColor: codeFillColor,
+          fillStyle: "none",
+          strokeWidth: 0,
+          x1: point.x,
+          y1: point.y,
+          x2: point.x + Math.max(result.width, CODE_MIN_WIDTH),
+          y2: point.y + result.height,
+          text: result.text,
+          codeLanguage: result.language,
+          fontFamily: "Geist Mono, monospace",
+          fontSize: 14,
+          fontWeight: "normal",
+        };
+
+        selectedElements.current = [el];
+        setSelectedTool("code");
+        setCodeLanguageState(result.language);
+        history.current.push([...elements.current, el]);
+        syncHistoryStatus();
+        setTool("select");
+        renderScene();
+        renderSelection();
+      });
+      return;
+    }
     if (tool !== "select" && selectedElements.current.length > 0) {
       commitSelectedElements();
     }
@@ -832,6 +1107,7 @@ export function useSketchEngine(
           point,
           6 / zoom.current,
           zoom.current,
+          [...elements.current, ...selectedElements.current],
         );
         if (handle !== null) {
           resizeHandle.current = handle;
@@ -858,6 +1134,9 @@ export function useSketchEngine(
         if (hit.fontFamily) setFontFamily(hit.fontFamily);
         if (hit.fontSize) setFontSize(hit.fontSize);
         if (hit.fontWeight) setFontWeight(hit.fontWeight);
+        if (hit.textAlign) setTextAlign(hit.textAlign);
+        if (hit.textVerticalAlign) setTextVerticalAlign(hit.textVerticalAlign);
+        if (hit.codeLanguage) setCodeLanguageState(hit.codeLanguage);
         isDragging.current = true;
         dragStart.current = point;
         renderScene();
@@ -898,6 +1177,18 @@ export function useSketchEngine(
     }
 
     isDrawing.current = true;
+    let startBinding: ArrowBinding | undefined;
+    let startX = point.x;
+    let startY = point.y;
+    if (tool === "arrow") {
+      const target = findBindableShape(point);
+      if (target) {
+        startBinding = { elementId: target.shape.id, anchor: target.anchor };
+        const p = getAnchorPoint(target.shape, target.anchor);
+        startX = p.x;
+        startY = p.y;
+      }
+    }
     currentElement.current = {
       id: crypto.randomUUID(),
       tool,
@@ -906,13 +1197,14 @@ export function useSketchEngine(
       fillColor,
       fillStyle,
       strokeWidth,
-      x1: point.x,
-      y1: point.y,
+      x1: startX,
+      y1: startY,
       x2: point.x,
       y2: point.y,
       points:
         tool === "freehand" || tool === "highlighter" ? [point] : undefined,
       opacity: tool === "highlighter" ? 0.35 : undefined,
+      startBinding,
     };
     renderActiveElement();
   }
@@ -953,8 +1245,33 @@ export function useSketchEngine(
         point,
       );
       selectedElements.current = [updated];
+      const movedIds = new Set([updated.id]);
+      elements.current = syncBoundArrows(movedIds, elements.current);
+
+      // Anchor-snap hint while dragging an arrow endpoint handle.
+      if (
+        updated.tool === "arrow" &&
+        (resizeHandle.current === 0 || resizeHandle.current === 2)
+      ) {
+        const exclude = new Set<string>([updated.id]);
+        const other =
+          resizeHandle.current === 0
+            ? updated.endBinding?.elementId
+            : updated.startBinding?.elementId;
+        if (other) exclude.add(other);
+        const target = findBindableShape(point, exclude);
+        hoveredAnchor.current = target
+          ? { shape: target.shape, anchor: target.anchor }
+          : null;
+      } else {
+        hoveredAnchor.current = null;
+      }
+
       cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(renderSelection);
+      rafId.current = requestAnimationFrame(() => {
+        renderScene();
+        renderSelection();
+      });
       return;
     }
 
@@ -977,17 +1294,72 @@ export function useSketchEngine(
         points: el.points?.map((p) => ({ x: p.x + dx, y: p.y + dy })),
       }));
 
+      // Drag bound arrows along with their target shapes.
+      const movedIds = new Set(selectedElements.current.map((el) => el.id));
+      if (movedIds.size > 0) {
+        elements.current = syncBoundArrows(movedIds, elements.current);
+        selectedElements.current = syncBoundArrows(
+          movedIds,
+          selectedElements.current,
+        );
+      }
+
       cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(renderSelection);
+      rafId.current = requestAnimationFrame(() => {
+        renderScene();
+        renderSelection();
+      });
+      return;
+    }
+
+    // Hover-only anchor preview when the arrow tool is active but no draw in progress.
+    if (tool === "arrow" && !isDrawing.current) {
+      const point = screenToCanvas(screenPoint);
+      const target = findBindableShape(point);
+      const next = target
+        ? { shape: target.shape, anchor: target.anchor }
+        : null;
+      const prev = hoveredAnchor.current;
+      const changed =
+        (!prev && next) ||
+        (prev && !next) ||
+        (prev &&
+          next &&
+          (prev.shape.id !== next.shape.id || prev.anchor !== next.anchor));
+      if (changed) {
+        hoveredAnchor.current = next;
+        cancelAnimationFrame(rafId.current);
+        rafId.current = requestAnimationFrame(renderActiveElement);
+      }
       return;
     }
 
     if (!isDrawing.current || !currentElement.current) return;
     const point = screenToCanvas(screenPoint);
+
+    // While drawing an arrow, snap the live endpoint to the nearest anchor of
+    // the shape under the cursor (excluding the start-bound shape).
+    let endX = point.x;
+    let endY = point.y;
+    let hint: { shape: SketchElement; anchor: AnchorSide } | null = null;
+    if (currentElement.current.tool === "arrow") {
+      const exclude = new Set<string>();
+      const sb = currentElement.current.startBinding;
+      if (sb) exclude.add(sb.elementId);
+      const target = findBindableShape(point, exclude);
+      if (target) {
+        const p = getAnchorPoint(target.shape, target.anchor);
+        endX = p.x;
+        endY = p.y;
+        hint = { shape: target.shape, anchor: target.anchor };
+      }
+    }
+    hoveredAnchor.current = hint;
+
     currentElement.current = {
       ...currentElement.current,
-      x2: point.x,
-      y2: point.y,
+      x2: endX,
+      y2: endY,
       points: currentElement.current.points
         ? [...currentElement.current.points, point]
         : undefined,
@@ -1026,6 +1398,7 @@ export function useSketchEngine(
       if (resizeHandle.current !== null) {
         resizeHandle.current = null;
         resizeOrigin.current = null;
+        hoveredAnchor.current = null;
         if (selectedElements.current.length > 0) {
           selectedElements.current =
             selectedElements.current.map(normalizeElement);
@@ -1082,9 +1455,32 @@ export function useSketchEngine(
       return;
     }
 
-    const justCreated = normalizeElement(currentElement.current!);
+    let justCreated = normalizeElement(currentElement.current!);
     isDrawing.current = false;
     currentElement.current = null;
+    hoveredAnchor.current = null;
+
+    if (justCreated.tool === "arrow") {
+      const exclude = new Set<string>();
+      if (justCreated.startBinding)
+        exclude.add(justCreated.startBinding.elementId);
+      const endTarget = findBindableShape(
+        { x: justCreated.x2, y: justCreated.y2 },
+        exclude,
+      );
+      if (endTarget) {
+        const p = getAnchorPoint(endTarget.shape, endTarget.anchor);
+        justCreated = {
+          ...justCreated,
+          x2: p.x,
+          y2: p.y,
+          endBinding: {
+            elementId: endTarget.shape.id,
+            anchor: endTarget.anchor,
+          },
+        };
+      }
+    }
 
     if (tool === "freehand" || tool === "highlighter") {
       elements.current = [...elements.current, justCreated];
@@ -1155,6 +1551,7 @@ export function useSketchEngine(
           point,
           6 / zoom.current,
           zoom.current,
+          [...elements.current, ...selectedElements.current],
         );
         if (handle !== null) return HANDLE_CURSORS[handle] ?? "pointer";
       }
@@ -1254,6 +1651,7 @@ export function useSketchEngine(
           (hit.tool !== "image" &&
             hit.tool !== "eraser" &&
             hit.tool !== "line" &&
+            hit.tool !== "arrow" &&
             hit.tool !== "freehand" &&
             hit.tool !== "highlighter"));
       if (hit && canEditText) {
@@ -1272,7 +1670,47 @@ export function useSketchEngine(
   function editSelected() {
     if (selectedElements.current.length !== 1) return;
     const el = selectedElements.current[0]!;
-    if (el.tool === "text") {
+    if (el.tool === "code") {
+      const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
+      const w = Math.abs(el.x2 - el.x1);
+      selectedElements.current = [];
+      renderScene();
+      renderSelection();
+      openCodeEditor({
+        currentText: el.text ?? "",
+        x: screenPos.x,
+        y: screenPos.y,
+        width: Math.max(w, CODE_MIN_WIDTH),
+        fontSize: el.fontSize ?? 14,
+        color: el.strokeColor,
+        zoom: zoom.current,
+        language: el.codeLanguage ?? "javascript",
+        theme: canvasMode,
+      }).then((result) => {
+        if (result === null) {
+          selectedElements.current = [el];
+          setSelectedTool(el.tool);
+          renderSelection();
+          return;
+        }
+        const updated = {
+          ...el,
+          text: result.text,
+          codeLanguage: result.language,
+          x2: el.x1 + Math.max(result.width, CODE_MIN_WIDTH),
+          y2: el.y1 + result.height,
+        };
+        selectedElements.current = [updated];
+        setCodeLanguageState(result.language);
+        elements.current = elements.current.map((e) =>
+          e.id === el.id ? updated : e,
+        );
+        history.current.push(snapshotWithSelection([updated]));
+        syncHistoryStatus();
+        renderScene();
+        renderSelection();
+      });
+    } else if (el.tool === "text") {
       const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
       const w = Math.abs(el.x2 - el.x1);
       selectedElements.current = [];
@@ -1314,6 +1752,7 @@ export function useSketchEngine(
       el.tool !== "image" &&
       el.tool !== "eraser" &&
       el.tool !== "line" &&
+      el.tool !== "arrow" &&
       el.tool !== "freehand" &&
       el.tool !== "highlighter"
     ) {
@@ -1385,6 +1824,31 @@ export function useSketchEngine(
     renderSelection();
   }
 
+  function duplicateSelected() {
+    if (selectedElements.current.length === 0) return;
+    const originals = selectedElements.current;
+    const duplicates = originals.map((element) => ({
+      ...element,
+      id: crypto.randomUUID(),
+      x1: element.x1 + OFFSET,
+      y1: element.y1 + OFFSET,
+      x2: element.x2 + OFFSET,
+      y2: element.y2 + OFFSET,
+      seed: Math.floor(Math.random() * 100_000),
+      points: element.points?.map((point) => ({
+        x: point.x + OFFSET,
+        y: point.y + OFFSET,
+      })),
+    }));
+
+    elements.current = [...elements.current, ...originals];
+    selectedElements.current = duplicates;
+    history.current.push(snapshotWithSelection());
+    syncHistoryStatus();
+    renderScene();
+    renderSelection();
+  }
+
   function deselect() {
     elements.current = [...elements.current, ...selectedElements.current];
     selectedElements.current = [];
@@ -1429,6 +1893,13 @@ export function useSketchEngine(
     setFontSize: applyFontSize,
     fontWeight,
     setFontWeight: applyFontWeight,
+    textAlign,
+    setTextAlign: applyTextAlign,
+    textVerticalAlign,
+    setTextVerticalAlign: applyTextVerticalAlign,
+    codeLanguage,
+    setCodeLanguage: applyCodeLanguage,
+    copySelectedCode,
     applyThemeColors,
     beautifyLayout,
     isBeautifying,
@@ -1445,6 +1916,7 @@ export function useSketchEngine(
     canUndo: historyStatus.canUndo,
     canRedo: historyStatus.canRedo,
     deleteSelected,
+    duplicateSelected,
     deselect,
     getCursorForPoint,
     handleDrop,

@@ -40,6 +40,32 @@ export function hitTestElement(
     );
   }
 
+  if (el.tool === "arrow") {
+    const bend = el.bend ?? 0;
+    if (Math.abs(bend) <= 0.5) {
+      return (
+        distToSegment(point, { x: el.x1, y: el.y1 }, { x: el.x2, y: el.y2 }) <
+        threshold
+      );
+    }
+    // Sample 16 line segments along the quadratic curve and check distance.
+    const dx = el.x2 - el.x1;
+    const dy = el.y2 - el.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const cx = (el.x1 + el.x2) / 2 + (-dy / len) * bend;
+    const cy = (el.y1 + el.y2) / 2 + (dx / len) * bend;
+    let prev = { x: el.x1, y: el.y1 };
+    for (let i = 1; i <= 16; i++) {
+      const t = i / 16;
+      const it = 1 - t;
+      const x = it * it * el.x1 + 2 * it * t * cx + t * t * el.x2;
+      const y = it * it * el.y1 + 2 * it * t * cy + t * t * el.y2;
+      if (distToSegment(point, prev, { x, y }) < threshold) return true;
+      prev = { x, y };
+    }
+    return false;
+  }
+
   if (
     (el.tool === "freehand" || el.tool === "highlighter") &&
     el.points &&
@@ -73,7 +99,69 @@ export function hitTestHandle(
   point: Point,
   pad: number,
   zoom: number,
+  allElements: SketchElement[] = [],
 ): number | null {
+  if (el.tool === "arrow") {
+    // Compute endpoints + midpoint inline to avoid a circular import from
+    // renderElement. Mirrors resolveArrowEndpoints + getArrowControlPoint.
+    let x1 = el.x1, y1 = el.y1, x2 = el.x2, y2 = el.y2;
+    if (el.startBinding) {
+      const s = allElements.find((e) => e.id === el.startBinding!.elementId);
+      if (s) {
+        const box = getBoundingBox(s);
+        const a = el.startBinding.anchor;
+        const p =
+          a === "top"
+            ? { x: box.x + box.w / 2, y: box.y }
+            : a === "bottom"
+              ? { x: box.x + box.w / 2, y: box.y + box.h }
+              : a === "left"
+                ? { x: box.x, y: box.y + box.h / 2 }
+                : { x: box.x + box.w, y: box.y + box.h / 2 };
+        x1 = p.x;
+        y1 = p.y;
+      }
+    }
+    if (el.endBinding) {
+      const s = allElements.find((e) => e.id === el.endBinding!.elementId);
+      if (s) {
+        const box = getBoundingBox(s);
+        const a = el.endBinding.anchor;
+        const p =
+          a === "top"
+            ? { x: box.x + box.w / 2, y: box.y }
+            : a === "bottom"
+              ? { x: box.x + box.w / 2, y: box.y + box.h }
+              : a === "left"
+                ? { x: box.x, y: box.y + box.h / 2 }
+                : { x: box.x + box.w, y: box.y + box.h / 2 };
+        x2 = p.x;
+        y2 = p.y;
+      }
+    }
+    const bend = el.bend ?? 0;
+    let mx = (x1 + x2) / 2;
+    let my = (y1 + y2) / 2;
+    if (Math.abs(bend) > 0.5) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      mx += (-dy / len) * bend;
+      my += (dx / len) * bend;
+    }
+    const points: [number, number][] = [
+      [x1, y1],
+      [mx, my],
+      [x2, y2],
+    ];
+    const hitRadius = 10 / zoom;
+    for (let i = 0; i < points.length; i++) {
+      const [hx, hy] = points[i]!;
+      if (Math.hypot(point.x - hx, point.y - hy) < hitRadius) return i;
+    }
+    return null;
+  }
+
   const { x, y, w, h } = getBoundingBox(el);
   const handles: [number, number][] = [
     [x - pad, y - pad],

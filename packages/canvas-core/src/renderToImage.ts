@@ -88,7 +88,7 @@ export async function renderCanvasToBlob(
     // In a real production app, we'd need to pre-load images as ImageBitmap in Workers.
     elements.forEach((el) => {
       try {
-        drawElement(rc, el);
+        drawElement(rc, el, undefined, elements);
       } catch (e) {
         console.warn("Failed to draw element during thumbnail generation", e);
       }
