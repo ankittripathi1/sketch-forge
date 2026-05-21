@@ -35,10 +35,7 @@ auth.post("/login", async (c) => {
   });
 
   if (!user) {
-    const [newUser] = await db
-      .insert(userTable)
-      .values({ email })
-      .returning();
+    const [newUser] = await db.insert(userTable).values({ email }).returning();
     user = newUser!;
   }
 

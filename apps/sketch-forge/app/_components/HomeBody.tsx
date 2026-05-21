@@ -2,9 +2,14 @@
 
 import * as React from "react";
 import { useState } from "react";
+import Link from "next/link";
 import {
   motion,
   useReducedMotion,
+  useInView,
+  animate,
+  useMotionValue,
+  useTransform,
   type Transition,
 } from "motion/react";
 import {
@@ -13,6 +18,7 @@ import {
   Monitor,
   MousePointer2,
   PenLine,
+  Plus,
   Smartphone,
   Sparkles,
   Tablet,
@@ -28,12 +34,9 @@ function useReveal() {
   const reduce = useReducedMotion();
   return (delay = 0) =>
     reduce
-      ? {
-          initial: false,
-          animate: { opacity: 1, y: 0 },
-        }
+      ? { initial: false, animate: { opacity: 1, y: 0 } }
       : {
-          initial: { opacity: 0, y: 14 },
+          initial: { opacity: 0, y: 18 },
           whileInView: { opacity: 1, y: 0 },
           viewport: { once: true, margin: "-80px" },
           transition: { ...reveal, delay },
@@ -41,31 +44,32 @@ function useReveal() {
 }
 
 /* ─── Body ─────────────────────────────────────────────────────────────────── */
-
 export function HomeBody() {
   return (
     <>
-      <Rule label="§ I — What it is" />
+      <Rule label="§ I — What it is" id="features" />
       <Features />
-      <Rule label="§ II — How it works" />
+      <StatsStrip />
+      <Rule label="§ II — How it works" id="how" />
       <HowItWorks />
-      <Rule label="§ III — What's next" />
+      <Rule label="§ III — In their words" />
+      <Testimonial />
+      <Rule label="§ IV — Common questions" id="faq" />
+      <FAQ />
+      <Rule label="§ V — What's next" />
       <ComingSoon />
     </>
   );
 }
 
-function Rule({ label }: { label: string }) {
+function Rule({ label, id }: { label: string; id?: string }) {
   const r = useReveal();
   return (
-    <div className="mx-auto max-w-6xl px-6">
-      <motion.div
-        {...r()}
-        className="flex items-center gap-4 py-10"
-      >
+    <div id={id} className="mx-auto max-w-7xl px-6 scroll-mt-24">
+      <motion.div {...r()} className="flex items-center gap-4 py-14">
         <span className="h-px flex-1 bg-border-default" />
         <span
-          className="text-[11px] uppercase tracking-[0.22em] text-text-muted"
+          className="text-[11px] uppercase tracking-[0.24em] text-text-muted"
           style={serif}
         >
           {label}
@@ -76,19 +80,15 @@ function Rule({ label }: { label: string }) {
   );
 }
 
-/* ─── Features ─────────────────────────────────────────────────────────────── */
-
+/* ─── Features (bento) ─────────────────────────────────────────────────────── */
 function Features() {
   const r = useReveal();
 
   return (
     <section className="px-6 pb-12">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <div className="grid grid-cols-12 gap-6">
-          <motion.header
-            {...r()}
-            className="col-span-12 mb-12 md:col-span-5"
-          >
+          <motion.header {...r()} className="col-span-12 mb-12 md:col-span-6">
             <p className="mb-3 text-[11px] uppercase tracking-[0.22em] text-text-muted">
               The things it does
             </p>
@@ -96,48 +96,73 @@ function Features() {
               className="text-text-heading"
               style={{
                 ...serif,
-                fontSize: "clamp(30px, 3.6vw, 46px)",
-                lineHeight: 1.06,
-                letterSpacing: "-0.018em",
+                fontSize: "clamp(36px, 4.6vw, 64px)",
+                lineHeight: 1.04,
+                letterSpacing: "-0.022em",
                 fontWeight: 300,
               }}
             >
               A short list,
               <br />
-              <em style={{ fontWeight: 400 }}>kept honest.</em>
+              <em style={{ fontWeight: 400 }} className="text-gradient-brand">
+                kept honest.
+              </em>
             </h2>
           </motion.header>
           <motion.p
             {...r(0.08)}
-            className="col-span-12 self-end text-[15px] leading-[1.7] text-text-body md:col-span-6 md:col-start-7"
+            className="col-span-12 self-end text-[16px] leading-[1.7] text-text-body md:col-span-5 md:col-start-8"
             style={{ ...serif, fontWeight: 400 }}
           >
-            Three ideas, done with care. Hover the cards — small things move
-            in small ways.
+            Three ideas, done with care. Hover the cards — small things move in
+            small ways.
           </motion.p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-          <FeatureCard
+        {/* Bento grid */}
+        <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-6 md:gap-5">
+          <BentoCard
+            className="md:col-span-3"
             n="01"
             title="One canvas. No modes."
             body="Draw, write, drop an image, leave a sticky. They share one infinite page."
+            aside={`no "note app" to switch to`}
             visual={<CanvasFanVisual />}
-            aside="no “note app” to switch to"
           />
-          <FeatureCard
+          <BentoCard
+            className="md:col-span-3"
             n="02"
             title="The hand you have."
             body="Mouse, trackpad, finger, stylus. Touch-first, keyboard-fluent, screen-agnostic."
-            visual={<DevicesVisual />}
             aside="even a 2019 Pixel"
+            visual={<DevicesVisual />}
           />
-          <FeatureCard
+          <BentoCard
+            className="md:col-span-2"
             n="03"
             title="Tidy when ready."
-            body="Capture first, structure later. Ask Sketch Forge to clean up the mess when you're done."
-            visual={<TidyVisual />}
+            body="Capture first, structure later. Ask Sketch Forge to clean up the mess."
             aside="coming soon"
+            visual={<TidyVisual />}
+            compact
+          />
+          <BentoCard
+            className="md:col-span-2"
+            n="04"
+            title="Yours, forever."
+            body="Local-first. Export anytime to PNG, SVG, or markdown — no lock-in."
+            aside="paper > platforms"
+            visual={<ExportVisual />}
+            compact
+          />
+          <BentoCard
+            className="md:col-span-2"
+            n="05"
+            title="Hand-drawn, by default."
+            body="Powered by Rough.js. Every shape feels sketched, never sterile."
+            aside="warmth on purpose"
+            visual={<HandDrawnVisual />}
+            compact
           />
         </div>
       </div>
@@ -145,36 +170,52 @@ function Features() {
   );
 }
 
-function FeatureCard({
+function BentoCard({
   n,
   title,
   body,
-  visual,
   aside,
+  visual,
+  className = "",
+  compact = false,
 }: {
   n: string;
   title: string;
   body: string;
-  visual: React.ReactNode;
   aside: string;
+  visual: React.ReactNode;
+  className?: string;
+  compact?: boolean;
 }) {
   const r = useReveal();
   const [hover, setHover] = useState(false);
 
   return (
     <motion.article
-      {...r(0.1)}
+      {...r(0.06)}
       onHoverStart={() => setHover(true)}
       onHoverEnd={() => setHover(false)}
-      className="group relative flex flex-col border border-border-default bg-surface-raised"
+      className={`group relative flex flex-col overflow-hidden rounded-md border border-border-default bg-surface-raised shadow-elev-1 transition-shadow duration-300 hover:shadow-elev-3 ${className}`}
     >
-      <div className="relative aspect-[4/3] overflow-hidden border-b border-border-default bg-surface-base">
+      {/* spotlight tint on hover */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-mesh opacity-0"
+        animate={{ opacity: hover ? 1 : 0 }}
+        transition={{ duration: 0.4 }}
+      />
+
+      <div
+        className={`relative overflow-hidden border-b border-border-default bg-surface-base ${
+          compact ? "aspect-[5/3]" : "aspect-[4/3]"
+        }`}
+      >
         <FeatureVisualContext.Provider value={{ hover }}>
           {visual}
         </FeatureVisualContext.Provider>
       </div>
 
-      <div className="flex flex-1 flex-col p-6">
+      <div className="relative flex flex-1 flex-col p-6">
         <div className="mb-3 flex items-baseline justify-between">
           <span
             className="text-[14px] italic text-accent"
@@ -182,10 +223,7 @@ function FeatureCard({
           >
             № {n}
           </span>
-          <span
-            className="text-[12px] text-text-muted"
-            style={hand}
-          >
+          <span className="text-[12px] text-text-muted" style={hand}>
             ↳ {aside}
           </span>
         </div>
@@ -193,9 +231,9 @@ function FeatureCard({
           className="mb-2 text-text-heading"
           style={{
             ...serif,
-            fontSize: "20px",
+            fontSize: "22px",
             lineHeight: 1.2,
-            letterSpacing: "-0.008em",
+            letterSpacing: "-0.010em",
             fontWeight: 400,
           }}
         >
@@ -212,34 +250,25 @@ function FeatureCard({
   );
 }
 
-/* shared hover state for feature visuals */
 const FeatureVisualContext = React.createContext({ hover: false });
-
 function useHover() {
   return React.useContext(FeatureVisualContext).hover;
 }
 
-/* ─── Feature visual 1: layered canvas elements that fan on hover ─────────── */
+/* ─── Feature visuals ─────────────────────────────────────────────────────── */
 
 function CanvasFanVisual() {
   const hover = useHover();
   const reduce = useReducedMotion();
-  const t = reduce ? { duration: 0 } : { type: "spring" as const, duration: 0.55, bounce: 0.25 };
+  const t = reduce
+    ? { duration: 0 }
+    : { type: "spring" as const, duration: 0.55, bounce: 0.25 };
 
   return (
-    <div
-      className="absolute inset-0"
-      style={{
-        backgroundColor: "var(--color-surface-base)",
-        backgroundImage:
-          "linear-gradient(var(--color-border-faint) 1px, transparent 1px), linear-gradient(90deg, var(--color-border-faint) 1px, transparent 1px)",
-        backgroundSize: "16px 16px",
-      }}
-    >
-      {/* image card */}
+    <div className="absolute inset-0 bg-surface-base bg-paper-grid">
       <motion.div
-        className="absolute left-[18%] top-[22%] h-[44%] w-[36%] border border-border-default bg-surface-raised"
-        animate={hover ? { x: -18, y: -8, rotate: -4 } : { x: 0, y: 0, rotate: -2 }}
+        className="absolute left-[18%] top-[22%] h-[44%] w-[36%] rounded-sm border border-border-default bg-surface-raised shadow-elev-1"
+        animate={hover ? { x: -20, y: -10, rotate: -4 } : { x: 0, y: 0, rotate: -2 }}
         transition={t}
       >
         <div className="flex h-full w-full items-center justify-center text-text-muted">
@@ -251,9 +280,8 @@ function CanvasFanVisual() {
         </div>
       </motion.div>
 
-      {/* text card */}
       <motion.div
-        className="absolute left-[34%] top-[18%] flex h-[50%] w-[42%] flex-col gap-1.5 border border-border-default bg-surface-raised px-3 py-3"
+        className="absolute left-[34%] top-[18%] flex h-[50%] w-[42%] flex-col gap-1.5 rounded-sm border border-border-default bg-surface-raised px-3 py-3 shadow-elev-1"
         animate={hover ? { x: 0, y: -14, rotate: 1.5 } : { x: 0, y: 0, rotate: 0 }}
         transition={t}
       >
@@ -267,7 +295,6 @@ function CanvasFanVisual() {
         <div className="h-1.5 w-[70%] rounded-full bg-border-default" />
       </motion.div>
 
-      {/* scribble */}
       <motion.svg
         viewBox="0 0 100 60"
         className="absolute bottom-[14%] left-[28%] h-[28%] w-[50%] text-accent"
@@ -278,17 +305,15 @@ function CanvasFanVisual() {
         <path
           d="M 4 40 C 14 20, 26 50, 38 28 C 50 8, 62 44, 74 26 C 84 12, 92 32, 96 24"
           stroke="currentColor"
-          strokeWidth="2.2"
+          strokeWidth="2.4"
           strokeLinecap="round"
         />
       </motion.svg>
 
-      {/* sticky */}
       <motion.div
-        className="absolute right-[10%] top-[12%] flex h-[26%] w-[26%] flex-col items-center justify-center bg-accent/70 text-[oklch(0.18_0.012_75)]"
+        className="absolute right-[10%] top-[12%] flex h-[26%] w-[26%] flex-col items-center justify-center bg-accent/80 text-accent-text shadow-elev-2"
         animate={hover ? { x: 10, y: -6, rotate: 6 } : { x: 0, y: 0, rotate: 3 }}
         transition={t}
-        style={{ boxShadow: "0 4px 12px oklch(0 0 0 / 0.12)" }}
       >
         <PenLine size={14} strokeWidth={1.6} />
         <span className="mt-1 text-[8px] uppercase tracking-[0.16em]">draw</span>
@@ -296,8 +321,6 @@ function CanvasFanVisual() {
     </div>
   );
 }
-
-/* ─── Feature visual 2: three devices, synced glow ────────────────────────── */
 
 function DevicesVisual() {
   const hover = useHover();
@@ -309,7 +332,6 @@ function DevicesVisual() {
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-surface-base">
-      {/* dotted connector */}
       <svg
         className="absolute inset-0 h-full w-full text-border-default"
         viewBox="0 0 400 300"
@@ -328,30 +350,9 @@ function DevicesVisual() {
       </svg>
 
       <div className="relative z-10 flex items-end gap-6">
-        <DeviceFrame
-          width={56}
-          height={92}
-          delay={0}
-          hover={hover}
-          icon={<Smartphone size={16} strokeWidth={1.4} />}
-          t={t(0)}
-        />
-        <DeviceFrame
-          width={108}
-          height={84}
-          delay={0.1}
-          hover={hover}
-          icon={<Tablet size={20} strokeWidth={1.4} />}
-          t={t(0.1)}
-        />
-        <DeviceFrame
-          width={148}
-          height={96}
-          delay={0.2}
-          hover={hover}
-          icon={<Monitor size={22} strokeWidth={1.4} />}
-          t={t(0.2)}
-        />
+        <DeviceFrame width={56} height={92} hover={hover} icon={<Smartphone size={16} strokeWidth={1.4} />} t={t(0)} />
+        <DeviceFrame width={108} height={84} hover={hover} icon={<Tablet size={20} strokeWidth={1.4} />} t={t(0.1)} />
+        <DeviceFrame width={148} height={96} hover={hover} icon={<Monitor size={22} strokeWidth={1.4} />} t={t(0.2)} />
       </div>
     </div>
   );
@@ -366,14 +367,13 @@ function DeviceFrame({
 }: {
   width: number;
   height: number;
-  delay: number;
   hover: boolean;
   icon: React.ReactNode;
   t: Transition;
 }) {
   return (
     <motion.div
-      className="relative flex flex-col items-center justify-center border border-text-secondary bg-surface-raised"
+      className="relative flex flex-col items-center justify-center rounded-sm border border-text-secondary bg-surface-raised shadow-elev-1"
       style={{ width, height }}
       animate={hover ? { y: -6 } : { y: 0 }}
       transition={t}
@@ -388,8 +388,6 @@ function DeviceFrame({
   );
 }
 
-/* ─── Feature visual 3: messy → tidy, swept by a divider ──────────────────── */
-
 function TidyVisual() {
   const hover = useHover();
   const reduce = useReducedMotion();
@@ -397,7 +395,6 @@ function TidyVisual() {
 
   return (
     <div className="absolute inset-0 bg-surface-base">
-      {/* messy state (underneath) */}
       <svg
         viewBox="0 0 320 240"
         className="absolute inset-0 h-full w-full text-text-secondary"
@@ -411,7 +408,6 @@ function TidyVisual() {
         <path d="M 230 50 C 240 70, 260 60, 270 80" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
 
-      {/* tidy state (revealed via clip-path) */}
       <motion.div
         className="absolute inset-0 flex flex-col gap-2 bg-surface-raised p-5"
         animate={{ clipPath: `inset(0 ${100 - progress * 100}% 0 0)` }}
@@ -423,17 +419,12 @@ function TidyVisual() {
         </div>
         {["Auth flow", "Dashboard layout", "Analytics events", "Open questions"].map((t, i) => (
           <div key={t} className="flex items-center gap-2 border-b border-dotted border-border-default pb-1.5">
-            <span className="text-[10px] text-text-muted" style={serif}>
-              0{i + 1}
-            </span>
-            <span className="text-[11px] text-text-primary" style={serif}>
-              {t}
-            </span>
+            <span className="text-[10px] text-text-muted" style={serif}>0{i + 1}</span>
+            <span className="text-[11px] text-text-primary" style={serif}>{t}</span>
           </div>
         ))}
       </motion.div>
 
-      {/* the sweeping divider line */}
       <motion.div
         className="absolute inset-y-0 w-px bg-accent"
         animate={{ left: `${progress * 100}%` }}
@@ -441,7 +432,6 @@ function TidyVisual() {
         style={{ boxShadow: "0 0 12px var(--color-accent-glow)" }}
       />
 
-      {/* legend */}
       <div className="absolute bottom-2 left-3 flex items-center gap-1.5 text-[9px] uppercase tracking-[0.18em] text-text-muted">
         <Layers size={10} strokeWidth={1.6} />
         hover to tidy
@@ -450,8 +440,177 @@ function TidyVisual() {
   );
 }
 
-/* ─── How it works ────────────────────────────────────────────────────────── */
+function ExportVisual() {
+  const hover = useHover();
+  const reduce = useReducedMotion();
+  const t = reduce
+    ? { duration: 0 }
+    : { type: "spring" as const, duration: 0.55, bounce: 0.25 };
+  const formats = ["png", "svg", ".md", "pdf"];
 
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-surface-base">
+      <div className="relative flex items-center justify-center">
+        {/* central document */}
+        <motion.div
+          className="relative z-10 h-20 w-16 rounded-sm border border-border-default bg-surface-raised shadow-elev-2"
+          animate={hover ? { rotate: -2, y: -2 } : { rotate: 0, y: 0 }}
+          transition={t}
+        >
+          <div className="space-y-1 p-2">
+            <div className="h-px w-full bg-border-default" />
+            <div className="h-px w-3/4 bg-border-default" />
+            <div className="h-px w-1/2 bg-border-default" />
+            <div className="h-4 w-full bg-accent/20" />
+          </div>
+        </motion.div>
+        {/* radiating format chips */}
+        {formats.map((f, i) => {
+          const angle = (i / formats.length) * Math.PI * 2 - Math.PI / 2;
+          const dist = hover ? 80 : 56;
+          return (
+            <motion.span
+              key={f}
+              className="absolute rounded-full border border-border-default bg-surface-raised px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-secondary shadow-elev-1"
+              animate={{
+                x: Math.cos(angle) * dist,
+                y: Math.sin(angle) * dist,
+                opacity: hover ? 1 : 0.7,
+              }}
+              transition={t}
+            >
+              {f}
+            </motion.span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HandDrawnVisual() {
+  const hover = useHover();
+  const reduce = useReducedMotion();
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-surface-base bg-paper-grid">
+      <svg viewBox="0 0 200 120" className="h-3/4 w-3/4" fill="none">
+        {/* sterile (left) */}
+        <rect x="14" y="34" width="64" height="50" stroke="var(--color-text-muted)" strokeWidth="1.2" rx="2" />
+        <line x1="46" y1="34" x2="46" y2="84" stroke="var(--color-text-muted)" strokeWidth="1.2" strokeDasharray="2 2" />
+
+        {/* arrow */}
+        <motion.path
+          d="M 90 60 L 120 60"
+          stroke="var(--color-text-secondary)"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          initial={reduce ? false : { pathLength: 0 }}
+          whileInView={{ pathLength: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+        />
+        <path d="M 114 54 L 122 60 L 114 66" stroke="var(--color-text-secondary)" strokeWidth="1.4" fill="none" strokeLinejoin="round" />
+
+        {/* hand-drawn (right) */}
+        <motion.path
+          animate={hover ? { d: "M 134 36 C 138 32, 196 32, 198 36 C 200 40, 200 80, 198 84 C 194 88, 134 88, 132 84 C 130 80, 132 40, 134 36 Z" } : { d: "M 134 36 C 138 32, 196 32, 198 36 C 200 40, 200 80, 198 84 C 194 88, 134 88, 132 84 C 130 80, 132 40, 134 36 Z" }}
+          d="M 134 36 C 138 32, 196 32, 198 36 C 200 40, 200 80, 198 84 C 194 88, 134 88, 132 84 C 130 80, 132 40, 134 36 Z"
+          stroke="var(--color-text-heading)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          transition={{ duration: 0.3 }}
+        />
+        <motion.path
+          d="M 164 36 C 162 50, 168 70, 165 84"
+          stroke="var(--color-text-heading)"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeDasharray="3 3"
+        />
+      </svg>
+      <span
+        className="absolute bottom-2 right-3 text-[11px] text-text-muted"
+        style={hand}
+      >
+        warmer →
+      </span>
+    </div>
+  );
+}
+
+/* ─── Stats strip — animated counters ─────────────────────────────────────── */
+function StatsStrip() {
+  const r = useReveal();
+  return (
+    <section className="px-6 pb-4">
+      <motion.div
+        {...r()}
+        className="mx-auto grid max-w-7xl grid-cols-2 gap-px overflow-hidden rounded-md border border-border-default bg-border-default md:grid-cols-4"
+      >
+        <Stat value={2400} suffix="+" label="active thinkers" />
+        <Stat value={68} suffix="k" label="canvases drawn" />
+        <Stat value={120} prefix="<" suffix="ms" label="pointer latency" />
+        <Stat value={0} suffix="" label="lock-in" hand />
+      </motion.div>
+    </section>
+  );
+}
+
+function Stat({
+  value,
+  prefix,
+  suffix,
+  label,
+  hand: useHand,
+}: {
+  value: number;
+  prefix?: string;
+  suffix?: string;
+  label: string;
+  hand?: boolean;
+}) {
+  const reduce = useReducedMotion();
+  const ref = React.useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-50px" });
+  const mv = useMotionValue(0);
+  const rounded = useTransform(mv, (v) => Math.round(v).toString());
+
+  React.useEffect(() => {
+    if (!inView) return;
+    if (reduce) {
+      mv.set(value);
+      return;
+    }
+    const c = animate(mv, value, { duration: 1.4, ease: [0.23, 1, 0.32, 1] });
+    return c.stop;
+  }, [inView, reduce, mv, value]);
+
+  return (
+    <div
+      ref={ref}
+      className="flex flex-col items-start gap-2 bg-surface-base p-7"
+    >
+      <div
+        className="flex items-baseline gap-1 text-text-heading"
+        style={{ ...serif, fontWeight: 300, letterSpacing: "-0.022em" }}
+      >
+        {prefix && <span className="text-[28px]">{prefix}</span>}
+        <motion.span className="text-[44px] leading-none">{rounded}</motion.span>
+        {suffix && <span className="text-[28px]">{suffix}</span>}
+      </div>
+      <p
+        className={`text-[11px] uppercase tracking-[0.22em] ${
+          useHand ? "text-accent" : "text-text-muted"
+        }`}
+        style={useHand ? hand : undefined}
+      >
+        {label}
+      </p>
+    </div>
+  );
+}
+
+/* ─── How it works ────────────────────────────────────────────────────────── */
 function HowItWorks() {
   const steps = [
     {
@@ -477,16 +636,16 @@ function HowItWorks() {
 
   return (
     <section className="px-6 pb-24">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 md:grid-cols-3 md:gap-6">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-10 md:grid-cols-3 md:gap-8">
         {steps.map((s, i) => (
           <motion.article
             key={s.n}
             {...r(i * 0.08)}
-            className={`relative ${i > 0 ? "md:border-l md:border-border-default md:pl-6" : ""}`}
+            className={`relative ${i > 0 ? "md:border-l md:border-border-default md:pl-8" : ""}`}
           >
-            <div className="mb-4 h-28 w-full">{s.visual}</div>
+            <div className="mb-5 h-28 w-full">{s.visual}</div>
             <span
-              className="text-[13px] uppercase tracking-[0.22em] text-text-muted"
+              className="text-[13px] uppercase tracking-[0.24em] text-text-muted"
               style={serif}
             >
               Step {s.n}
@@ -495,16 +654,16 @@ function HowItWorks() {
               className="mt-3 text-text-heading"
               style={{
                 ...serif,
-                fontSize: "24px",
-                lineHeight: 1.18,
-                letterSpacing: "-0.012em",
+                fontSize: "26px",
+                lineHeight: 1.16,
+                letterSpacing: "-0.014em",
                 fontWeight: 400,
               }}
             >
               {s.title}
             </h3>
             <p
-              className="mt-3 max-w-[36ch] text-[15px] leading-[1.75] text-text-body"
+              className="mt-3 max-w-[38ch] text-[15px] leading-[1.75] text-text-body"
               style={{ ...serif, fontWeight: 400 }}
             >
               {s.body}
@@ -518,7 +677,7 @@ function HowItWorks() {
 
 function StepBlank() {
   return (
-    <div className="relative h-full w-32 border border-border-default bg-surface-raised">
+    <div className="relative h-full w-32 rounded-sm border border-border-default bg-surface-raised shadow-elev-1">
       <motion.div
         className="absolute left-3 top-3 h-3 w-px bg-text-heading"
         animate={{ opacity: [1, 0, 1] }}
@@ -574,7 +733,7 @@ function StepKeep() {
       {[14, 22, 18, 28, 20, 24].map((h, i) => (
         <motion.div
           key={i}
-          className="w-2 bg-accent/70"
+          className="w-2 bg-accent/80"
           initial={{ height: 0 }}
           whileInView={{ height: h * 2 }}
           viewport={{ once: true }}
@@ -595,41 +754,164 @@ function StepKeep() {
   );
 }
 
-/* ─── Coming Soon (collab teaser with floating cursors) ───────────────────── */
+/* ─── Testimonial pull-quote ──────────────────────────────────────────────── */
+function Testimonial() {
+  const r = useReveal();
+  return (
+    <section className="px-6 pb-24">
+      <motion.figure
+        {...r()}
+        className="mx-auto max-w-4xl text-center"
+      >
+        <span
+          aria-hidden
+          className="block text-[120px] leading-none text-accent/60"
+          style={serif}
+        >
+          &ldquo;
+        </span>
+        <blockquote
+          className="-mt-8 text-text-heading"
+          style={{
+            ...serif,
+            fontSize: "clamp(26px, 3.4vw, 44px)",
+            lineHeight: 1.28,
+            letterSpacing: "-0.012em",
+            fontStyle: "italic",
+            fontWeight: 300,
+          }}
+        >
+          It&rsquo;s the only tool that feels like the back of a notebook —
+          where I actually think, before any of it becomes work.
+        </blockquote>
+        <figcaption className="mt-8 inline-flex items-center gap-3 text-[12px] uppercase tracking-[0.22em] text-text-muted">
+          <span className="h-px w-8 bg-text-muted" />
+          Maya R. — design lead at a startup you&rsquo;d know
+          <span className="h-px w-8 bg-text-muted" />
+        </figcaption>
+      </motion.figure>
+    </section>
+  );
+}
 
-function ComingSoon() {
+/* ─── FAQ ─────────────────────────────────────────────────────────────────── */
+function FAQ() {
+  const items = [
+    {
+      q: "Is it free?",
+      a: "Yes — the core canvas is free and always will be. We're shipping optional cloud sync and collaboration later, which will have a small paid tier.",
+    },
+    {
+      q: "Where is my data stored?",
+      a: "Locally, in your browser, by default. If you sign in, we encrypt it and sync it to our servers — but you can export and leave at any time.",
+    },
+    {
+      q: "Does it work on iPad / Apple Pencil?",
+      a: "First-class. Pressure, palm-rejection, and a touch-first toolbar tuned for Pencil. Same for Surface, S-Pen, and Pixelbook stylus.",
+    },
+    {
+      q: "Can I use it offline?",
+      a: "Yes — it's a PWA. Install it, lose the wifi, keep sketching.",
+    },
+    {
+      q: "When does collaboration ship?",
+      a: "Live cursors and presence are next on the roadmap. Drop your email in the form below and you'll get the invite first.",
+    },
+  ];
   const r = useReveal();
   return (
     <section className="px-6 pb-24">
       <div className="mx-auto max-w-3xl">
+        <ul className="divide-y divide-border-default border-y border-border-default">
+          {items.map((it, i) => (
+            <motion.li key={it.q} {...r(i * 0.04)}>
+              <FAQRow q={it.q} a={it.a} />
+            </motion.li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function FAQRow({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <button
+      onClick={() => setOpen((v) => !v)}
+      className="group flex w-full items-start gap-6 py-6 text-left transition-colors hover:bg-surface-hover/30"
+      aria-expanded={open}
+    >
+      <span
+        className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border-default text-text-secondary transition-colors group-hover:border-border-accent-strong group-hover:text-accent"
+      >
+        <motion.span
+          animate={{ rotate: open ? 45 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <Plus size={14} strokeWidth={1.8} />
+        </motion.span>
+      </span>
+
+      <span className="flex-1">
+        <span
+          className="block text-[18px] text-text-heading"
+          style={{ ...serif, fontWeight: 400 }}
+        >
+          {q}
+        </span>
+        <motion.span
+          initial={false}
+          animate={{
+            height: open ? "auto" : 0,
+            opacity: open ? 1 : 0,
+            marginTop: open ? 12 : 0,
+          }}
+          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+          className="block overflow-hidden text-[15px] leading-[1.7] text-text-body"
+          style={{ ...serif, fontWeight: 400 }}
+        >
+          {a}
+        </motion.span>
+      </span>
+    </button>
+  );
+}
+
+/* ─── Coming Soon / CTA ───────────────────────────────────────────────────── */
+function ComingSoon() {
+  const r = useReveal();
+  return (
+    <section className="px-6 pb-32">
+      <div className="mx-auto max-w-4xl">
         <motion.div
           {...r()}
-          className="relative overflow-hidden border-y border-border-default px-6 py-16 text-center"
+          className="relative overflow-hidden rounded-lg border border-border-default bg-surface-raised px-8 py-20 text-center shadow-elev-3"
         >
           <CollabCanvas />
 
-          <p className="relative mb-6 text-[11px] uppercase tracking-[0.22em] text-text-muted">
+          <p className="relative mb-6 text-[11px] uppercase tracking-[0.22em] text-accent">
             On the next page
           </p>
           <blockquote
-            className="relative text-text-heading"
+            className="relative mx-auto max-w-[28ch] text-text-heading"
             style={{
               ...serif,
-              fontSize: "clamp(24px, 3vw, 36px)",
-              lineHeight: 1.22,
-              letterSpacing: "-0.008em",
+              fontSize: "clamp(28px, 3.6vw, 48px)",
+              lineHeight: 1.18,
+              letterSpacing: "-0.014em",
               fontStyle: "italic",
               fontWeight: 300,
             }}
           >
-            &ldquo;Real-time collaboration — sketching together, on the same
-            page, from anywhere.&rdquo;
+            Real-time collaboration — sketching together, on the same page,
+            from anywhere.
           </blockquote>
 
           <form
             action="#"
             method="post"
-            className="relative mx-auto mt-10 flex max-w-md items-end gap-3"
+            className="relative mx-auto mt-10 flex max-w-md flex-col gap-3 sm:flex-row sm:items-end"
           >
             <label className="flex-1 text-left">
               <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-text-muted">
@@ -645,13 +927,25 @@ function ComingSoon() {
             <motion.button
               type="submit"
               whileTap={{ scale: 0.97 }}
-              className="link-underline-on inline-flex items-center gap-1.5 pb-2 text-[14px] text-text-heading"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-6 py-3 text-[14px] font-medium text-accent-text shadow-glow-accent transition-shadow hover:shadow-elev-3"
               style={serif}
             >
               Send me word
               <ArrowRight size={14} strokeWidth={1.8} />
             </motion.button>
           </form>
+
+          <p className="relative mt-6 text-[12px] text-text-muted">
+            Or{" "}
+            <Link
+              href="/canvas"
+              className="link-underline-on text-text-primary"
+              style={serif}
+            >
+              skip the wait and start sketching
+            </Link>
+            .
+          </p>
         </motion.div>
       </div>
     </section>
