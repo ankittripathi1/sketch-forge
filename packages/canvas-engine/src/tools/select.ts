@@ -34,6 +34,24 @@ export type SelectPointerDownAction =
   | { type: "start-marquee"; marquee: SelectionMarquee; additive: boolean }
   | { type: "none" };
 
+export type SelectPointerMoveAction =
+  | { type: "update-marquee"; marquee: SelectionMarquee }
+  | { type: "resize"; point: Point; interaction: Extract<SelectInteraction, { type: "resizing" }> }
+  | {
+      type: "drag";
+      point: Point;
+      dx: number;
+      dy: number;
+      interaction: Extract<SelectInteraction, { type: "dragging" }>;
+    }
+  | { type: "none" };
+
+export type SelectFinalizeAction =
+  | { type: "finish-marquee"; ids: string[]; additive: boolean }
+  | { type: "finish-resize"; moved: boolean }
+  | { type: "finish-drag"; moved: boolean }
+  | { type: "none" };
+
 export function findHitSelectedElement(
   selected: SketchElement[],
   point: Point,
@@ -190,4 +208,74 @@ export function getSelectPointerDownAction({
     marquee: createSelectionMarquee(point),
     additive: shiftKey,
   };
+}
+
+export function getSelectPointerMoveAction({
+  interaction,
+  screenPoint,
+  screenToCanvas,
+  selectionMarquee,
+  selectedCount,
+}: {
+  interaction: SelectInteraction;
+  screenPoint: Point;
+  screenToCanvas: (point: Point) => Point;
+  selectionMarquee: SelectionMarquee | null;
+  selectedCount: number;
+}): SelectPointerMoveAction {
+  const point = screenToCanvas(screenPoint);
+
+  if (interaction.type === "marquee" && selectionMarquee) {
+    return {
+      type: "update-marquee",
+      marquee: updateSelectionMarquee(selectionMarquee, point),
+    };
+  }
+
+  if (interaction.type === "resizing" && selectedCount === 1) {
+    return { type: "resize", point, interaction };
+  }
+
+  if (interaction.type === "dragging" && selectedCount > 0) {
+    const dx = point.x - interaction.lastPoint.x;
+    const dy = point.y - interaction.lastPoint.y;
+    if (dx === 0 && dy === 0) return { type: "none" };
+    return {
+      type: "drag",
+      point,
+      dx,
+      dy,
+      interaction,
+    };
+  }
+
+  return { type: "none" };
+}
+
+export function getSelectFinalizeAction({
+  interaction,
+  selectionMarquee,
+  elements,
+}: {
+  interaction: SelectInteraction;
+  selectionMarquee: SelectionMarquee | null;
+  elements: SketchElement[];
+}): SelectFinalizeAction {
+  if (interaction.type === "marquee" && selectionMarquee) {
+    return {
+      type: "finish-marquee",
+      ids: getMarqueeSelectedIds(elements, selectionMarquee),
+      additive: interaction.additive,
+    };
+  }
+
+  if (interaction.type === "resizing") {
+    return { type: "finish-resize", moved: interaction.moved };
+  }
+
+  if (interaction.type === "dragging") {
+    return { type: "finish-drag", moved: interaction.moved };
+  }
+
+  return { type: "none" };
 }

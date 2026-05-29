@@ -40,10 +40,10 @@ import {
 import { buildTextElement, applyTextEdit } from "./tools/text";
 import {
   findSingleSelectionHandle,
-  getMarqueeSelectedIds,
+  getSelectFinalizeAction,
+  getSelectPointerMoveAction,
   getSelectPointerDownAction,
   moveSelectedElements,
-  updateSelectionMarquee,
   type SelectionMarquee,
   type SelectInteraction,
 } from "./tools/select";
@@ -777,98 +777,88 @@ export function useSketchEngine(
       return;
     }
 
-    if (
-      tool === "select" &&
-      selectInteraction.current.type === "marquee" &&
-      selectionMarquee.current
-    ) {
-      const point = screenToCanvas(screenPoint);
-      selectionMarquee.current = updateSelectionMarquee(
-        selectionMarquee.current,
-        point,
-      );
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(renderSelection);
-      return;
-    }
-
-    if (
-      tool === "select" &&
-      selectInteraction.current.type === "resizing" &&
-      selectedIds.current.size === 1 &&
-      selectInteraction.current.origin
-    ) {
-      const interaction = selectInteraction.current;
-      const point = screenToCanvas(screenPoint);
-      const updated = applyResize(interaction.origin, interaction.handle, point);
-      selectInteraction.current = { ...interaction, moved: true };
-      setSelectedElements([updated]);
-      const movedIds = new Set([updated.id]);
-      elements.current = syncBoundArrows(movedIds, elements.current);
-
-      // Anchor-snap hint while dragging an arrow endpoint handle.
-      if (
-        updated.tool === "arrow" &&
-        (interaction.handle === 0 || interaction.handle === 2)
-      ) {
-        const exclude = new Set<string>([updated.id]);
-        const other =
-          interaction.handle === 0
-            ? updated.endBinding?.elementId
-            : updated.startBinding?.elementId;
-        if (other) exclude.add(other);
-        const target = findBindableShape(point, exclude);
-        hoveredAnchor.current = target
-          ? { shape: target.shape, anchor: target.anchor }
-          : null;
-      } else {
-        hoveredAnchor.current = null;
-      }
-
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(() => {
-        renderScene();
-        renderSelection();
+    if (tool === "select") {
+      const action = getSelectPointerMoveAction({
+        interaction: selectInteraction.current,
+        screenPoint,
+        screenToCanvas,
+        selectionMarquee: selectionMarquee.current,
+        selectedCount: selectedIds.current.size,
       });
-      return;
-    }
 
-    if (
-      tool === "select" &&
-      selectInteraction.current.type === "dragging" &&
-      selectedIds.current.size > 0
-    ) {
-      const interaction = selectInteraction.current;
-      const point = screenToCanvas(screenPoint);
-      const dx = point.x - interaction.lastPoint.x;
-      const dy = point.y - interaction.lastPoint.y;
-      if (dx === 0 && dy === 0) return;
+      switch (action.type) {
+        case "update-marquee":
+          selectionMarquee.current = action.marquee;
+          cancelAnimationFrame(rafId.current);
+          rafId.current = requestAnimationFrame(renderSelection);
+          return;
 
-      selectInteraction.current = {
-        ...interaction,
-        lastPoint: point,
-        moved: true,
-      };
+        case "resize": {
+          const updated = applyResize(
+            action.interaction.origin,
+            action.interaction.handle,
+            action.point,
+          );
+          selectInteraction.current = { ...action.interaction, moved: true };
+          setSelectedElements([updated]);
+          const movedIds = new Set([updated.id]);
+          elements.current = syncBoundArrows(movedIds, elements.current);
 
-      elements.current = moveSelectedElements(
-        elements.current,
-        selectedIds.current,
-        dx,
-        dy,
-      );
+          if (
+            updated.tool === "arrow" &&
+            (action.interaction.handle === 0 || action.interaction.handle === 2)
+          ) {
+            const exclude = new Set<string>([updated.id]);
+            const other =
+              action.interaction.handle === 0
+                ? updated.endBinding?.elementId
+                : updated.startBinding?.elementId;
+            if (other) exclude.add(other);
+            const target = findBindableShape(action.point, exclude);
+            hoveredAnchor.current = target
+              ? { shape: target.shape, anchor: target.anchor }
+              : null;
+          } else {
+            hoveredAnchor.current = null;
+          }
 
-      // Drag bound arrows along with their target shapes.
-      const movedIds = new Set(selectedIds.current);
-      if (movedIds.size > 0) {
-        elements.current = syncBoundArrows(movedIds, elements.current);
+          cancelAnimationFrame(rafId.current);
+          rafId.current = requestAnimationFrame(() => {
+            renderScene();
+            renderSelection();
+          });
+          return;
+        }
+
+        case "drag": {
+          selectInteraction.current = {
+            ...action.interaction,
+            lastPoint: action.point,
+            moved: true,
+          };
+          elements.current = moveSelectedElements(
+            elements.current,
+            selectedIds.current,
+            action.dx,
+            action.dy,
+          );
+
+          const movedIds = new Set(selectedIds.current);
+          if (movedIds.size > 0) {
+            elements.current = syncBoundArrows(movedIds, elements.current);
+          }
+
+          cancelAnimationFrame(rafId.current);
+          rafId.current = requestAnimationFrame(() => {
+            renderScene();
+            renderSelection();
+          });
+          return;
+        }
+
+        case "none":
+          break;
       }
-
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(() => {
-        renderScene();
-        renderSelection();
-      });
-      return;
     }
 
     // Hover-only anchor preview when the arrow tool is active but no draw in progress.
@@ -934,50 +924,48 @@ export function useSketchEngine(
     }
 
     if (tool === "select") {
-      const interaction = selectInteraction.current;
+      const action = getSelectFinalizeAction({
+        interaction: selectInteraction.current,
+        selectionMarquee: selectionMarquee.current,
+        elements: elements.current,
+      });
+      selectInteraction.current = { type: "idle" };
 
-      if (interaction.type === "marquee" && selectionMarquee.current) {
-        const ids = getMarqueeSelectedIds(
-          elements.current,
-          selectionMarquee.current,
-        );
-        if (ids.length > 0) {
-          selectedIds.current = interaction.additive
-            ? addToSelection(selectedIds.current, ids)
-            : setSelection(ids);
-        } else if (!interaction.additive) {
-          selectedIds.current = setSelection([]);
-          setSelectedTool(null);
-        }
-        selectInteraction.current = { type: "idle" };
-        selectionMarquee.current = null;
-        renderScene();
-        renderSelection();
-        return;
-      }
+      switch (action.type) {
+        case "finish-marquee":
+          if (action.ids.length > 0) {
+            selectedIds.current = action.additive
+              ? addToSelection(selectedIds.current, action.ids)
+              : setSelection(action.ids);
+          } else if (!action.additive) {
+            selectedIds.current = setSelection([]);
+            setSelectedTool(null);
+          }
+          selectionMarquee.current = null;
+          renderScene();
+          renderSelection();
+          return;
 
-      if (interaction.type === "resizing") {
-        selectInteraction.current = { type: "idle" };
-        hoveredAnchor.current = null;
-        if (interaction.moved && selectedIds.current.size > 0) {
+        case "finish-resize":
+          hoveredAnchor.current = null;
+          if (action.moved && selectedIds.current.size > 0) {
+            setSelectedElements(selectedElementsList().map(normalizeElement));
+            history.current.push([...elements.current]);
+            syncHistoryStatus();
+          }
+          return;
+
+        case "finish-drag":
+          if (!action.moved || selectedIds.current.size === 0) return;
           setSelectedElements(selectedElementsList().map(normalizeElement));
           history.current.push([...elements.current]);
           syncHistoryStatus();
-        }
-        return;
-      }
+          renderSelection();
+          return;
 
-      if (interaction.type === "dragging") {
-        selectInteraction.current = { type: "idle" };
-        if (!interaction.moved || selectedIds.current.size === 0) return;
-        setSelectedElements(selectedElementsList().map(normalizeElement));
-        history.current.push([...elements.current]);
-        syncHistoryStatus();
-        renderSelection();
-        return;
+        case "none":
+          return;
       }
-
-      selectInteraction.current = { type: "idle" };
       return;
     }
 
