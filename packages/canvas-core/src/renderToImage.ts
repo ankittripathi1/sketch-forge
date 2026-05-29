@@ -38,7 +38,9 @@ export async function renderCanvasToBlob(
     (canvas as HTMLCanvasElement).height = height;
   }
 
-  const ctx = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  const ctx = canvas.getContext("2d") as
+    | OffscreenCanvasRenderingContext2D
+    | CanvasRenderingContext2D;
   if (!ctx) throw new Error("Could not get canvas context");
 
   // Fill background
@@ -70,7 +72,7 @@ export async function renderCanvasToBlob(
     const fitScale = Math.min(
       availableWidth / Math.max(contentWidth, 1),
       availableHeight / Math.max(contentHeight, 1),
-      scale
+      scale,
     );
 
     // Center the content

@@ -77,8 +77,7 @@ export function hitTestElement(
         : threshold;
     for (let i = 0; i < el.points.length - 1; i++) {
       if (
-        distToSegment(point, el.points[i]!, el.points[i + 1]!) <
-        strokeThreshold
+        distToSegment(point, el.points[i]!, el.points[i + 1]!) < strokeThreshold
       )
         return true;
     }
@@ -104,7 +103,10 @@ export function hitTestHandle(
   if (el.tool === "arrow") {
     // Compute endpoints + midpoint inline to avoid a circular import from
     // renderElement. Mirrors resolveArrowEndpoints + getArrowControlPoint.
-    let x1 = el.x1, y1 = el.y1, x2 = el.x2, y2 = el.y2;
+    let x1 = el.x1,
+      y1 = el.y1,
+      x2 = el.x2,
+      y2 = el.y2;
     if (el.startBinding) {
       const s = allElements.find((e) => e.id === el.startBinding!.elementId);
       if (s) {
@@ -199,4 +201,20 @@ export function isElementInsideRect(
     bbox.x + bbox.w <= rx + rw &&
     bbox.y + bbox.h <= ry + rh
   );
+}
+
+export function getElementsBoundingBox(elements: SketchElement[]) {
+  const boxes = elements.map(getBoundingBox);
+
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  const maxX = Math.min(...boxes.map((b) => b.x + b.w));
+  const maxY = Math.min(...boxes.map((b) => b.y + b.h));
+
+  return {
+    x: minX,
+    y: minY,
+    w: maxX - minX,
+    h: maxY - minY
+  }
 }

@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+/*
+  Tailwind v4 needs @theme in the app CSS entry so token utilities such as
+  bg-accent, text-text-body, and border-border-default are generated.
+*/
+@theme {
+  --color-surface-base: oklch(0.985 0.006 82);
+  --color-surface-raised: oklch(1 0 0);
+  --color-surface-overlay: oklch(0.965 0.008 82);
+  --color-surface-hover: oklch(0.94 0.01 82);
+  --color-surface-sunken: oklch(0.94 0.01 82);
+  --color-surface-paper: oklch(0.965 0.012 82);
+
+  --color-border-default: oklch(0.84 0.012 80);
+  --color-border-subtle: oklch(0.9 0.008 80);
+  --color-border-faint: oklch(0.86 0.01 80 / 0.55);
+  --color-border-strong: oklch(0.7 0.014 80);
+  --color-border-accent: oklch(0.62 0.18 23 / 0.32);
+  --color-border-accent-strong: oklch(0.58 0.19 23 / 0.55);
+
+  --color-text-heading: oklch(0.14 0.018 75);
+  --color-text-primary: oklch(0.2 0.016 75);
+  --color-text-body: oklch(0.34 0.014 75);
+  --color-text-secondary: oklch(0.48 0.012 75);
+  --color-text-muted: oklch(0.6 0.01 75);
+  --color-text-dim: oklch(0.72 0.008 75);
+  --color-text-on-accent: oklch(0.99 0 0);
+  --color-text-ink: oklch(0.14 0.018 75);
+
+  --color-accent: #d6424f;
+  --color-accent-hover: color-mix(in srgb, #d6424f 84%, black);
+  --color-accent-pressed: color-mix(in srgb, #d6424f 72%, black);
+  --color-accent-text: #ffffff;
+  --color-accent-glow: color-mix(in srgb, #d6424f 20%, transparent);
+  --color-accent-subtle: color-mix(in srgb, #d6424f 8%, transparent);
+
+  --color-status-new: oklch(0.58 0.01 75);
+  --color-status-learning: oklch(0.62 0.16 80);
+  --color-status-mastered: oklch(0.58 0.18 155);
+  --color-status-success: oklch(0.58 0.18 155);
+  --color-status-success-subtle: oklch(0.58 0.18 155 / 0.1);
+  --color-status-warning: oklch(0.62 0.16 80);
+  --color-status-warning-subtle: oklch(0.62 0.16 80 / 0.1);
+  --color-status-danger: oklch(0.56 0.2 25);
+  --color-status-danger-subtle: oklch(0.56 0.2 25 / 0.1);
+  --color-status-info: oklch(0.54 0.16 235);
+  --color-status-info-subtle: oklch(0.54 0.16 235 / 0.1);
+
+  --shadow-elev-1:
+    0 1px 2px oklch(0.2 0.02 75 / 0.06), inset 0 1px 0 oklch(1 0 0 / 0.8);
+  --shadow-elev-2:
+    0 8px 24px oklch(0.2 0.02 75 / 0.08), inset 0 1px 0 oklch(1 0 0 / 0.78);
+  --shadow-elev-3:
+    0 20px 60px oklch(0.2 0.02 75 / 0.12), inset 0 1px 0 oklch(1 0 0 / 0.78);
+  --shadow-elev-4:
+    0 32px 90px oklch(0.2 0.02 75 / 0.14), inset 0 1px 0 oklch(1 0 0 / 0.78);
+  --shadow-glow-accent: 0 0 48px var(--color-accent-glow);
+
+  --gradient-brand: linear-gradient(
+    135deg,
+    oklch(0.62 0.18 23),
+    oklch(0.48 0.16 18)
+  );
+  --gradient-mesh:
+    radial-gradient(at 5% 10%, oklch(0.56 0.2 24 / 0.08), transparent 46%),
+    radial-gradient(at 96% 4%, oklch(0.62 0.11 205 / 0.07), transparent 42%),
+    radial-gradient(at 72% 96%, oklch(0.72 0.12 86 / 0.07), transparent 46%);
+
+  --radius-pill: 9999px;
+  --radius-card: 8px;
+}
+
+[data-theme="dark"] {
+  --color-surface-base: oklch(0.095 0.008 75);
+  --color-surface-raised: oklch(0.135 0.01 75);
+  --color-surface-overlay: oklch(0.17 0.012 75);
+  --color-surface-hover: oklch(0.2 0.014 75);
+  --color-surface-sunken: oklch(0.065 0.006 75);
+  --color-surface-paper: oklch(0.12 0.012 80);
+
+  --color-border-default: oklch(0.23 0.014 75);
+  --color-border-subtle: oklch(0.17 0.01 75);
+  --color-border-faint: oklch(0.24 0.012 75 / 0.44);
+  --color-border-strong: oklch(0.32 0.014 75);
+  --color-border-accent: oklch(0.68 0.17 24 / 0.34);
+  --color-border-accent-strong: oklch(0.68 0.17 24 / 0.56);
+
+  --color-text-heading: oklch(0.96 0.006 88);
+  --color-text-primary: oklch(0.92 0.008 88);
+  --color-text-body: oklch(0.78 0.012 80);
+  --color-text-secondary: oklch(0.62 0.012 75);
+  --color-text-muted: oklch(0.47 0.01 75);
+  --color-text-dim: oklch(0.34 0.01 75);
+  --color-text-on-accent: oklch(0.14 0.018 75);
+  --color-text-ink: oklch(0.96 0.006 88);
+
+  --color-accent: #e0525d;
+  --color-accent-hover: color-mix(in srgb, #e0525d 88%, white);
+  --color-accent-pressed: color-mix(in srgb, #e0525d 74%, black);
+  --color-accent-text: oklch(0.99 0 0);
+  --color-accent-glow: color-mix(in srgb, #e0525d 24%, transparent);
+  --color-accent-subtle: color-mix(in srgb, #e0525d 12%, transparent);
+
+  --shadow-elev-1:
+    0 1px 4px oklch(0 0 0 / 0.34), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --shadow-elev-2:
+    0 10px 32px oklch(0 0 0 / 0.38), inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --shadow-elev-3:
+    0 20px 64px oklch(0 0 0 / 0.48), inset 0 1px 0 oklch(1 0 0 / 0.07);
+  --shadow-elev-4:
+    0 34px 100px oklch(0 0 0 / 0.58), inset 0 1px 0 oklch(1 0 0 / 0.08);
+  --shadow-glow-accent: 0 0 56px var(--color-accent-glow);
+
+  --gradient-brand: linear-gradient(
+    135deg,
+    oklch(0.7 0.17 24),
+    oklch(0.58 0.16 18)
+  );
+  --gradient-mesh:
+    radial-gradient(at 8% 12%, oklch(0.58 0.18 24 / 0.18), transparent 44%),
+    radial-gradient(at 92% 0%, oklch(0.62 0.11 205 / 0.1), transparent 38%),
+    radial-gradient(at 78% 100%, oklch(0.74 0.1 86 / 0.1), transparent 44%);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--color-surface-base);
+}
+
+body {
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

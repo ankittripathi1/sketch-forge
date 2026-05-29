@@ -2,6 +2,7 @@ import rough from "roughjs";
 import type { SketchElement } from "./types";
 import { getBoundingBox } from "./hitDetection";
 import { isColorDark } from "./colorUtils";
+import { highlightCodeLine } from "./codeHighlight";
 
 const imageCache = new Map<string, HTMLImageElement>();
 
@@ -29,230 +30,740 @@ function wrapText(
   return lines;
 }
 
-const JS_KEYWORDS = new Set([
-  "async",
-  "await",
-  "break",
-  "case",
-  "catch",
-  "class",
-  "const",
-  "continue",
-  "default",
-  "else",
-  "export",
-  "extends",
-  "finally",
-  "for",
-  "from",
-  "function",
-  "if",
-  "import",
-  "let",
-  "new",
-  "return",
-  "switch",
-  "throw",
-  "try",
-  "typeof",
-  "var",
-  "while",
-]);
+function wrapRichSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: RichTextSegment[],
+  maxWidth: number,
+  font: { weight: string; size: number; family: string },
+): RichTextSegment[][] {
+  const lines: RichTextSegment[][] = [];
+  let current: RichTextSegment[] = [];
+  let currentWidth = 0;
 
-const TS_KEYWORDS = new Set([
-  ...JS_KEYWORDS,
-  "abstract",
-  "as",
-  "declare",
-  "enum",
-  "implements",
-  "interface",
-  "keyof",
-  "namespace",
-  "private",
-  "protected",
-  "public",
-  "readonly",
-  "type",
-]);
+  const segmentFont = (kind: RichTextSegment["kind"]) =>
+    kind === "code"
+      ? `500 ${font.size * 0.9}px "Geist Mono", monospace`
+      : kind === "math"
+        ? `italic 600 ${font.size}px Georgia, "Times New Roman", serif`
+        : `${font.weight} ${font.size}px ${font.family}`;
 
-const PYTHON_KEYWORDS = new Set([
-  "and",
-  "as",
-  "assert",
-  "async",
-  "await",
-  "break",
-  "class",
-  "continue",
-  "def",
-  "del",
-  "elif",
-  "else",
-  "except",
-  "False",
-  "finally",
-  "for",
-  "from",
-  "global",
-  "if",
-  "import",
-  "in",
-  "is",
-  "lambda",
-  "None",
-  "nonlocal",
-  "not",
-  "or",
-  "pass",
-  "raise",
-  "return",
-  "True",
-  "try",
-  "while",
-  "with",
-  "yield",
-]);
+  const measure = (segment: RichTextSegment) => {
+    ctx.font = segmentFont(segment.kind);
+    return ctx.measureText(
+      segment.kind === "math" ? latexToDisplayText(segment.text) : segment.text,
+    ).width;
+  };
 
-const JAVA_KEYWORDS = new Set([
-  "abstract",
-  "assert",
-  "boolean",
-  "break",
-  "byte",
-  "case",
-  "catch",
-  "char",
-  "class",
-  "const",
-  "continue",
-  "default",
-  "do",
-  "double",
-  "else",
-  "enum",
-  "extends",
-  "final",
-  "finally",
-  "float",
-  "for",
-  "if",
-  "implements",
-  "import",
-  "instanceof",
-  "int",
-  "interface",
-  "long",
-  "new",
-  "package",
-  "private",
-  "protected",
-  "public",
-  "return",
-  "short",
-  "static",
-  "strictfp",
-  "super",
-  "switch",
-  "synchronized",
-  "this",
-  "throw",
-  "throws",
-  "transient",
-  "try",
-  "void",
-  "volatile",
-  "while",
-]);
+  const pushLine = () => {
+    lines.push(current.length ? current : [{ text: " ", kind: "plain" }]);
+    current = [];
+    currentWidth = 0;
+  };
 
-type CodeLanguage = NonNullable<SketchElement["codeLanguage"]>;
-type CodeToken = {
-  text: string;
-  kind: "plain" | "keyword" | "string" | "number" | "comment" | "function";
-};
-
-function getCodeKeywords(language: CodeLanguage | undefined) {
-  if (language === "python") return PYTHON_KEYWORDS;
-  if (language === "java") return JAVA_KEYWORDS;
-  if (language === "typescript") return TS_KEYWORDS;
-  return JS_KEYWORDS;
-}
-
-function tokenizeCodeLine(
-  line: string,
-  language: CodeLanguage | undefined,
-): CodeToken[] {
-  const tokens: CodeToken[] = [];
-  const keywords = getCodeKeywords(language);
-  let i = 0;
-
-  while (i < line.length) {
-    const rest = line.slice(i);
-    const comment = rest.match(language === "python" ? /^#.*/ : /^\/\/.*/);
-    if (comment) {
-      tokens.push({ text: comment[0], kind: "comment" });
-      break;
-    }
-
-    const string = rest.match(/^(['"`])(?:\\.|(?!\1).)*\1/);
-    if (string) {
-      tokens.push({ text: string[0], kind: "string" });
-      i += string[0].length;
+  for (const segment of segments) {
+    if (segment.kind !== "plain") {
+      const width = measure(segment);
+      if (current.length && currentWidth + width > maxWidth) pushLine();
+      current.push(segment);
+      currentWidth += width;
       continue;
     }
 
-    const number = rest.match(/^\b\d+(?:\.\d+)?\b/);
-    if (number) {
-      tokens.push({ text: number[0], kind: "number" });
-      i += number[0].length;
-      continue;
-    }
+    const tokens = segment.text.split(/(\s+)/);
+    for (const token of tokens) {
+      if (!token) continue;
+      const width = measure({ text: token, kind: "plain" });
+      if (current.length && currentWidth + width > maxWidth) {
+        pushLine();
+        if (/^\s+$/.test(token)) continue;
+      }
 
-    const word = rest.match(/^[A-Za-z_$][\w$]*/);
-    if (word) {
-      const next = line.slice(i + word[0].length).trimStart();
-      const kind = keywords.has(word[0])
-        ? "keyword"
-        : next.startsWith("(")
-          ? "function"
-          : "plain";
-      tokens.push({ text: word[0], kind });
-      i += word[0].length;
-      continue;
-    }
+      if (width > maxWidth && !/^\s+$/.test(token)) {
+        let chunk = "";
+        for (const char of token) {
+          const test = chunk + char;
+          const testWidth = measure({ text: test, kind: "plain" });
+          if (chunk && testWidth > maxWidth) {
+            current.push({ text: chunk, kind: "plain" });
+            pushLine();
+            chunk = char;
+          } else {
+            chunk = test;
+          }
+        }
+        if (chunk) {
+          current.push({ text: chunk, kind: "plain" });
+          currentWidth += measure({ text: chunk, kind: "plain" });
+        }
+        continue;
+      }
 
-    tokens.push({ text: line[i]!, kind: "plain" });
-    i += 1;
+      current.push({ text: token, kind: "plain" });
+      currentWidth += width;
+    }
   }
 
-  return tokens;
+  if (current.length) pushLine();
+  return lines;
 }
 
-function getCodeTokenColor(
-  kind: CodeToken["kind"],
-  darkBlock: boolean,
-  fallback: string,
+type RichTextSegment = {
+  text: string;
+  kind: "plain" | "code" | "link" | "math";
+};
+type RichTextLine =
+  | {
+      kind: "heading";
+      level: 1 | 2 | 3;
+      text: string;
+    }
+  | {
+      kind: "check";
+      checked: boolean;
+      text: string;
+    }
+  | {
+      kind: "bullet" | "ordered" | "paragraph";
+      text: string;
+      marker?: string;
+    }
+  | {
+      kind: "codeblock";
+      language: string;
+      lines: string[];
+    }
+  | {
+      kind: "equation";
+      text: string;
+    };
+type CalloutKind = "note" | "warning" | "definition" | "assumption" | "key";
+
+const CALLOUT_META: Record<
+  CalloutKind,
+  { label: string; accent: string; subtle: string }
+> = {
+  note: {
+    label: "Note",
+    accent: "#5a8ae8",
+    subtle: "rgba(90, 138, 232, 0.12)",
+  },
+  warning: {
+    label: "Warning",
+    accent: "#e8845a",
+    subtle: "rgba(232, 132, 90, 0.14)",
+  },
+  definition: {
+    label: "Definition",
+    accent: "#5ab98a",
+    subtle: "rgba(90, 185, 138, 0.13)",
+  },
+  assumption: {
+    label: "Assumption",
+    accent: "#a06ae8",
+    subtle: "rgba(160, 106, 232, 0.13)",
+  },
+  key: {
+    label: "Key takeaway",
+    accent: "#e8a830",
+    subtle: "rgba(232, 168, 48, 0.14)",
+  },
+};
+
+const LATEX_SYMBOLS: Record<string, string> = {
+  "\\alpha": "α",
+  "\\beta": "β",
+  "\\gamma": "γ",
+  "\\delta": "δ",
+  "\\epsilon": "ε",
+  "\\theta": "θ",
+  "\\lambda": "λ",
+  "\\mu": "μ",
+  "\\pi": "π",
+  "\\rho": "ρ",
+  "\\sigma": "σ",
+  "\\tau": "τ",
+  "\\phi": "φ",
+  "\\omega": "ω",
+  "\\Delta": "Δ",
+  "\\Sigma": "Σ",
+  "\\Pi": "Π",
+  "\\Omega": "Ω",
+  "\\infty": "∞",
+  "\\sum": "∑",
+  "\\prod": "∏",
+  "\\int": "∫",
+  "\\partial": "∂",
+  "\\nabla": "∇",
+  "\\sqrt": "√",
+  "\\cdot": "·",
+  "\\times": "×",
+  "\\div": "÷",
+  "\\le": "≤",
+  "\\leq": "≤",
+  "\\ge": "≥",
+  "\\geq": "≥",
+  "\\ne": "≠",
+  "\\neq": "≠",
+  "\\approx": "≈",
+  "\\equiv": "≡",
+  "\\to": "→",
+  "\\rightarrow": "→",
+  "\\leftarrow": "←",
+  "\\Rightarrow": "⇒",
+  "\\in": "∈",
+  "\\notin": "∉",
+  "\\subset": "⊂",
+  "\\subseteq": "⊆",
+  "\\cup": "∪",
+  "\\cap": "∩",
+  "\\land": "∧",
+  "\\lor": "∨",
+};
+
+const SUPER_DIGITS: Record<string, string> = {
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  "+": "⁺",
+  "-": "⁻",
+  "=": "⁼",
+  "(": "⁽",
+  ")": "⁾",
+  n: "ⁿ",
+  i: "ⁱ",
+};
+
+const SUB_DIGITS: Record<string, string> = {
+  "0": "₀",
+  "1": "₁",
+  "2": "₂",
+  "3": "₃",
+  "4": "₄",
+  "5": "₅",
+  "6": "₆",
+  "7": "₇",
+  "8": "₈",
+  "9": "₉",
+  "+": "₊",
+  "-": "₋",
+  "=": "₌",
+  "(": "₍",
+  ")": "₎",
+  a: "ₐ",
+  e: "ₑ",
+  h: "ₕ",
+  i: "ᵢ",
+  j: "ⱼ",
+  k: "ₖ",
+  l: "ₗ",
+  m: "ₘ",
+  n: "ₙ",
+  o: "ₒ",
+  p: "ₚ",
+  r: "ᵣ",
+  s: "ₛ",
+  t: "ₜ",
+  u: "ᵤ",
+  v: "ᵥ",
+  x: "ₓ",
+};
+
+function parseInlineRichText(text: string): RichTextSegment[] {
+  const segments: RichTextSegment[] = [];
+  const pattern = /(`[^`]+`)|(\[[^\]]+\]\([^)]+\))|(\$(?!\$)(?:\\.|[^$])+\$)/g;
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      segments.push({ text: text.slice(cursor, index), kind: "plain" });
+    }
+    const value = match[0];
+    if (value.startsWith("`")) {
+      segments.push({ text: value.slice(1, -1), kind: "code" });
+    } else if (value.startsWith("$")) {
+      segments.push({ text: value.slice(1, -1), kind: "math" });
+    } else {
+      const label = value.match(/^\[([^\]]+)\]/)?.[1] ?? value;
+      segments.push({ text: label, kind: "link" });
+    }
+    cursor = index + value.length;
+  }
+  if (cursor < text.length) {
+    segments.push({ text: text.slice(cursor), kind: "plain" });
+  }
+  return segments.length ? segments : [{ text, kind: "plain" }];
+}
+
+function parseRichTextLines(text: string): RichTextLine[] {
+  const raw = text.split("\n");
+  const out: RichTextLine[] = [];
+  let i = 0;
+  while (i < raw.length) {
+    const line = raw[i]!.trimEnd();
+
+    const equationFence = line.match(/^\$\$\s*(.*)$/);
+    if (equationFence) {
+      const lines: string[] = [];
+      const first = equationFence[1] ?? "";
+      if (first.trim() && !first.trim().endsWith("$$")) {
+        lines.push(first);
+      } else if (first.trim().endsWith("$$")) {
+        out.push({
+          kind: "equation",
+          text: first.replace(/\$\$\s*$/, "").trim(),
+        });
+        i++;
+        continue;
+      }
+
+      i++;
+      while (i < raw.length && !/\$\$\s*$/.test(raw[i]!.trimEnd())) {
+        lines.push(raw[i]!);
+        i++;
+      }
+      if (i < raw.length) {
+        lines.push(raw[i]!.replace(/\$\$\s*$/, ""));
+        i++;
+      }
+      out.push({ kind: "equation", text: lines.join(" ").trim() });
+      continue;
+    }
+
+    // Fenced code block: ```lang ... ```
+    const fence = line.match(/^```\s*(\w*)\s*$/);
+    if (fence) {
+      const language = fence[1] || "";
+      const lines: string[] = [];
+      i++;
+      while (i < raw.length && !/^```\s*$/.test(raw[i]!.trimEnd())) {
+        lines.push(raw[i]!);
+        i++;
+      }
+      // Consume the closing fence if present
+      if (i < raw.length) i++;
+      out.push({ kind: "codeblock", language, lines });
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      out.push({
+        kind: "heading",
+        level: heading[1]!.length as 1 | 2 | 3,
+        text: heading[2]!,
+      });
+      i++;
+      continue;
+    }
+
+    // Checklist: accept `[ ]`, `[x]`, optionally preceded by `- ` or `* `
+    const checklist = line.match(/^(?:[-*]\s+)?\[([ xX])\]\s+(.+)$/);
+    if (checklist) {
+      out.push({
+        kind: "check",
+        checked: checklist[1]!.toLowerCase() === "x",
+        text: checklist[2]!,
+      });
+      i++;
+      continue;
+    }
+
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      out.push({ kind: "bullet", text: bullet[1]! });
+      i++;
+      continue;
+    }
+
+    const ordered = line.match(/^(\d+[.)])\s+(.+)$/);
+    if (ordered) {
+      out.push({ kind: "ordered", marker: ordered[1]!, text: ordered[2]! });
+      i++;
+      continue;
+    }
+
+    out.push({ kind: "paragraph", text: line || " " });
+    i++;
+  }
+  return out;
+}
+
+function replaceLatexScripts(input: string, marker: "^" | "_") {
+  const map = marker === "^" ? SUPER_DIGITS : SUB_DIGITS;
+  return input.replace(
+    new RegExp(`\\${marker}(?:\\{([^}]+)\\}|([A-Za-z0-9()+\\-=]))`, "g"),
+    (_match, group: string | undefined, single: string | undefined) => {
+      const value = group ?? single ?? "";
+      return value
+        .split("")
+        .map((char) => map[char] ?? char)
+        .join("");
+    },
+  );
+}
+
+function latexToDisplayText(input: string) {
+  let value = input.trim();
+  value = value.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)");
+  value = value.replace(/\\sqrt\{([^{}]+)\}/g, "√($1)");
+  value = value.replace(/\\left|\\right/g, "");
+  for (const [latex, symbol] of Object.entries(LATEX_SYMBOLS)) {
+    value = value.replaceAll(latex, symbol);
+  }
+  value = replaceLatexScripts(value, "^");
+  value = replaceLatexScripts(value, "_");
+  value = value.replace(/[{}]/g, "");
+  value = value.replace(/\\,/g, " ");
+  value = value.replace(/\\/g, "");
+  return value;
+}
+
+function drawMathText(
+  ctx: CanvasRenderingContext2D,
+  expression: string,
+  x: number,
+  y: number,
+  options: {
+    size: number;
+    color: string;
+    maxWidth: number;
+    block?: boolean;
+    center?: boolean;
+  },
 ) {
-  if (kind === "keyword") return darkBlock ? "#d8b4fe" : "#9333ea";
-  if (kind === "string") return darkBlock ? "#86efac" : "#15803d";
-  if (kind === "number") return darkBlock ? "#fdba74" : "#b45309";
-  if (kind === "comment") return darkBlock ? "#94a3b8" : "#64748b";
-  if (kind === "function") return darkBlock ? "#93c5fd" : "#2563eb";
-  return fallback;
+  const text = latexToDisplayText(expression);
+  const size = options.block ? options.size * 1.16 : options.size;
+  ctx.font = `italic 600 ${size}px Georgia, "Times New Roman", serif`;
+  ctx.textBaseline = "top";
+  ctx.fillStyle = options.color;
+  const width = ctx.measureText(text).width;
+  const drawX =
+    options.center && width < options.maxWidth
+      ? x + (options.maxWidth - width) / 2
+      : x;
+  ctx.fillText(text, drawX, y, options.maxWidth);
+  return {
+    width: Math.min(width, options.maxWidth),
+    height: size * 1.25,
+  };
 }
 
-function getCodeLanguageLabel(language: CodeLanguage | undefined) {
-  if (language === "typescript") return "TypeScript";
-  if (language === "python") return "Python";
-  if (language === "java") return "Java";
-  return "JavaScript";
+function parseCallout(text: string): {
+  kind: CalloutKind;
+  title: string;
+  body: string;
+} | null {
+  const lines = text.split("\n");
+  const first = lines[0]?.trim() ?? "";
+  const match = first.match(
+    /^>\s*\[!(NOTE|WARNING|DEFINITION|ASSUMPTION|KEY)\]\s*(.*)$/i,
+  );
+  if (!match) return null;
+  const kind = match[1]!.toLowerCase() as CalloutKind;
+  const title = match[2]?.trim() || CALLOUT_META[kind].label;
+  const body = lines
+    .slice(1)
+    .map((line) => line.replace(/^>\s?/, ""))
+    .join("\n")
+    .trim();
+  return { kind, title, body };
 }
 
-function getCodeLanguageAccent(language: CodeLanguage | undefined) {
-  if (language === "typescript") return "#3178c6";
-  if (language === "python") return "#2f80ed";
-  if (language === "java") return "#e76f51";
-  return "#f0b429";
+function drawRichSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: RichTextSegment[],
+  x: number,
+  y: number,
+  maxWidth: number,
+  colors: { text: string; codeBg: string; codeText: string; link: string },
+  font: { weight: string; size: number; family: string },
+) {
+  let cursorX = x;
+  ctx.textBaseline = "top";
+  for (const segment of segments) {
+    const segmentFont =
+      segment.kind === "code"
+        ? `500 ${font.size * 0.9}px "Geist Mono", monospace`
+        : `${font.weight} ${font.size}px ${font.family}`;
+    ctx.font = segmentFont;
+    const width = ctx.measureText(segment.text).width;
+    if (cursorX + width > x + maxWidth && cursorX > x) break;
+
+    if (segment.kind === "code") {
+      const padX = font.size * 0.28;
+      const padY = font.size * 0.12;
+      ctx.fillStyle = colors.codeBg;
+      roundedRectPath(
+        ctx,
+        cursorX - padX,
+        y - padY,
+        width + padX * 2,
+        font.size * 1.18,
+        font.size * 0.22,
+      );
+      ctx.fill();
+      ctx.fillStyle = colors.codeText;
+      ctx.fillText(segment.text, cursorX, y);
+    } else if (segment.kind === "link") {
+      ctx.fillStyle = colors.link;
+      ctx.fillText(segment.text, cursorX, y);
+      ctx.strokeStyle = colors.link;
+      ctx.lineWidth = Math.max(1, font.size * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(cursorX, y + font.size * 1.08);
+      ctx.lineTo(cursorX + width, y + font.size * 1.08);
+      ctx.stroke();
+    } else if (segment.kind === "math") {
+      const rendered = latexToDisplayText(segment.text);
+      ctx.font = `italic 600 ${font.size}px Georgia, "Times New Roman", serif`;
+      const mathWidth = ctx.measureText(rendered).width;
+      if (cursorX + mathWidth > x + maxWidth && cursorX > x) break;
+      ctx.fillStyle = colors.link;
+      ctx.fillText(rendered, cursorX, y);
+      cursorX += mathWidth;
+      continue;
+    } else {
+      ctx.fillStyle = colors.text;
+      ctx.fillText(segment.text, cursorX, y);
+    }
+    cursorX += width;
+  }
+}
+
+function drawWrappedRichSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: RichTextSegment[],
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  bottom: number,
+  colors: { text: string; codeBg: string; codeText: string; link: string },
+  font: { weight: string; size: number; family: string },
+) {
+  let cursorY = y;
+  const wrapped = wrapRichSegments(ctx, segments, maxWidth, font);
+  for (const visualLine of wrapped) {
+    if (cursorY > bottom - font.size) break;
+    drawRichSegments(ctx, visualLine, x, cursorY, maxWidth, colors, font);
+    cursorY += lineHeight;
+  }
+  return cursorY;
+}
+
+function drawRichTextBlock(
+  ctx: CanvasRenderingContext2D,
+  el: SketchElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const fontSz = el.fontSize ?? el.strokeWidth * 10 + 4;
+  const fontFam = el.fontFamily ?? "Kalam, cursive";
+  const fontWt = el.fontWeight ?? "normal";
+  const darkText = isColorDark(el.strokeColor);
+  const linkColor = darkText ? "#3b82f6" : "#93c5fd";
+  const codeBg = darkText ? "rgba(36,48,68,0.09)" : "rgba(255,255,255,0.12)";
+  const codeText = darkText ? "#243044" : "#f5f5f0";
+  // Padding is intentionally small: the stored bbox (from openTextEditor) is
+  // sized as lines * fontSize * 1.2 with no padding, so anything larger here
+  // would push content outside the bbox and trip the clip check below before
+  // the first line draws.
+  const pad = Math.max(2, fontSz * 0.08);
+  const maxWidth = Math.max(w - pad * 2, 24);
+  let cursorY = y + pad;
+
+  const callout = parseCallout(el.text ?? "");
+  if (callout) {
+    const meta = CALLOUT_META[callout.kind];
+    ctx.save();
+    ctx.fillStyle = meta.subtle;
+    roundedRectPath(ctx, x, y, w, h, 12);
+    ctx.fill();
+    ctx.fillStyle = meta.accent;
+    roundedRectPath(ctx, x, y, Math.max(4, fontSz * 0.22), h, 12);
+    ctx.fill();
+    ctx.font = `700 ${fontSz * 0.86}px ${fontFam}`;
+    ctx.textBaseline = "top";
+    ctx.fillStyle = meta.accent;
+    ctx.fillText(meta.label.toUpperCase(), x + pad + 8, cursorY);
+    cursorY += fontSz * 1.32;
+    ctx.font = `700 ${fontSz * 1.08}px ${fontFam}`;
+    ctx.fillStyle = el.strokeColor;
+    ctx.fillText(callout.title, x + pad + 8, cursorY);
+    cursorY += fontSz * 1.5;
+    for (const line of wrapText(ctx, callout.body, maxWidth - 8)) {
+      if (cursorY > y + h - fontSz) break;
+      ctx.font = `${fontWt} ${fontSz}px ${fontFam}`;
+      ctx.fillStyle = el.strokeColor;
+      ctx.fillText(line, x + pad + 8, cursorY);
+      cursorY += fontSz * 1.32;
+    }
+    ctx.restore();
+    return;
+  }
+
+  for (const line of parseRichTextLines(el.text ?? "")) {
+    if (cursorY > y + h - fontSz) break;
+    if (line.kind === "heading") {
+      const scale = line.level === 1 ? 1.55 : line.level === 2 ? 1.28 : 1.12;
+      const size = fontSz * scale;
+      ctx.font = `700 ${size}px ${fontFam}`;
+      ctx.fillStyle = el.strokeColor;
+      ctx.textBaseline = "top";
+      ctx.fillText(line.text, x + pad, cursorY);
+      cursorY += size * 1.2;
+      continue;
+    }
+
+    if (line.kind === "codeblock") {
+      const codeFontSz = fontSz * 0.92;
+      const codeLineH = codeFontSz * 1.35;
+      const blockPad = fontSz * 0.5;
+      const renderedLines = line.lines.length > 0 ? line.lines : [""];
+      const blockH = renderedLines.length * codeLineH + blockPad * 2;
+      ctx.save();
+      ctx.fillStyle = codeBg;
+      roundedRectPath(ctx, x + pad, cursorY, w - pad * 2, blockH, 8);
+      ctx.fill();
+      if (line.language) {
+        ctx.font = `600 ${fontSz * 0.7}px "Geist Mono", monospace`;
+        ctx.fillStyle = codeText;
+        ctx.globalAlpha = 0.6;
+        const label = line.language.toUpperCase();
+        const labelW = ctx.measureText(label).width;
+        ctx.textBaseline = "top";
+        ctx.fillText(label, x + pad + (w - pad * 2) - labelW - 8, cursorY + 6);
+        ctx.globalAlpha = 1;
+      }
+      ctx.font = `500 ${codeFontSz}px "Geist Mono", monospace`;
+      ctx.textBaseline = "top";
+      let cy = cursorY + blockPad;
+      for (const codeLine of renderedLines) {
+        const expanded = codeLine.replace(/\t/g, "    ");
+        const tokens = highlightCodeLine(expanded, line.language, darkText);
+        let cxToken = x + pad + blockPad;
+        for (const t of tokens) {
+          if (!t.text) continue;
+          ctx.fillStyle = t.color;
+          ctx.fillText(t.text, cxToken, cy);
+          cxToken += ctx.measureText(t.text).width;
+        }
+        cy += codeLineH;
+      }
+      ctx.restore();
+      cursorY += blockH + fontSz * 0.3;
+      continue;
+    }
+
+    if (line.kind === "equation") {
+      const equationPad = fontSz * 0.5;
+      const equationH = fontSz * 2.2;
+      ctx.save();
+      ctx.fillStyle = codeBg;
+      roundedRectPath(ctx, x + pad, cursorY, w - pad * 2, equationH, 10);
+      ctx.fill();
+      drawMathText(
+        ctx,
+        line.text,
+        x + pad + equationPad,
+        cursorY + fontSz * 0.45,
+        {
+          size: fontSz,
+          color: el.strokeColor,
+          maxWidth: Math.max(24, w - pad * 2 - equationPad * 2),
+          block: true,
+          center: true,
+        },
+      );
+      ctx.restore();
+      cursorY += equationH + fontSz * 0.35;
+      continue;
+    }
+
+    const markerX = x + pad;
+    const textX = x + pad + fontSz * 1.35;
+    const lineH = fontSz * 1.2;
+    ctx.font = `${fontWt} ${fontSz}px ${fontFam}`;
+    ctx.textBaseline = "top";
+
+    if (line.kind === "check") {
+      const box = fontSz * 0.72;
+      ctx.strokeStyle = el.strokeColor;
+      ctx.lineWidth = Math.max(1, fontSz * 0.08);
+      roundedRectPath(ctx, markerX, cursorY + fontSz * 0.16, box, box, 3);
+      ctx.stroke();
+      if (line.checked) {
+        ctx.beginPath();
+        ctx.moveTo(markerX + box * 0.2, cursorY + box * 0.52);
+        ctx.lineTo(markerX + box * 0.44, cursorY + box * 0.78);
+        ctx.lineTo(markerX + box * 0.84, cursorY + box * 0.28);
+        ctx.stroke();
+      }
+    } else if (line.kind === "bullet") {
+      ctx.fillStyle = el.strokeColor;
+      ctx.beginPath();
+      ctx.arc(
+        markerX + fontSz * 0.34,
+        cursorY + fontSz * 0.54,
+        fontSz * 0.14,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    } else if (line.kind === "ordered") {
+      ctx.fillStyle = el.strokeColor;
+      ctx.fillText(line.marker ?? "1.", markerX, cursorY);
+    }
+
+    const drawX = line.kind === "paragraph" ? x + pad : textX;
+    cursorY = drawWrappedRichSegments(
+      ctx,
+      parseInlineRichText(line.text),
+      drawX,
+      cursorY,
+      line.kind === "paragraph" ? maxWidth : maxWidth - fontSz * 1.35,
+      lineH,
+      y + h,
+      {
+        text: el.strokeColor,
+        codeBg,
+        codeText,
+        link: linkColor,
+      },
+      { weight: fontWt, size: fontSz, family: fontFam },
+    );
+  }
+}
+
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+) {
+  const r = Math.min(radius, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 import type { AnchorSide } from "./types";
@@ -476,103 +987,9 @@ export function drawElement(
     drawWithOpacity(() => rc.path(path, opts));
   } else if (el.tool === "text" && el.text) {
     const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
-    const fontSz = el.fontSize ?? el.strokeWidth * 10 + 4;
-    const fontFam = el.fontFamily ?? "Kalam, cursive";
-    const fontWt = el.fontWeight ?? "normal";
-    const LINE_HEIGHT = 1.2;
-    ctx.save();
-    ctx.font = `${fontWt} ${fontSz}px ${fontFam}`;
-    ctx.textBaseline = "top";
-    ctx.fillStyle = el.strokeColor;
-
-    const maxWidth = Math.abs(el.x2 - el.x1);
-    const lines =
-      maxWidth > 20 ? wrapText(ctx, el.text, maxWidth) : el.text.split("\n");
-
-    lines.forEach((line, i) => {
-      ctx.fillText(line, el.x1, el.y1 + i * fontSz * LINE_HEIGHT);
-    });
-    ctx.restore();
-  } else if (el.tool === "code") {
-    const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
     const { x, y, w, h } = getBoundingBox(el);
-    const fontSz = el.fontSize ?? 14;
-    const fontFam = el.fontFamily ?? "Geist Mono, monospace";
-    const lineH = fontSz * 1.45;
-    const padX = 18;
-    const headerH = 32;
-    const bodyTop = y + headerH + 10;
-    const radius = 10;
-    const lines = (el.text ?? "").split("\n");
-    const isEmpty = (el.text ?? "").length === 0;
-    const darkBlock = !isColorDark(el.strokeColor);
-    const textColor = darkBlock ? "#e8e6d8" : "#243044";
-    const mutedTextColor = darkBlock
-      ? "rgba(226,232,240,0.46)"
-      : "rgba(71,85,105,0.48)";
-    const blockBg = darkBlock
-      ? "rgba(12, 12, 18, 0.88)"
-      : "rgba(255, 255, 255, 0.94)";
-    const headerBg = darkBlock
-      ? "rgba(255,255,255,0.045)"
-      : "rgba(15,23,42,0.035)";
-    const borderColor = darkBlock
-      ? "rgba(255,255,255,0.18)"
-      : "rgba(15,23,42,0.14)";
-    const accent = getCodeLanguageAccent(el.codeLanguage);
-
     ctx.save();
-    ctx.fillStyle = blockBg;
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = Math.max(1, el.strokeWidth || 1);
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, radius);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, radius);
-    ctx.clip();
-    ctx.fillStyle = headerBg;
-    ctx.fillRect(x, y, w, headerH);
-    ctx.fillStyle = accent;
-    ctx.fillRect(x, y, 3, headerH);
-    ctx.restore();
-
-    const label = getCodeLanguageLabel(el.codeLanguage);
-    ctx.font = `700 ${Math.max(10, fontSz * 0.72)}px ${fontFam}`;
-    const badgePadX = 7;
-    const badgeH = 20;
-    const badgeW = ctx.measureText(label).width + badgePadX * 2;
-    const badgeX = x + w - badgeW - 12;
-    const badgeY = y + (headerH - badgeH) / 2;
-    ctx.fillStyle = darkBlock
-      ? "rgba(255,255,255,0.10)"
-      : "rgba(15,23,42,0.06)";
-    ctx.beginPath();
-    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
-    ctx.fill();
-    ctx.fillStyle = accent;
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, badgeX + badgePadX, badgeY + badgeH / 2);
-
-    ctx.font = `normal ${fontSz}px ${fontFam}`;
-    ctx.textBaseline = "top";
-    if (isEmpty) {
-      ctx.fillStyle = mutedTextColor;
-      ctx.fillText("Empty code block", x + padX, bodyTop);
-    } else {
-      lines.forEach((line, i) => {
-        let cursorX = x + padX;
-        const baselineY = bodyTop + i * lineH;
-        for (const token of tokenizeCodeLine(line, el.codeLanguage)) {
-          ctx.fillStyle = getCodeTokenColor(token.kind, darkBlock, textColor);
-          ctx.fillText(token.text, cursorX, baselineY);
-          cursorX += ctx.measureText(token.text).width;
-        }
-      });
-    }
+    drawRichTextBlock(ctx, el, x, y, w, h);
     ctx.restore();
   } else if (el.tool === "image" && el.src) {
     const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
@@ -596,7 +1013,6 @@ export function drawElement(
   if (
     el.text &&
     el.tool !== "text" &&
-    el.tool !== "code" &&
     el.tool !== "image" &&
     el.tool !== "eraser" &&
     el.tool !== "highlighter" &&
@@ -705,19 +1121,10 @@ export function drawSelectionBox(
   const lw = 1.5 / zoom;
 
   ctx.save();
-  ctx.strokeStyle =
-    el.tool === "code" ? "rgba(129, 140, 248, 0.78)" : "#6366f1";
+  ctx.strokeStyle = "#6366f1";
   ctx.lineWidth = lw;
-  ctx.setLineDash(
-    el.tool === "code" ? [8 / zoom, 5 / zoom] : [5 / zoom, 3 / zoom],
-  );
-  if (el.tool === "code") {
-    ctx.beginPath();
-    ctx.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 12 / zoom);
-    ctx.stroke();
-  } else {
-    ctx.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
-  }
+  ctx.setLineDash([5 / zoom, 3 / zoom]);
+  ctx.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
   ctx.setLineDash([]);
 
   const handles: [number, number][] = [
@@ -732,7 +1139,7 @@ export function drawSelectionBox(
   ];
 
   ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = el.tool === "code" ? "rgba(129, 140, 248, 0.9)" : "#6366f1";
+  ctx.strokeStyle = "#6366f1";
   ctx.lineWidth = lw;
   for (const [hx, hy] of handles) {
     ctx.beginPath();

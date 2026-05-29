@@ -1,17 +1,8 @@
 "use client";
 
 import { RefObject, useRef, useState } from "react";
-import rough from "roughjs";
 import { SketchElement, Point, Tool, FillStyle } from "@repo/canvas-core/types";
-import {
-  drawElement,
-  drawSelectionBox,
-  drawAnchorHints,
-  getAnchorPoint,
-  getAllAnchorPoints,
-  resolveArrowEndpoints,
-  getArrowControlPoint,
-} from "@repo/canvas-core/renderElement";
+import { getAnchorPoint } from "@repo/canvas-core/renderElement";
 import type { ArrowBinding, AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
 import {
@@ -26,18 +17,23 @@ import {
   type RecognitionConfig,
 } from "@repo/canvas-core/lib/recognition";
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
-import { openTextEditor } from "@repo/canvas-core/textEditor";
-import { openCodeEditor } from "@repo/canvas-core/codeEditor";
+import { measureTextBox, openTextEditor } from "@repo/canvas-core/textEditor";
 import {
   DEFAULT_DARK_STROKE,
   DEFAULT_LIGHT_STROKE,
 } from "@repo/canvas-core/colorUtils";
+import * as transforms from "./lib/transform";
+import * as geometry from "./lib/geometry";
+import { recolorByTheme } from "./lib/theme";
+import { buildTextFromStrokes } from "./lib/scribble";
+import { applyLayoutUpdates } from "./lib/beautify";
+import { buildTextElement, applyTextEdit } from "./tools/text";
+import { createRenderers } from "./lib/rendering";
+import { useCanvasUI } from "./store";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
 const OFFSET = 24;
-const CODE_MIN_WIDTH = 280;
-type CodeLanguage = NonNullable<SketchElement["codeLanguage"]>;
 
 const HANDLE_CURSORS = [
   "nwse-resize",
@@ -89,44 +85,45 @@ export function useSketchEngine(
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>,
   interactionCavasRef: RefObject<HTMLCanvasElement | null>,
   canvasMode: "light" | "dark" = "light",
+  onChange?: () => void,
 ) {
+  const {
+    strokeColor,
+    fillColor,
+    fillStyle,
+    strokeWidth,
+    fontFamily,
+    fontSize,
+    fontWeight,
+    textAlign,
+    textVerticalAlign,
+    scribbleEnabled,
+    recognitionBackend,
+    recognitionApiKey,
+    setStrokeColor,
+    setFillColor,
+    setFillStyle,
+    setStrokeWidth,
+    setFontFamily,
+    setFontSize,
+    setFontWeight,
+    setTextAlign,
+    setTextVerticalAlign,
+    setScribbleEnabled,
+    setRecognitionBackend,
+    setRecognitionApiKey,
+  } = useCanvasUI();
+
+  // ── Engine-internal state: stays in the hook (state machine + flow flags). ──
   const [tool, setTool] = useState<Tool>("rectangle");
   const [historyStatus, setHistoryStatus] = useState({
     canUndo: false,
     canRedo: false,
   });
-  const [strokeColor, setStrokeColor] = useState("#1a1a2e");
-  const [fillColor, setFillColor] = useState("none");
-  const [fillStyle, setFillStyle] = useState<FillStyle>("none");
-  const [strokeWidth, setStrokeWidth] = useState(1.5);
-  const [fontFamily, setFontFamily] = useState("Kalam, cursive");
-  const [fontSize, setFontSize] = useState(16);
-  const [fontWeight, setFontWeight] = useState<"normal" | "bold">("normal");
-  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">(
-    "center",
-  );
-  const [textVerticalAlign, setTextVerticalAlign] = useState<
-    "top" | "middle" | "bottom"
-  >("middle");
-  const [codeLanguage, setCodeLanguageState] =
-    useState<CodeLanguage>("javascript");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [zoomLevel, setZoomLevel] = useState(100);
-  /** Whether the Scribble feature is active (freehand strokes convert to text). */
-  const [scribbleEnabled, setScribbleEnabled] = useState(false);
-  /**
-   * True while a scribble batch is debouncing OR while recognition is in
-   * flight.  Drives the pulsing "recognizing" badge in the UI.
-   * Cleared in the finally block of flushScribbleBatch so it covers both
-   * the wait period and the actual API call duration.
-   */
   const [scribblePending, setScribblePending] = useState(false);
-  /** True while beautifyLayout() is awaiting the Gemini layout response. */
   const [isBeautifying, setIsBeautifying] = useState(false);
-  const [recognitionBackend, setRecognitionBackend] = useState<
-    "tesseract" | "gemini"
-  >("tesseract");
-  const [recognitionApiKey, setRecognitionApiKey] = useState("");
   /**
    * Mutable ref that mirrors recognitionBackend + recognitionApiKey state.
    *
@@ -153,6 +150,7 @@ export function useSketchEngine(
     x2: number;
     y2: number;
   } | null>(null);
+  const isAddetiveSelection = useRef(false);
   const isDragging = useRef(false);
   const dragStart = useRef<Point>({ x: 0, y: 0 });
   const resizeHandle = useRef<number | null>(null);
@@ -202,10 +200,7 @@ export function useSketchEngine(
    * Used in all pointer event handlers to translate cursor positions.
    */
   function screenToCanvas(point: Point): Point {
-    return {
-      x: (point.x - panOffset.current.x) / zoom.current,
-      y: (point.y - panOffset.current.y) / zoom.current,
-    };
+    return transforms.screenToCanvas(point, zoom.current, panOffset.current);
   }
 
   /**
@@ -213,38 +208,15 @@ export function useSketchEngine(
    * editor textarea over an existing text element.
    */
   function canvasToScreen(point: Point): Point {
-    return {
-      x: point.x * zoom.current + panOffset.current.x,
-      y: point.y * zoom.current + panOffset.current.y,
-    };
+    return transforms.canvasToScreen(point, zoom.current, panOffset.current);
   }
 
   function getDeviceScale(canvas: HTMLCanvasElement) {
-    const rect = canvas.getBoundingClientRect();
-    return rect.width > 0 ? canvas.width / rect.width : 1;
-  }
-
-  function applyTransform(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ) {
-    const scale = getDeviceScale(canvas);
-    ctx.setTransform(
-      zoom.current * scale,
-      0,
-      0,
-      zoom.current * scale,
-      panOffset.current.x * scale,
-      panOffset.current.y * scale,
-    );
+    return transforms.getDeviceScale(canvas);
   }
 
   function clearCanvas(canvas: HTMLCanvasElement) {
-    const ctx = canvas.getContext("2d")!;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+    return transforms.clearCanvas(canvas);
   }
 
   /**
@@ -256,109 +228,25 @@ export function useSketchEngine(
    * The onImageLoad callback passed to drawElement is renderScene itself,
    * so that image elements trigger a repaint once their src has loaded.
    */
-  function renderScene() {
-    const canvas = sceneCanvasRef!.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    clearCanvas(canvas);
-    ctx.save();
-    applyTransform(ctx, canvas);
-    const rc = rough.canvas(canvas);
-    const all = [...elements.current, ...selectedElements.current];
-    elements.current.forEach((el) => drawElement(rc, el, renderScene, all));
-    ctx.restore();
-  }
-
-  function renderActiveElement() {
-    const canvas = interactionCavasRef!.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    clearCanvas(canvas);
-    if (!currentElement.current && !hoveredAnchor.current) return;
-    ctx.save();
-    applyTransform(ctx, canvas);
-    if (currentElement.current) {
-      const rc = rough.canvas(canvas);
-      drawElement(rc, currentElement.current, undefined, [
-        ...elements.current,
-        ...selectedElements.current,
-      ]);
-    }
-    if (hoveredAnchor.current) {
-      drawAnchorHints(
-        ctx,
-        hoveredAnchor.current.shape,
-        hoveredAnchor.current.anchor,
-        zoom.current,
-      );
-    }
-    ctx.restore();
-  }
-
-  function renderSelection() {
-    const canvas = interactionCavasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    clearCanvas(canvas);
-
-    ctx.save();
-    applyTransform(ctx, canvas);
-    const rc = rough.canvas(canvas);
-
-    if (selectionMarquee.current) {
-      const { x1, y1, x2, y2 } = selectionMarquee.current;
-      ctx.strokeStyle = "#6366f1";
-      ctx.setLineDash([5 / zoom.current, 3 / zoom.current]);
-      ctx.lineWidth = 1 / zoom.current;
-      ctx.strokeRect(
-        Math.min(x1, x2),
-        Math.min(y1, y2),
-        Math.abs(x2 - x1),
-        Math.abs(y2 - y1),
-      );
-      ctx.fillStyle = "rgba(99, 102, 241, 0.05)";
-      ctx.fillRect(
-        Math.min(x1, x2),
-        Math.min(y1, y2),
-        Math.abs(x2 - x1),
-        Math.abs(y2 - y1),
-      );
-    }
-
-    const all = [...elements.current, ...selectedElements.current];
-    selectedElements.current.forEach((el) => {
-      drawElement(rc, el, undefined, all);
-      drawSelectionBox(ctx, el, zoom.current, all);
-    });
-
-    if (hoveredAnchor.current) {
-      drawAnchorHints(
-        ctx,
-        hoveredAnchor.current.shape,
-        hoveredAnchor.current.anchor,
-        zoom.current,
-      );
-    }
-
-    ctx.restore();
-  }
-
-  function renderInteractionLayer() {
-    if (selectedElements.current.length > 0 || selectionMarquee.current) {
-      renderSelection();
-      return;
-    }
-    renderActiveElement();
-  }
-
-  function scheduleViewportRender() {
-    cancelAnimationFrame(viewportRafId.current);
-    viewportRafId.current = requestAnimationFrame(() => {
-      setPanOffsetDisplay({ ...panOffset.current });
-      renderScene();
-      renderInteractionLayer();
-    });
-  }
+  const renderers = createRenderers({
+    sceneCanvas: sceneCanvasRef,
+    interactionCanvas: interactionCavasRef,
+    elements,
+    selectedElements,
+    currentElement,
+    hoveredAnchor,
+    selectionMarquee,
+    zoom,
+    panOffset,
+    viewportRafId,
+    setPanOffsetDisplay,
+  });
+  const {
+    renderScene,
+    renderActiveElement,
+    renderSelection,
+    scheduleViewportRender,
+  } = renderers;
 
   /**
    * Flushes the accumulated scribble batch: runs recognition on all strokes
@@ -411,46 +299,17 @@ export function useSketchEngine(
 
       const text = await recognizeHandwriting(
         strokes,
-        recognitionConfigRef.current, // always fresh — see the ref comment above
+        recognitionConfigRef.current,
       );
 
-      // If recognition returned nothing useful, leave the strokes as-is.
-      if (!text.trim()) return;
-
-      // Compute the union bounding box across all strokes in the batch.
-      // This determines where the replacement text element is placed.
-      const allPts = strokes.flat();
-      const x1 = Math.min(...allPts.map((p) => p.x));
-      const y1 = Math.min(...allPts.map((p) => p.y));
-      const x2 = Math.max(...allPts.map((p) => p.x));
-      const y2 = Math.max(...allPts.map((p) => p.y));
-      const strokeHeight = y2 - y1;
-
-      // Atomically replace the raw strokes with the text element.
-      elements.current = elements.current.filter((el) => !ids.has(el.id));
-
-      const textEl: SketchElement = {
-        id: crypto.randomUUID(),
-        tool: "text",
-        seed: Math.floor(Math.random() * 100_000),
-        strokeColor, // captures current toolbar color at the time of flush
-        fillColor: "none",
-        fillStyle: "none",
-        strokeWidth: 0,
-        x1,
-        y1,
-        // Enforce a minimum width/height so single-character elements aren't
-        // invisible (x2 === x1 would produce a zero-width bounding box).
-        x2: Math.max(x2, x1 + 40),
-        y2: Math.max(y2, y1 + 20),
-        text: text.trim(),
+      const textEl = buildTextFromStrokes(strokes, text, {
+        strokeColor,
         fontFamily,
-        // Scale font size to the height of the handwriting: 72% of stroke
-        // height, clamped to a sensible range of 14–96 px.
-        fontSize: Math.min(Math.max(Math.round(strokeHeight * 0.72), 14), 96),
         fontWeight,
-      };
+      });
+      if (!textEl) return;
 
+      elements.current = elements.current.filter((el) => !ids.has(el.id));
       elements.current = [...elements.current, textEl];
       history.current.push(elements.current);
       syncHistoryStatus();
@@ -543,22 +402,6 @@ export function useSketchEngine(
     updateSelectedElements({ textVerticalAlign: v });
   }
 
-  function applyCodeLanguage(language: CodeLanguage) {
-    setCodeLanguageState(language);
-    updateSelectedElements({ codeLanguage: language });
-  }
-
-  async function copySelectedCode() {
-    const code = selectedElements.current.find((el) => el.tool === "code");
-    if (!code) return false;
-    try {
-      await navigator.clipboard.writeText(code.text ?? "");
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   /**
    * Swap every element whose strokeColor is the "opposite" theme default to
    * the new theme default.  Elements with custom colours are left untouched.
@@ -609,39 +452,12 @@ export function useSketchEngine(
       // bail out without touching elements or history.
       if (!updates.length) return;
 
-      // Build a lookup map for efficient per-element update application.
       const updateMap = new Map(updates.map((u) => [u.id, u]));
-
-      /**
-       * Merges one LayoutUpdate into its matching SketchElement.
-       * Coordinates are always updated.  Font properties are only applied to
-       * text elements to prevent shapes from accidentally gaining font fields.
-       */
-      const apply = (el: SketchElement): SketchElement => {
-        const u = updateMap.get(el.id);
-        if (!u) return el; // element not in the update list — leave untouched
-        return {
-          ...el,
-          x1: u.x1,
-          y1: u.y1,
-          x2: u.x2,
-          y2: u.y2,
-          // Only patch text-specific fields on actual text elements.
-          ...(u.text !== undefined && el.tool === "text"
-            ? { text: u.text }
-            : {}),
-          ...(u.fontSize !== undefined && el.tool === "text"
-            ? { fontSize: u.fontSize }
-            : {}),
-          ...(u.fontWeight !== undefined && el.tool === "text"
-            ? { fontWeight: u.fontWeight }
-            : {}),
-        };
-      };
-
-      // Apply the layout to both element stores in-place.
-      elements.current = elements.current.map(apply);
-      selectedElements.current = selectedElements.current.map(apply);
+      elements.current = applyLayoutUpdates(elements.current, updateMap);
+      selectedElements.current = applyLayoutUpdates(
+        selectedElements.current,
+        updateMap,
+      );
 
       // Any arrow bound to a shape that just moved should follow it. We pass
       // the full id set so all bindings get re-resolved against the new positions.
@@ -682,38 +498,25 @@ export function useSketchEngine(
    *
    * @param isDark  true when switching TO a dark theme, false for light.
    */
-  function applyThemeColors(isDark: boolean) {
-    const fromColor = isDark ? DEFAULT_LIGHT_STROKE : DEFAULT_DARK_STROKE;
-    const toColor = isDark ? DEFAULT_DARK_STROKE : DEFAULT_LIGHT_STROKE;
-
-    // Update the toolbar default so new elements use the right colour.
-    setStrokeColor(toColor);
-
-    /** Recolours one element if it uses the old theme default; leaves others as-is. */
-    const recolor = (el: SketchElement): SketchElement =>
-      el.strokeColor.toLowerCase() === fromColor.toLowerCase()
-        ? { ...el, strokeColor: toColor }
-        : el;
-
-    const nextElements = elements.current.map(recolor);
-    const nextSelected = selectedElements.current.map(recolor);
-
-    // Reference equality check: recolor returns the original object unchanged
-    // when no colour swap is needed, so a !== comparison correctly detects
-    // whether any element was actually modified.
-    const anyChanged =
-      nextElements.some((el, i) => el !== elements.current[i]) ||
-      nextSelected.some((el, i) => el !== selectedElements.current[i]);
-
-    elements.current = nextElements;
-    selectedElements.current = nextSelected;
-
-    if (anyChanged) {
+  function applyThemeColors(
+    isDark: boolean,
+    options: { recordHistory?: boolean } = {},
+  ) {
+    const result = recolorByTheme(
+      elements.current,
+      selectedElements.current,
+      isDark,
+    );
+    setStrokeColor(result.newDefaultStroke);
+    elements.current = result.elements;
+    selectedElements.current = result.selected;
+    if (result.changed && options.recordHistory !== false) {
       history.current.push(snapshotWithSelection());
       syncHistoryStatus();
     }
     renderScene();
     renderSelection();
+    return result.changed;
   }
 
   function applyTool(nextTool: Tool) {
@@ -727,7 +530,9 @@ export function useSketchEngine(
       setFillStyle("none");
       setStrokeWidth(18);
     } else if (tool === "highlighter") {
-      setStrokeColor("#1a1a2e");
+      setStrokeColor(
+        canvasMode === "dark" ? DEFAULT_DARK_STROKE : DEFAULT_LIGHT_STROKE,
+      );
       setFillColor("none");
       setFillStyle("none");
       setStrokeWidth(1.5);
@@ -735,21 +540,7 @@ export function useSketchEngine(
   }
 
   function normalizeElement(el: SketchElement): SketchElement {
-    if (
-      el.tool === "line" ||
-      el.tool === "arrow" ||
-      el.tool === "freehand" ||
-      el.tool === "highlighter"
-    ) {
-      return el;
-    }
-    return {
-      ...el,
-      x1: Math.min(el.x1, el.x2),
-      y1: Math.min(el.y1, el.y2),
-      x2: Math.max(el.x1, el.x2),
-      y2: Math.max(el.y1, el.y2),
-    };
+    return geometry.normalizeElement(el);
   }
 
   function applyResize(
@@ -757,240 +548,50 @@ export function useSketchEngine(
     handle: number,
     to: Point,
   ): SketchElement {
-    if (el.tool === "arrow") {
-      const ends = resolveArrowEndpoints(el, [
-        ...elements.current,
-        ...selectedElements.current,
-      ]);
-      if (handle === 0) {
-        // Start endpoint — rebind if dropped on a shape, else unbind.
-        const target = findBindableShape(to, new Set([el.id]));
-        if (target) {
-          const p = getAnchorPoint(target.shape, target.anchor);
-          return {
-            ...el,
-            x1: p.x,
-            y1: p.y,
-            startBinding: {
-              elementId: target.shape.id,
-              anchor: target.anchor,
-            },
-          };
-        }
-        return { ...el, x1: to.x, y1: to.y, startBinding: undefined };
-      }
-      if (handle === 2) {
-        const exclude = new Set<string>([el.id]);
-        if (el.startBinding) exclude.add(el.startBinding.elementId);
-        const target = findBindableShape(to, exclude);
-        if (target) {
-          const p = getAnchorPoint(target.shape, target.anchor);
-          return {
-            ...el,
-            x2: p.x,
-            y2: p.y,
-            endBinding: {
-              elementId: target.shape.id,
-              anchor: target.anchor,
-            },
-          };
-        }
-        return { ...el, x2: to.x, y2: to.y, endBinding: undefined };
-      }
-      // handle === 1: bend midpoint. Compute signed perpendicular distance
-      // from the chord (x1,y1)→(x2,y2) to `to`.
-      const dx = ends.x2 - ends.x1;
-      const dy = ends.y2 - ends.y1;
-      const len = Math.hypot(dx, dy) || 1;
-      const mx = (ends.x1 + ends.x2) / 2;
-      const my = (ends.y1 + ends.y2) / 2;
-      // Perpendicular unit vector matches getArrowControlPoint: (-dy, dx) / len
-      const bend = ((to.x - mx) * -dy + (to.y - my) * dx) / len;
-      return { ...el, bend };
-    }
+    const resized = geometry.applyResize(
+      el,
+      handle,
+      to,
+      [...elements.current, ...selectedElements.current],
+      zoom.current,
+    );
+    if (resized.tool !== "text" || !resized.text) return resized;
 
-    const { x, y, w, h } = getBoundingBox(el);
-    let nx1 = el.x1,
-      ny1 = el.y1,
-      nx2 = el.x2,
-      ny2 = el.y2;
-    const isCornerHandle = [0, 2, 5, 7].includes(handle);
+    const { x, y, w } = getBoundingBox(resized);
+    const measured = measureTextBox(resized.text, {
+      fontFamily: resized.fontFamily ?? fontFamily,
+      fontSize: resized.fontSize ?? fontSize,
+      fontWeight: resized.fontWeight ?? fontWeight,
+      width: Math.max(w, 20),
+      fixedWidth: true,
+    });
 
-    if (isCornerHandle && w > 0 && h > 0) {
-      const movesLeft = [0, 3, 5].includes(handle);
-      const movesTop = [0, 1, 2].includes(handle);
-      const anchorX = movesLeft ? x + w : x;
-      const anchorY = movesTop ? y + h : y;
-      const scale = Math.max(
-        Math.abs(to.x - anchorX) / w,
-        Math.abs(to.y - anchorY) / h,
-      );
-      const nextW =
-        el.tool === "code" ? Math.max(w * scale, CODE_MIN_WIDTH) : w * scale;
-      const nextH = h * scale;
-      const nextX = movesLeft ? anchorX - nextW : anchorX;
-      const nextY = movesTop ? anchorY - nextH : anchorY;
-
-      if (el.tool === "line") {
-        return {
-          ...el,
-          x1: nextX + (el.x1 - x) * scale,
-          y1: nextY + (el.y1 - y) * scale,
-          x2: nextX + (el.x2 - x) * scale,
-          y2: nextY + (el.y2 - y) * scale,
-        };
-      }
-
-      if (el.tool === "freehand" || el.tool === "highlighter") {
-        return {
-          ...el,
-          x1: nextX,
-          y1: nextY,
-          x2: nextX + nextW,
-          y2: nextY + nextH,
-          points: el.points?.map((p) => ({
-            x: nextX + (p.x - x) * scale,
-            y: nextY + (p.y - y) * scale,
-          })),
-        };
-      }
-
-      return {
-        ...el,
-        x1: nextX,
-        y1: nextY,
-        x2: nextX + nextW,
-        y2: nextY + nextH,
-      };
-    }
-
-    const scaleX = w > 0 ? (to.x - x) / w : 1;
-    const scaleY = h > 0 ? (to.y - y) / h : 1;
-
-    switch (handle) {
-      case 0:
-        nx1 = to.x;
-        ny1 = to.y;
-        break;
-      case 1:
-        ny1 = to.y;
-        break;
-      case 2:
-        nx2 = to.x;
-        ny1 = to.y;
-        break;
-      case 3:
-        nx1 = to.x;
-        break;
-      case 4:
-        nx2 = to.x;
-        break;
-      case 5:
-        nx1 = to.x;
-        ny2 = to.y;
-        break;
-      case 6:
-        ny2 = to.y;
-        break;
-      case 7:
-        nx2 = to.x;
-        ny2 = to.y;
-        break;
-    }
-
-    if (el.tool === "code") {
-      const movesLeft = [0, 3, 5].includes(handle);
-      const currentWidth = Math.abs(nx2 - nx1);
-      if (currentWidth < CODE_MIN_WIDTH) {
-        if (movesLeft) nx1 = nx2 - CODE_MIN_WIDTH;
-        else nx2 = nx1 + CODE_MIN_WIDTH;
-      }
-    }
-
-    if (el.tool === "freehand" || el.tool === "highlighter") {
-      return {
-        ...el,
-        x1: nx1,
-        y1: ny1,
-        x2: nx2,
-        y2: ny2,
-        points: el.points?.map((p) => ({
-          x: x + (p.x - x) * scaleX,
-          y: y + (p.y - y) * scaleY,
-        })),
-      };
-    }
-
-    return { ...el, x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
+    return {
+      ...resized,
+      x1: x,
+      x2: x + Math.max(w, 20),
+      y1: y,
+      y2: y + measured.height,
+    };
   }
 
-  /**
-   * Returns the topmost shape eligible for arrow binding (rectangle, ellipse,
-   * diamond) under a given canvas-space point — or null if none.
-   * Excludes elements in the exclude set so we don't bind an arrow to itself
-   * or to the shape on its other end during draw.
-   */
   function findBindableShape(
     point: Point,
     exclude: Set<string> = new Set(),
   ): { shape: SketchElement; anchor: AnchorSide } | null {
-    const all = [...elements.current, ...selectedElements.current];
-    for (let i = all.length - 1; i >= 0; i--) {
-      const el = all[i]!;
-      if (exclude.has(el.id)) continue;
-      if (
-        el.tool !== "rectangle" &&
-        el.tool !== "ellipse" &&
-        el.tool !== "diamond"
-      )
-        continue;
-      if (hitTestElement(el, point, 8 / zoom.current)) {
-        // Pick the anchor on this shape whose point is closest to the cursor.
-        const anchors = getAllAnchorPoints(el);
-        let best = anchors[0]!;
-        let bestDist = Infinity;
-        for (const a of anchors) {
-          const d = Math.hypot(point.x - a.x, point.y - a.y);
-          if (d < bestDist) {
-            bestDist = d;
-            best = a;
-          }
-        }
-        return { shape: el, anchor: best.side };
-      }
-    }
-    return null;
+    return geometry.findBindableShape(
+      point,
+      [...elements.current, ...selectedElements.current],
+      zoom.current,
+      exclude,
+    );
   }
 
-  /**
-   * After a shape has moved or resized, walk all elements and update the stored
-   * endpoint of any arrow bound to the shape so its data stays consistent with
-   * the visual (arrows are also re-resolved at render time, but hit-testing
-   * uses the stored coords).
-   */
   function syncBoundArrows(shapeIds: Set<string>, list: SketchElement[]) {
-    const allShapes = [...elements.current, ...selectedElements.current];
-    return list.map((el) => {
-      if (el.tool !== "arrow") return el;
-      let next = el;
-      if (el.startBinding && shapeIds.has(el.startBinding.elementId)) {
-        const target = allShapes.find(
-          (e) => e.id === el.startBinding!.elementId,
-        );
-        if (target) {
-          const p = getAnchorPoint(target, el.startBinding.anchor);
-          next = { ...next, x1: p.x, y1: p.y };
-        }
-      }
-      if (el.endBinding && shapeIds.has(el.endBinding.elementId)) {
-        const target = allShapes.find((e) => e.id === el.endBinding!.elementId);
-        if (target) {
-          const p = getAnchorPoint(target, el.endBinding.anchor);
-          next = { ...next, x2: p.x, y2: p.y };
-        }
-      }
-      return next;
-    });
+    return geometry.syncBoundArrows(shapeIds, list, [
+      ...elements.current,
+      ...selectedElements.current,
+    ]);
   }
 
   function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
@@ -1018,23 +619,12 @@ export function useSketchEngine(
         zoom: zoom.current,
       }).then((result) => {
         if (!result?.text.trim()) return;
-        const el: SketchElement = {
-          id: crypto.randomUUID(),
-          tool: "text",
-          seed: Math.floor(Math.random() * 100000),
+        const el = buildTextElement(point, result, {
           strokeColor,
-          fillColor: "none",
-          fillStyle: "none",
-          strokeWidth: 0,
-          x1: point.x,
-          y1: point.y,
-          x2: point.x + result.width,
-          y2: point.y + result.height,
-          text: result.text,
           fontFamily,
           fontSize,
           fontWeight,
-        };
+        });
         selectedElements.current = [el];
         setSelectedTool("text");
         history.current.push([...elements.current, el]);
@@ -1046,58 +636,20 @@ export function useSketchEngine(
       return;
     }
 
-    if (tool === "code") {
-      const codeStrokeColor =
-        canvasMode === "dark" ? DEFAULT_DARK_STROKE : DEFAULT_LIGHT_STROKE;
-      const codeFillColor =
-        canvasMode === "dark"
-          ? "rgba(12, 12, 18, 0.82)"
-          : "rgba(255, 255, 255, 0.92)";
-      const opts = {
-        x: screenPoint.x,
-        y: screenPoint.y,
-        width: Math.max(420, CODE_MIN_WIDTH),
-        fontSize: 14,
-        color: codeStrokeColor,
-        zoom: zoom.current,
-        language: "javascript" as const,
-        theme: canvasMode,
-      };
-      openCodeEditor(opts).then((result) => {
-        if (!result) return;
-
-        const el: SketchElement = {
-          id: crypto.randomUUID(),
-          tool: "code",
-          seed: Math.floor(Math.random() * 100000),
-          strokeColor: codeStrokeColor,
-          fillColor: codeFillColor,
-          fillStyle: "none",
-          strokeWidth: 0,
-          x1: point.x,
-          y1: point.y,
-          x2: point.x + Math.max(result.width, CODE_MIN_WIDTH),
-          y2: point.y + result.height,
-          text: result.text,
-          codeLanguage: result.language,
-          fontFamily: "Geist Mono, monospace",
-          fontSize: 14,
-          fontWeight: "normal",
-        };
-
-        selectedElements.current = [el];
-        setSelectedTool("code");
-        setCodeLanguageState(result.language);
-        history.current.push([...elements.current, el]);
-        syncHistoryStatus();
-        setTool("select");
-        renderScene();
-        renderSelection();
-      });
-      return;
-    }
     if (tool !== "select" && selectedElements.current.length > 0) {
       commitSelectedElements();
+    }
+
+    if (tool === "select" && selectedElements.current.length > 1) {
+      const hitSelected = selectedElements.current
+        .slice()
+        .reverse()
+        .find((el) => hitTestElement(el, point, 8 / zoom.current));
+      if (hitSelected) {
+        isDragging.current = true;
+        dragStart.current = point;
+        return;
+      }
     }
 
     if (tool === "select") {
@@ -1136,7 +688,6 @@ export function useSketchEngine(
         if (hit.fontWeight) setFontWeight(hit.fontWeight);
         if (hit.textAlign) setTextAlign(hit.textAlign);
         if (hit.textVerticalAlign) setTextVerticalAlign(hit.textVerticalAlign);
-        if (hit.codeLanguage) setCodeLanguageState(hit.codeLanguage);
         isDragging.current = true;
         dragStart.current = point;
         renderScene();
@@ -1375,6 +926,7 @@ export function useSketchEngine(
     }
 
     if (tool === "select") {
+      isAddetiveSelection.current = ed;
       if (selectionMarquee.current) {
         const { x1, y1, x2, y2 } = selectionMarquee.current;
         const newlySelected = elements.current.filter((el) =>
@@ -1670,47 +1222,7 @@ export function useSketchEngine(
   function editSelected() {
     if (selectedElements.current.length !== 1) return;
     const el = selectedElements.current[0]!;
-    if (el.tool === "code") {
-      const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
-      const w = Math.abs(el.x2 - el.x1);
-      selectedElements.current = [];
-      renderScene();
-      renderSelection();
-      openCodeEditor({
-        currentText: el.text ?? "",
-        x: screenPos.x,
-        y: screenPos.y,
-        width: Math.max(w, CODE_MIN_WIDTH),
-        fontSize: el.fontSize ?? 14,
-        color: el.strokeColor,
-        zoom: zoom.current,
-        language: el.codeLanguage ?? "javascript",
-        theme: canvasMode,
-      }).then((result) => {
-        if (result === null) {
-          selectedElements.current = [el];
-          setSelectedTool(el.tool);
-          renderSelection();
-          return;
-        }
-        const updated = {
-          ...el,
-          text: result.text,
-          codeLanguage: result.language,
-          x2: el.x1 + Math.max(result.width, CODE_MIN_WIDTH),
-          y2: el.y1 + result.height,
-        };
-        selectedElements.current = [updated];
-        setCodeLanguageState(result.language);
-        elements.current = elements.current.map((e) =>
-          e.id === el.id ? updated : e,
-        );
-        history.current.push(snapshotWithSelection([updated]));
-        syncHistoryStatus();
-        renderScene();
-        renderSelection();
-      });
-    } else if (el.tool === "text") {
+    if (el.tool === "text") {
       const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
       const w = Math.abs(el.x2 - el.x1);
       selectedElements.current = [];
@@ -1726,6 +1238,7 @@ export function useSketchEngine(
         fontWeight: el.fontWeight ?? fontWeight,
         color: el.strokeColor,
         zoom: zoom.current,
+        fixedWidth: true,
       }).then((result) => {
         if (result === null) {
           selectedElements.current = [el];
@@ -1733,12 +1246,7 @@ export function useSketchEngine(
           renderSelection();
           return;
         }
-        const updated = {
-          ...el,
-          text: result.text,
-          x2: el.x1 + result.width,
-          y2: el.y1 + result.height,
-        };
+        const updated = applyTextEdit(el, result);
         selectedElements.current = [updated];
         elements.current = elements.current.map((e) =>
           e.id === el.id ? updated : e,
@@ -1897,9 +1405,6 @@ export function useSketchEngine(
     setTextAlign: applyTextAlign,
     textVerticalAlign,
     setTextVerticalAlign: applyTextVerticalAlign,
-    codeLanguage,
-    setCodeLanguage: applyCodeLanguage,
-    copySelectedCode,
     applyThemeColors,
     beautifyLayout,
     isBeautifying,

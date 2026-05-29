@@ -24,6 +24,7 @@
   ],
   "dependencies": {
     "arctic": "^3.7.0",
-    "oslo": "^1.2.1"
+    "oslo": "^1.2.1",
+    "zustand": "^5.0.14"
   }
 }

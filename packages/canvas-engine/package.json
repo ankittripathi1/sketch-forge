@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@repo/canvas-core": "*",
-    "roughjs": "^4.6.6"
+    "roughjs": "^4.6.6",
+    "zustand": "^5.0.13"
   },
   "peerDependencies": {
     "react": "^19.2.0"

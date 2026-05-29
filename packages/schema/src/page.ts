@@ -8,6 +8,8 @@ export const CreatePageSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   elements: z.array(SketchElementSchema).optional().nullable(),
   thumbnail: z.string().optional().nullable(),
+  thumbnailLight: z.string().optional().nullable(),
+  thumbnailDark: z.string().optional().nullable(),
   status: PageStatusSchema.optional(),
   pageOrder: z.number().int().optional(),
   tags: z.array(z.string()).optional().nullable(),

@@ -189,6 +189,8 @@ export const pages = pgTable(
     title: text("title").notNull().default("Untitled"),
     elements: jsonb("elements"),
     thumbnail: text("thumbnail"),
+    thumbnailLight: text("thumbnail_light"),
+    thumbnailDark: text("thumbnail_dark"),
     status: pageStatusEnum("status").notNull().default("new"),
     pageOrder: integer("page_order").notNull().default(0),
     tags: text("tags").array(),

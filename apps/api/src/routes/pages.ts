@@ -29,6 +29,8 @@ pagesRouter.get("/search", async (c) => {
       id: pages.id,
       title: pages.title,
       thumbnail: pages.thumbnail,
+      thumbnailLight: pages.thumbnailLight,
+      thumbnailDark: pages.thumbnailDark,
       folderId: pages.folderId,
       snippet: sql<string>`ts_headline('english', ${pages.searchableText}, to_tsquery('english', ${query.trim().split(/\s+/).join(" & ")}), 'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15')`,
     })

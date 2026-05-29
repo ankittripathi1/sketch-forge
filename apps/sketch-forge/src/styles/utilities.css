@@ -1,0 +1,117 @@
+@layer utilities {
+  .shadow-elev-1 {
+    box-shadow: var(--shadow-elev-1);
+  }
+
+  .shadow-elev-2 {
+    box-shadow: var(--shadow-elev-2);
+  }
+
+  .shadow-elev-3 {
+    box-shadow: var(--shadow-elev-3);
+  }
+
+  .shadow-elev-4 {
+    box-shadow: var(--shadow-elev-4);
+  }
+
+  .shadow-glow-accent {
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  .bg-gradient-brand {
+    background: var(--gradient-brand);
+  }
+
+  .bg-gradient-mesh {
+    background: var(--gradient-mesh);
+  }
+
+  .font-handwriting {
+    font-family: Kalam, cursive;
+  }
+
+  .font-serif-display {
+    font-family: Spectral, "Iowan Old Style", Georgia, serif;
+  }
+
+  .link-underline-on {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    transition:
+      background-size 260ms cubic-bezier(0.23, 1, 0.32, 1),
+      color 200ms ease;
+  }
+
+  .link-underline-on:hover {
+    background-size: 0% 1px;
+  }
+
+  .link-underline-draw {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 0% 1px;
+    transition: background-size 260ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .link-underline-draw:hover {
+    background-size: 100% 1px;
+  }
+
+  .grain::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .bg-paper-dots {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      var(--color-border-faint) 1px,
+      transparent 0
+    );
+    background-size: 28px 28px;
+  }
+
+  .bg-paper-grid {
+    background-image:
+      linear-gradient(var(--color-border-faint) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-border-faint) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .marquee-track {
+    animation: marquee 42s linear infinite;
+  }
+
+  .text-gradient-brand {
+    background: var(--gradient-brand);
+    background-clip: text;
+    color: transparent;
+    -webkit-background-clip: text;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}

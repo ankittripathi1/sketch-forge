@@ -1,4 +1,4 @@
-/** Drawing tool identifier. 'select', 'text', 'code', and 'image' are canvas-only. */
+/** Drawing tool identifier. 'select', 'text', and 'image' are canvas-only. */
 export type Tool =
   | "rectangle"
   | "ellipse"
@@ -10,8 +10,7 @@ export type Tool =
   | "eraser"
   | "text"
   | "image"
-  | "select"
-  | "code";
+  | "select";
 
 /** Fill rendering mode for closed shapes. */
 export type FillStyle = "none" | "hachure" | "solid";
@@ -48,7 +47,6 @@ export type SketchElement = {
   opacity?: number;
   /** Text content for tool="text" or inline shape labels. */
   text?: string;
-  codeLanguage?: "python" | "java" | "javascript" | "typescript";
   /** Ordered path points for freehand and highlighter strokes. */
   points?: Point[];
   /** Data URL for tool="image". */
