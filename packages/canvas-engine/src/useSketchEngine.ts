@@ -9,7 +9,6 @@ import {
   hitTestElement,
   hitTestHandle,
   getBoundingBox,
-  isElementInsideRect,
 } from "@repo/canvas-core/hitDetection";
 import {
   recognizeHandwriting,
@@ -29,6 +28,18 @@ import { buildTextFromStrokes } from "./lib/scribble";
 import { applyLayoutUpdates } from "./lib/beautify";
 import { addToSelection, getSelectedElements, setSelection } from "./lib/selectionModel";
 import { buildTextElement, applyTextEdit } from "./tools/text";
+import {
+  createSelectionMarquee,
+  findHitElement,
+  findHitSelectedElement,
+  findSingleSelectionHandle,
+  getMarqueeSelectedIds,
+  isOutsidePrimarySelectionBounds,
+  moveSelectedElements,
+  updateSelectionMarquee,
+  type SelectionMarquee,
+  type SelectInteraction,
+} from "./tools/select";
 import { createRenderers } from "./lib/rendering";
 import { useCanvasUI } from "./store";
 
@@ -46,17 +57,6 @@ const HANDLE_CURSORS = [
   "ns-resize",
   "nwse-resize",
 ];
-
-type SelectInteraction =
-  | { type: "idle" }
-  | { type: "dragging"; lastPoint: Point; moved: boolean }
-  | {
-      type: "resizing";
-      handle: number;
-      origin: SketchElement;
-      moved: boolean;
-    }
-  | { type: "marquee"; additive: boolean };
 
 type CanvasInteraction =
   | { type: "idle" }
@@ -161,12 +161,7 @@ export function useSketchEngine(
   });
 
   const selectedIds = useRef<Set<string>>(new Set());
-  const selectionMarquee = useRef<{
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-  } | null>(null);
+  const selectionMarquee = useRef<SelectionMarquee | null>(null);
   const selectInteraction = useRef<SelectInteraction>({ type: "idle" });
   const canvasInteraction = useRef<CanvasInteraction>({ type: "idle" });
   const elements = useRef<SketchElement[]>([]);
@@ -652,10 +647,11 @@ export function useSketchEngine(
     }
 
     if (tool === "select" && selectedIds.current.size > 1) {
-      const hitSelected = selectedElementsList()
-        .slice()
-        .reverse()
-        .find((el) => hitTestElement(el, point, 8 / zoom.current));
+      const hitSelected = findHitSelectedElement(
+        selectedElementsList(),
+        point,
+        8 / zoom.current,
+      );
       if (hitSelected) {
         selectInteraction.current = {
           type: "dragging",
@@ -669,8 +665,8 @@ export function useSketchEngine(
     if (tool === "select") {
       const selected = selectedElementsList();
       if (selected.length === 1) {
-        const handle = hitTestHandle(
-          selected[0]!,
+        const handle = findSingleSelectionHandle(
+          selected,
           point,
           6 / zoom.current,
           zoom.current,
@@ -687,9 +683,7 @@ export function useSketchEngine(
         }
       }
 
-      const hit = [...elements.current]
-        .reverse()
-        .find((el) => hitTestElement(el, point, 8 / zoom.current));
+      const hit = findHitElement(elements.current, point, 8 / zoom.current);
       if (hit) {
         setSelectedElements([hit]);
         setSelectedTool(hit.tool);
@@ -713,18 +707,7 @@ export function useSketchEngine(
       }
 
       if (selected.length > 0) {
-        const boxPoint = canvasToScreen(point);
-        const el = selected[0]!;
-        const { x, y, w, h } = getBoundingBox(el);
-        const sMin = canvasToScreen({ x, y });
-        const sMax = canvasToScreen({ x: x + w, y: y + h });
-
-        if (
-          boxPoint.x < sMin.x ||
-          boxPoint.x > sMax.x ||
-          boxPoint.y < sMin.y ||
-          boxPoint.y > sMax.y
-        ) {
+        if (isOutsidePrimarySelectionBounds(selected, point, canvasToScreen)) {
           clearSelection();
           renderScene();
           renderSelection();
@@ -732,12 +715,7 @@ export function useSketchEngine(
         return;
       }
 
-      selectionMarquee.current = {
-        x1: point.x,
-        y1: point.y,
-        x2: point.x,
-        y2: point.y,
-      };
+      selectionMarquee.current = createSelectionMarquee(point);
       selectInteraction.current = { type: "marquee", additive: e.shiftKey };
       renderSelection();
       return;
@@ -797,11 +775,10 @@ export function useSketchEngine(
       selectionMarquee.current
     ) {
       const point = screenToCanvas(screenPoint);
-      selectionMarquee.current = {
-        ...selectionMarquee.current,
-        x2: point.x,
-        y2: point.y,
-      };
+      selectionMarquee.current = updateSelectionMarquee(
+        selectionMarquee.current,
+        point,
+      );
       cancelAnimationFrame(rafId.current);
       rafId.current = requestAnimationFrame(renderSelection);
       return;
@@ -865,17 +842,11 @@ export function useSketchEngine(
         moved: true,
       };
 
-      elements.current = elements.current.map((el) =>
-        selectedIds.current.has(el.id)
-          ? {
-              ...el,
-              x1: el.x1 + dx,
-              y1: el.y1 + dy,
-              x2: el.x2 + dx,
-              y2: el.y2 + dy,
-              points: el.points?.map((p) => ({ x: p.x + dx, y: p.y + dy })),
-            }
-          : el,
+      elements.current = moveSelectedElements(
+        elements.current,
+        selectedIds.current,
+        dx,
+        dy,
       );
 
       // Drag bound arrows along with their target shapes.
@@ -962,12 +933,11 @@ export function useSketchEngine(
       const interaction = selectInteraction.current;
 
       if (interaction.type === "marquee" && selectionMarquee.current) {
-        const { x1, y1, x2, y2 } = selectionMarquee.current;
-        const newlySelected = elements.current.filter((el) =>
-          isElementInsideRect(el, x1, y1, x2, y2),
+        const ids = getMarqueeSelectedIds(
+          elements.current,
+          selectionMarquee.current,
         );
-        if (newlySelected.length > 0) {
-          const ids = newlySelected.map((el) => el.id);
+        if (ids.length > 0) {
           selectedIds.current = interaction.additive
             ? addToSelection(selectedIds.current, ids)
             : setSelection(ids);
