@@ -42,7 +42,13 @@ import {
 } from "./tools/select";
 import { createRenderers } from "./lib/rendering";
 import { useCanvasUI } from "./store";
-import { buildDraftElement, updateDraftElement } from "./tools/drawing";
+import {
+  bindArrowEnd,
+  buildDraftElement,
+  eraseIntersectingElements,
+  isStrokeDraft,
+  updateDraftElement,
+} from "./tools/drawing";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
@@ -967,23 +973,10 @@ export function useSketchEngine(
     cancelAnimationFrame(rafId.current);
 
     if (tool === "eraser") {
-      const eraser = currentElement.current;
-      const minX = Math.min(eraser.x1, eraser.x2);
-      const maxX = Math.max(eraser.x1, eraser.x2);
-      const minY = Math.min(eraser.y1, eraser.y2);
-      const maxY = Math.max(eraser.y1, eraser.y2);
-      elements.current = elements.current.filter((el) => {
-        const elMinX = Math.min(el.x1, el.x2);
-        const elMaxX = Math.max(el.x1, el.x2);
-        const elMinY = Math.min(el.y1, el.y2);
-        const elMaxY = Math.max(el.y1, el.y2);
-        return !(
-          elMinX < maxX &&
-          elMaxX > minX &&
-          elMinY < maxY &&
-          elMaxY > minY
-        );
-      });
+      elements.current = eraseIntersectingElements(
+        elements.current,
+        currentElement.current,
+      );
       currentElement.current = null;
       history.current.push(elements.current);
       syncHistoryStatus();
@@ -996,29 +989,9 @@ export function useSketchEngine(
     currentElement.current = null;
     hoveredAnchor.current = null;
 
-    if (justCreated.tool === "arrow") {
-      const exclude = new Set<string>();
-      if (justCreated.startBinding)
-        exclude.add(justCreated.startBinding.elementId);
-      const endTarget = findBindableShape(
-        { x: justCreated.x2, y: justCreated.y2 },
-        exclude,
-      );
-      if (endTarget) {
-        const p = getAnchorPoint(endTarget.shape, endTarget.anchor);
-        justCreated = {
-          ...justCreated,
-          x2: p.x,
-          y2: p.y,
-          endBinding: {
-            elementId: endTarget.shape.id,
-            anchor: endTarget.anchor,
-          },
-        };
-      }
-    }
+    justCreated = bindArrowEnd(justCreated, findBindableShape);
 
-    if (tool === "freehand" || tool === "highlighter") {
+    if (isStrokeDraft(tool)) {
       elements.current = [...elements.current, justCreated];
       history.current.push(elements.current);
       syncHistoryStatus();
