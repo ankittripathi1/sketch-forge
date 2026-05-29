@@ -39,12 +39,9 @@ import {
 } from "./lib/viewport";
 import { buildTextElement, applyTextEdit } from "./tools/text";
 import {
-  createSelectionMarquee,
-  findHitElement,
-  findHitSelectedElement,
   findSingleSelectionHandle,
   getMarqueeSelectedIds,
-  isPointInsideSelectionBounds,
+  getSelectPointerDownAction,
   moveSelectedElements,
   updateSelectionMarquee,
   type SelectionMarquee,
@@ -665,89 +662,82 @@ export function useSketchEngine(
 
     if (tool === "select") {
       const selected = selectedElementsList();
-      if (selected.length > 1 && !e.shiftKey) {
-        const hitSelected = findHitSelectedElement(
-          selected,
-          point,
-          8 / zoom.current,
-        );
-        const hitGroupBounds = isPointInsideSelectionBounds(
-          selected,
-          point,
-          8 / zoom.current,
-        );
-        if (hitSelected || hitGroupBounds) {
+      const action = getSelectPointerDownAction({
+        point,
+        selected,
+        elements: elements.current,
+        zoom: zoom.current,
+        shiftKey: e.shiftKey,
+      });
+
+      switch (action.type) {
+        case "start-drag":
           selectInteraction.current = {
             type: "dragging",
             lastPoint: point,
             moved: false,
           };
           return;
-        }
-      }
 
-      if (selected.length === 1) {
-        const handle = findSingleSelectionHandle(
-          selected,
-          point,
-          6 / zoom.current,
-          zoom.current,
-          [...elements.current],
-        );
-        if (handle !== null) {
+        case "start-resize":
           selectInteraction.current = {
             type: "resizing",
-            handle,
-            origin: { ...selected[0]! },
+            handle: action.handle,
+            origin: action.origin,
             moved: false,
           };
           return;
-        }
-      }
 
-      const hit = findHitElement(elements.current, point, 8 / zoom.current);
-      if (hit) {
-        if (e.shiftKey) {
-          selectedIds.current = toggleSelection(selectedIds.current, hit.id);
+        case "toggle-element":
+          selectedIds.current = toggleSelection(
+            selectedIds.current,
+            action.element.id,
+          );
           setSelectedTool(null);
           renderScene();
           renderSelection();
           return;
-        }
 
-        setSelectedElements([hit]);
-        setSelectedTool(hit.tool);
-        setStrokeColor(hit.strokeColor);
-        setFillColor(hit.fillColor);
-        setFillStyle(hit.fillStyle);
-        setStrokeWidth(hit.strokeWidth);
-        if (hit.fontFamily) setFontFamily(hit.fontFamily);
-        if (hit.fontSize) setFontSize(hit.fontSize);
-        if (hit.fontWeight) setFontWeight(hit.fontWeight);
-        if (hit.textAlign) setTextAlign(hit.textAlign);
-        if (hit.textVerticalAlign) setTextVerticalAlign(hit.textVerticalAlign);
-        selectInteraction.current = {
-          type: "dragging",
-          lastPoint: point,
-          moved: false,
-        };
-        renderScene();
-        renderSelection();
-        return;
-      }
+        case "select-element":
+          setSelectedElements([action.element]);
+          setSelectedTool(action.element.tool);
+          setStrokeColor(action.element.strokeColor);
+          setFillColor(action.element.fillColor);
+          setFillStyle(action.element.fillStyle);
+          setStrokeWidth(action.element.strokeWidth);
+          if (action.element.fontFamily) setFontFamily(action.element.fontFamily);
+          if (action.element.fontSize) setFontSize(action.element.fontSize);
+          if (action.element.fontWeight) setFontWeight(action.element.fontWeight);
+          if (action.element.textAlign) setTextAlign(action.element.textAlign);
+          if (action.element.textVerticalAlign)
+            setTextVerticalAlign(action.element.textVerticalAlign);
+          selectInteraction.current = {
+            type: "dragging",
+            lastPoint: point,
+            moved: false,
+          };
+          renderScene();
+          renderSelection();
+          return;
 
-      if (selected.length > 0) {
-        if (!isPointInsideSelectionBounds(selected, point, 8 / zoom.current)) {
+        case "clear-selection":
           clearSelection();
           renderScene();
           renderSelection();
-        }
-        return;
-      }
+          return;
 
-      selectionMarquee.current = createSelectionMarquee(point);
-      selectInteraction.current = { type: "marquee", additive: e.shiftKey };
-      renderSelection();
+        case "start-marquee":
+          selectionMarquee.current = action.marquee;
+          selectInteraction.current = {
+            type: "marquee",
+            additive: action.additive,
+          };
+          renderSelection();
+          return;
+
+        case "none":
+          return;
+      }
       return;
     }
 

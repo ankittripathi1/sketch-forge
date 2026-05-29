@@ -25,6 +25,15 @@ export type SelectionMarquee = {
   y2: number;
 };
 
+export type SelectPointerDownAction =
+  | { type: "start-drag" }
+  | { type: "start-resize"; handle: number; origin: SketchElement }
+  | { type: "toggle-element"; element: SketchElement }
+  | { type: "select-element"; element: SketchElement }
+  | { type: "clear-selection" }
+  | { type: "start-marquee"; marquee: SelectionMarquee; additive: boolean }
+  | { type: "none" };
+
 export function findHitSelectedElement(
   selected: SketchElement[],
   point: Point,
@@ -125,4 +134,60 @@ export function moveSelectedElements(
         }
       : el,
   );
+}
+
+export function getSelectPointerDownAction({
+  point,
+  selected,
+  elements,
+  zoom,
+  shiftKey,
+}: {
+  point: Point;
+  selected: SketchElement[];
+  elements: SketchElement[];
+  zoom: number;
+  shiftKey: boolean;
+}): SelectPointerDownAction {
+  const tolerance = 8 / zoom;
+
+  if (selected.length > 1 && !shiftKey) {
+    const hitSelected = findHitSelectedElement(selected, point, tolerance);
+    const hitGroupBounds = isPointInsideSelectionBounds(
+      selected,
+      point,
+      tolerance,
+    );
+    if (hitSelected || hitGroupBounds) return { type: "start-drag" };
+  }
+
+  const handle = findSingleSelectionHandle(
+    selected,
+    point,
+    6 / zoom,
+    zoom,
+    elements,
+  );
+  if (handle !== null && selected.length === 1) {
+    return { type: "start-resize", handle, origin: { ...selected[0]! } };
+  }
+
+  const hit = findHitElement(elements, point, tolerance);
+  if (hit) {
+    return shiftKey
+      ? { type: "toggle-element", element: hit }
+      : { type: "select-element", element: hit };
+  }
+
+  if (selected.length > 0) {
+    return isPointInsideSelectionBounds(selected, point, tolerance)
+      ? { type: "none" }
+      : { type: "clear-selection" };
+  }
+
+  return {
+    type: "start-marquee",
+    marquee: createSelectionMarquee(point),
+    additive: shiftKey,
+  };
 }
