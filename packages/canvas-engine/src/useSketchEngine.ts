@@ -27,6 +27,11 @@ import { recolorByTheme } from "./lib/theme";
 import { buildTextFromStrokes } from "./lib/scribble";
 import { applyLayoutUpdates } from "./lib/beautify";
 import { addToSelection, getSelectedElements, setSelection } from "./lib/selectionModel";
+import {
+  panByOffset,
+  panByPointerMove,
+  zoomAroundScreenPoint,
+} from "./lib/viewport";
 import { buildTextElement, applyTextEdit } from "./tools/text";
 import {
   createSelectionMarquee,
@@ -751,10 +756,11 @@ export function useSketchEngine(
   function onPointerMove(screenPoint: Point) {
     if (canvasInteraction.current.type === "panning") {
       const interaction = canvasInteraction.current;
-      panOffset.current = {
-        x: panOffset.current.x + (screenPoint.x - interaction.lastScreenPoint.x),
-        y: panOffset.current.y + (screenPoint.y - interaction.lastScreenPoint.y),
-      };
+      panOffset.current = panByPointerMove(
+        panOffset.current,
+        interaction.lastScreenPoint,
+        screenPoint,
+      );
       canvasInteraction.current = {
         type: "panning",
         lastScreenPoint: screenPoint,
@@ -1026,25 +1032,22 @@ export function useSketchEngine(
   }
 
   function handleZoom(delta: number, cursorScreen: Point) {
-    const newZoom = Math.min(
-      MAX_ZOOM,
-      Math.max(MIN_ZOOM, zoom.current * (1 + delta)),
-    );
-    const cursorCanvas = screenToCanvas(cursorScreen);
-    zoom.current = newZoom;
-    setZoomLevel(Math.round(newZoom * 100));
-    panOffset.current = {
-      x: cursorScreen.x - cursorCanvas.x * newZoom,
-      y: cursorScreen.y - cursorCanvas.y * newZoom,
-    };
+    const next = zoomAroundScreenPoint({
+      currentZoom: zoom.current,
+      panOffset: panOffset.current,
+      cursorScreen,
+      delta,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
+    });
+    zoom.current = next.zoom;
+    setZoomLevel(Math.round(next.zoom * 100));
+    panOffset.current = next.panOffset;
     scheduleViewportRender();
   }
 
   function onPan(dx: number, dy: number) {
-    panOffset.current = {
-      x: panOffset.current.x + dx,
-      y: panOffset.current.y + dy,
-    };
+    panOffset.current = panByOffset(panOffset.current, dx, dy);
     scheduleViewportRender();
   }
 
