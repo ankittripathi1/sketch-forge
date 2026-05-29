@@ -40,7 +40,9 @@ export function findHitElement(
   point: Point,
   tolerance: number,
 ) {
-  return [...elements].reverse().find((el) => hitTestElement(el, point, tolerance));
+  return [...elements]
+    .reverse()
+    .find((el) => hitTestElement(el, point, tolerance));
 }
 
 export function findSingleSelectionHandle(
@@ -98,7 +100,9 @@ export function getMarqueeSelectedIds(
   marquee: SelectionMarquee,
 ) {
   return elements
-    .filter((el) => isElementInsideRect(el, marquee.x1, marquee.y1, marquee.x2, marquee.y2))
+    .filter((el) =>
+      isElementInsideRect(el, marquee.x1, marquee.y1, marquee.x2, marquee.y2),
+    )
     .map((el) => el.id);
 }
 

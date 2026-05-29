@@ -28,6 +28,7 @@ export function removeFromSelection(
   for (const id of ids) next.delete(id);
   return next;
 }
+
 export function toggleSelection(
   selectionIds: Set<string>,
   id: string,

@@ -26,7 +26,12 @@ import * as geometry from "./lib/geometry";
 import { recolorByTheme } from "./lib/theme";
 import { buildTextFromStrokes } from "./lib/scribble";
 import { applyLayoutUpdates } from "./lib/beautify";
-import { addToSelection, getSelectedElements, setSelection } from "./lib/selectionModel";
+import {
+  addToSelection,
+  getSelectedElements,
+  setSelection,
+  toggleSelection,
+} from "./lib/selectionModel";
 import {
   panByOffset,
   panByPointerMove,
@@ -697,6 +702,14 @@ export function useSketchEngine(
 
       const hit = findHitElement(elements.current, point, 8 / zoom.current);
       if (hit) {
+        if (e.shiftKey) {
+          selectedIds.current = toggleSelection(selectedIds.current, hit.id);
+          setSelectedTool(null);
+          renderScene();
+          renderSelection();
+          return;
+        }
+
         setSelectedElements([hit]);
         setSelectedTool(hit.tool);
         setStrokeColor(hit.strokeColor);
@@ -937,6 +950,9 @@ export function useSketchEngine(
           selectedIds.current = interaction.additive
             ? addToSelection(selectedIds.current, ids)
             : setSelection(ids);
+        } else if (!interaction.additive) {
+          selectedIds.current = setSelection([]);
+          setSelectedTool(null);
         }
         selectInteraction.current = { type: "idle" };
         selectionMarquee.current = null;
