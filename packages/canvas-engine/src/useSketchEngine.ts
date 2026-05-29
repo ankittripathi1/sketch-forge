@@ -47,6 +47,17 @@ const HANDLE_CURSORS = [
   "nwse-resize",
 ];
 
+type SelectInteraction =
+  | { type: "idle" }
+  | { type: "dragging"; lastPoint: Point; moved: boolean }
+  | {
+      type: "resizing";
+      handle: number;
+      origin: SketchElement;
+      moved: boolean;
+    }
+  | { type: "marquee"; additive: boolean };
+
 /**
  * useSketchEngine
  *
@@ -151,11 +162,7 @@ export function useSketchEngine(
     x2: number;
     y2: number;
   } | null>(null);
-  const isAdditiveSelection = useRef(false);
-  const isDragging = useRef(false);
-  const dragStart = useRef<Point>({ x: 0, y: 0 });
-  const resizeHandle = useRef<number | null>(null);
-  const resizeOrigin = useRef<SketchElement | null>(null);
+  const selectInteraction = useRef<SelectInteraction>({ type: "idle" });
   const elements = useRef<SketchElement[]>([]);
   const currentElement = useRef<SketchElement | null>(null);
   const isDrawing = useRef(false);
@@ -645,8 +652,11 @@ export function useSketchEngine(
         .reverse()
         .find((el) => hitTestElement(el, point, 8 / zoom.current));
       if (hitSelected) {
-        isDragging.current = true;
-        dragStart.current = point;
+        selectInteraction.current = {
+          type: "dragging",
+          lastPoint: point,
+          moved: false,
+        };
         return;
       }
     }
@@ -662,8 +672,12 @@ export function useSketchEngine(
           [...elements.current],
         );
         if (handle !== null) {
-          resizeHandle.current = handle;
-          resizeOrigin.current = { ...selected[0]! };
+          selectInteraction.current = {
+            type: "resizing",
+            handle,
+            origin: { ...selected[0]! },
+            moved: false,
+          };
           return;
         }
       }
@@ -683,8 +697,11 @@ export function useSketchEngine(
         if (hit.fontWeight) setFontWeight(hit.fontWeight);
         if (hit.textAlign) setTextAlign(hit.textAlign);
         if (hit.textVerticalAlign) setTextVerticalAlign(hit.textVerticalAlign);
-        isDragging.current = true;
-        dragStart.current = point;
+        selectInteraction.current = {
+          type: "dragging",
+          lastPoint: point,
+          moved: false,
+        };
         renderScene();
         renderSelection();
         return;
@@ -716,7 +733,7 @@ export function useSketchEngine(
         x2: point.x,
         y2: point.y,
       };
-      isAdditiveSelection.current = e.shiftKey;
+      selectInteraction.current = { type: "marquee", additive: e.shiftKey };
       renderSelection();
       return;
     }
@@ -765,7 +782,11 @@ export function useSketchEngine(
       return;
     }
 
-    if (tool === "select" && selectionMarquee.current) {
+    if (
+      tool === "select" &&
+      selectInteraction.current.type === "marquee" &&
+      selectionMarquee.current
+    ) {
       const point = screenToCanvas(screenPoint);
       selectionMarquee.current = {
         ...selectionMarquee.current,
@@ -779,16 +800,14 @@ export function useSketchEngine(
 
     if (
       tool === "select" &&
-      resizeHandle.current !== null &&
+      selectInteraction.current.type === "resizing" &&
       selectedIds.current.size === 1 &&
-      resizeOrigin.current
+      selectInteraction.current.origin
     ) {
+      const interaction = selectInteraction.current;
       const point = screenToCanvas(screenPoint);
-      const updated = applyResize(
-        resizeOrigin.current,
-        resizeHandle.current,
-        point,
-      );
+      const updated = applyResize(interaction.origin, interaction.handle, point);
+      selectInteraction.current = { ...interaction, moved: true };
       setSelectedElements([updated]);
       const movedIds = new Set([updated.id]);
       elements.current = syncBoundArrows(movedIds, elements.current);
@@ -796,11 +815,11 @@ export function useSketchEngine(
       // Anchor-snap hint while dragging an arrow endpoint handle.
       if (
         updated.tool === "arrow" &&
-        (resizeHandle.current === 0 || resizeHandle.current === 2)
+        (interaction.handle === 0 || interaction.handle === 2)
       ) {
         const exclude = new Set<string>([updated.id]);
         const other =
-          resizeHandle.current === 0
+          interaction.handle === 0
             ? updated.endBinding?.elementId
             : updated.startBinding?.elementId;
         if (other) exclude.add(other);
@@ -822,13 +841,20 @@ export function useSketchEngine(
 
     if (
       tool === "select" &&
-      isDragging.current &&
+      selectInteraction.current.type === "dragging" &&
       selectedIds.current.size > 0
     ) {
+      const interaction = selectInteraction.current;
       const point = screenToCanvas(screenPoint);
-      const dx = point.x - dragStart.current.x;
-      const dy = point.y - dragStart.current.y;
-      dragStart.current = point;
+      const dx = point.x - interaction.lastPoint.x;
+      const dy = point.y - interaction.lastPoint.y;
+      if (dx === 0 && dy === 0) return;
+
+      selectInteraction.current = {
+        ...interaction,
+        lastPoint: point,
+        moved: true,
+      };
 
       elements.current = elements.current.map((el) =>
         selectedIds.current.has(el.id)
@@ -920,29 +946,30 @@ export function useSketchEngine(
     }
 
     if (tool === "select") {
-      if (selectionMarquee.current) {
+      const interaction = selectInteraction.current;
+
+      if (interaction.type === "marquee" && selectionMarquee.current) {
         const { x1, y1, x2, y2 } = selectionMarquee.current;
         const newlySelected = elements.current.filter((el) =>
           isElementInsideRect(el, x1, y1, x2, y2),
         );
         if (newlySelected.length > 0) {
           const ids = newlySelected.map((el) => el.id);
-          selectedIds.current = isAdditiveSelection.current
+          selectedIds.current = interaction.additive
             ? addToSelection(selectedIds.current, ids)
             : setSelection(ids);
         }
-        isAdditiveSelection.current = false;
+        selectInteraction.current = { type: "idle" };
         selectionMarquee.current = null;
         renderScene();
         renderSelection();
         return;
       }
 
-      if (resizeHandle.current !== null) {
-        resizeHandle.current = null;
-        resizeOrigin.current = null;
+      if (interaction.type === "resizing") {
+        selectInteraction.current = { type: "idle" };
         hoveredAnchor.current = null;
-        if (selectedIds.current.size > 0) {
+        if (interaction.moved && selectedIds.current.size > 0) {
           setSelectedElements(selectedElementsList().map(normalizeElement));
           history.current.push([...elements.current]);
           syncHistoryStatus();
@@ -950,13 +977,17 @@ export function useSketchEngine(
         return;
       }
 
-      isDragging.current = false;
-      if (selectedIds.current.size > 0) {
+      if (interaction.type === "dragging") {
+        selectInteraction.current = { type: "idle" };
+        if (!interaction.moved || selectedIds.current.size === 0) return;
         setSelectedElements(selectedElementsList().map(normalizeElement));
         history.current.push([...elements.current]);
         syncHistoryStatus();
         renderSelection();
+        return;
       }
+
+      selectInteraction.current = { type: "idle" };
       return;
     }
 
