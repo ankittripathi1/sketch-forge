@@ -1,10 +1,6 @@
 import type { RefObject } from "react";
 import rough from "roughjs";
-import type {
-  AnchorSide,
-  Point,
-  SketchElement,
-} from "@repo/canvas-core/types";
+import type { AnchorSide, Point, SketchElement } from "@repo/canvas-core/types";
 import {
   drawElement,
   drawGroupSelectionBox,
@@ -31,6 +27,7 @@ export type RenderContext = {
   } | null>;
   zoom: RefObject<number>;
   panOffset: RefObject<Point>;
+  interactionRafId: RefObject<number>;
   viewportRafId: RefObject<number>;
   setPanOffsetDisplay: (p: Point) => void;
 };
@@ -129,10 +126,7 @@ export function createRenderers(ctx: RenderContext) {
   }
 
   function renderInteractionLayer() {
-    if (
-      ctx.selectedIds.current.size > 0 ||
-      ctx.selectionMarquee.current
-    ) {
+    if (ctx.selectedIds.current.size > 0 || ctx.selectionMarquee.current) {
       renderSelection();
       return;
     }
@@ -150,11 +144,35 @@ export function createRenderers(ctx: RenderContext) {
     );
   }
 
+  function scheduleSelectionRender() {
+    cancelAnimationFrame(ctx.interactionRafId.current!);
+    (ctx.interactionRafId as { current: number }).current =
+      requestAnimationFrame(renderSelection);
+  }
+
+  function scheduleActiveElementRender() {
+    cancelAnimationFrame(ctx.interactionRafId.current!);
+    (ctx.interactionRafId as { current: number }).current =
+      requestAnimationFrame(renderActiveElement);
+  }
+
+  function scheduleSceneAndSelectionRender() {
+    cancelAnimationFrame(ctx.interactionRafId.current!);
+    (ctx.interactionRafId as { current: number }).current =
+      requestAnimationFrame(() => {
+        renderScene();
+        renderSelection();
+      });
+  }
+
   return {
     renderScene,
     renderActiveElement,
     renderSelection,
     renderInteractionLayer,
+    scheduleSelectionRender,
+    scheduleActiveElementRender,
+    scheduleSceneAndSelectionRender,
     scheduleViewportRender,
   };
 }

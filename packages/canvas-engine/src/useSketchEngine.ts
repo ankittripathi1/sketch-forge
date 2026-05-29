@@ -40,6 +40,7 @@ import {
 import { buildTextElement, applyTextEdit } from "./tools/text";
 import {
   findSingleSelectionHandle,
+  getResizeAnchorPreview,
   getSelectFinalizeAction,
   getSelectPointerMoveAction,
   getSelectPointerDownAction,
@@ -258,6 +259,7 @@ export function useSketchEngine(
     selectionMarquee,
     zoom,
     panOffset,
+    interactionRafId: rafId,
     viewportRafId,
     setPanOffsetDisplay,
   });
@@ -265,6 +267,9 @@ export function useSketchEngine(
     renderScene,
     renderActiveElement,
     renderSelection,
+    scheduleSelectionRender,
+    scheduleActiveElementRender,
+    scheduleSceneAndSelectionRender,
     scheduleViewportRender,
   } = renderers;
 
@@ -612,6 +617,13 @@ export function useSketchEngine(
     return geometry.syncBoundArrows(shapeIds, list, [...elements.current]);
   }
 
+  function commitSelectedElementSnapshot({ render = false } = {}) {
+    setSelectedElements(selectedElementsList().map(normalizeElement));
+    history.current.push([...elements.current]);
+    syncHistoryStatus();
+    if (render) renderSelection();
+  }
+
   function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
     if (tool === "select" && e.button === 2) return;
 
@@ -705,9 +717,11 @@ export function useSketchEngine(
           setFillColor(action.element.fillColor);
           setFillStyle(action.element.fillStyle);
           setStrokeWidth(action.element.strokeWidth);
-          if (action.element.fontFamily) setFontFamily(action.element.fontFamily);
+          if (action.element.fontFamily)
+            setFontFamily(action.element.fontFamily);
           if (action.element.fontSize) setFontSize(action.element.fontSize);
-          if (action.element.fontWeight) setFontWeight(action.element.fontWeight);
+          if (action.element.fontWeight)
+            setFontWeight(action.element.fontWeight);
           if (action.element.textAlign) setTextAlign(action.element.textAlign);
           if (action.element.textVerticalAlign)
             setTextVerticalAlign(action.element.textVerticalAlign);
@@ -789,8 +803,7 @@ export function useSketchEngine(
       switch (action.type) {
         case "update-marquee":
           selectionMarquee.current = action.marquee;
-          cancelAnimationFrame(rafId.current);
-          rafId.current = requestAnimationFrame(renderSelection);
+          scheduleSelectionRender();
           return;
 
         case "resize": {
@@ -803,30 +816,14 @@ export function useSketchEngine(
           setSelectedElements([updated]);
           const movedIds = new Set([updated.id]);
           elements.current = syncBoundArrows(movedIds, elements.current);
-
-          if (
-            updated.tool === "arrow" &&
-            (action.interaction.handle === 0 || action.interaction.handle === 2)
-          ) {
-            const exclude = new Set<string>([updated.id]);
-            const other =
-              action.interaction.handle === 0
-                ? updated.endBinding?.elementId
-                : updated.startBinding?.elementId;
-            if (other) exclude.add(other);
-            const target = findBindableShape(action.point, exclude);
-            hoveredAnchor.current = target
-              ? { shape: target.shape, anchor: target.anchor }
-              : null;
-          } else {
-            hoveredAnchor.current = null;
-          }
-
-          cancelAnimationFrame(rafId.current);
-          rafId.current = requestAnimationFrame(() => {
-            renderScene();
-            renderSelection();
+          hoveredAnchor.current = getResizeAnchorPreview({
+            updated,
+            handle: action.interaction.handle,
+            point: action.point,
+            findBindableShape,
           });
+
+          scheduleSceneAndSelectionRender();
           return;
         }
 
@@ -848,11 +845,7 @@ export function useSketchEngine(
             elements.current = syncBoundArrows(movedIds, elements.current);
           }
 
-          cancelAnimationFrame(rafId.current);
-          rafId.current = requestAnimationFrame(() => {
-            renderScene();
-            renderSelection();
-          });
+          scheduleSceneAndSelectionRender();
           return;
         }
 
@@ -877,16 +870,12 @@ export function useSketchEngine(
           (prev.shape.id !== next.shape.id || prev.anchor !== next.anchor));
       if (changed) {
         hoveredAnchor.current = next;
-        cancelAnimationFrame(rafId.current);
-        rafId.current = requestAnimationFrame(renderActiveElement);
+        scheduleActiveElementRender();
       }
       return;
     }
 
-    if (
-      canvasInteraction.current.type !== "drawing" ||
-      !currentElement.current
-    )
+    if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
       return;
     const point = screenToCanvas(screenPoint);
 
@@ -913,8 +902,7 @@ export function useSketchEngine(
       x: endX,
       y: endY,
     });
-    cancelAnimationFrame(rafId.current);
-    rafId.current = requestAnimationFrame(renderActiveElement);
+    scheduleActiveElementRender();
   }
 
   async function finalizeElement() {
@@ -949,18 +937,13 @@ export function useSketchEngine(
         case "finish-resize":
           hoveredAnchor.current = null;
           if (action.moved && selectedIds.current.size > 0) {
-            setSelectedElements(selectedElementsList().map(normalizeElement));
-            history.current.push([...elements.current]);
-            syncHistoryStatus();
+            commitSelectedElementSnapshot();
           }
           return;
 
         case "finish-drag":
           if (!action.moved || selectedIds.current.size === 0) return;
-          setSelectedElements(selectedElementsList().map(normalizeElement));
-          history.current.push([...elements.current]);
-          syncHistoryStatus();
-          renderSelection();
+          commitSelectedElementSnapshot({ render: true });
           return;
 
         case "none":
@@ -969,10 +952,7 @@ export function useSketchEngine(
       return;
     }
 
-    if (
-      canvasInteraction.current.type !== "drawing" ||
-      !currentElement.current
-    )
+    if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
       return;
     canvasInteraction.current = { type: "idle" };
     cancelAnimationFrame(rafId.current);

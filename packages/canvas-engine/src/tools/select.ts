@@ -1,4 +1,4 @@
-import type { Point, SketchElement } from "@repo/canvas-core/types";
+import type { AnchorSide, Point, SketchElement } from "@repo/canvas-core/types";
 import {
   getBoundingBox,
   getElementsBoundingBox,
@@ -36,7 +36,11 @@ export type SelectPointerDownAction =
 
 export type SelectPointerMoveAction =
   | { type: "update-marquee"; marquee: SelectionMarquee }
-  | { type: "resize"; point: Point; interaction: Extract<SelectInteraction, { type: "resizing" }> }
+  | {
+      type: "resize";
+      point: Point;
+      interaction: Extract<SelectInteraction, { type: "resizing" }>;
+    }
   | {
       type: "drag";
       point: Point;
@@ -51,6 +55,8 @@ export type SelectFinalizeAction =
   | { type: "finish-resize"; moved: boolean }
   | { type: "finish-drag"; moved: boolean }
   | { type: "none" };
+
+type BindableShape = { shape: SketchElement; anchor: AnchorSide };
 
 export function findHitSelectedElement(
   selected: SketchElement[],
@@ -152,6 +158,32 @@ export function moveSelectedElements(
         }
       : el,
   );
+}
+
+export function getResizeAnchorPreview({
+  updated,
+  handle,
+  point,
+  findBindableShape,
+}: {
+  updated: SketchElement;
+  handle: number;
+  point: Point;
+  findBindableShape: (
+    point: Point,
+    exclude: Set<string>,
+  ) => BindableShape | null;
+}): BindableShape | null {
+  if (updated.tool !== "arrow" || (handle !== 0 && handle !== 2)) return null;
+
+  const exclude = new Set<string>([updated.id]);
+  const other =
+    handle === 0
+      ? updated.endBinding?.elementId
+      : updated.startBinding?.elementId;
+  if (other) exclude.add(other);
+
+  return findBindableShape(point, exclude);
 }
 
 export function getSelectPointerDownAction({
