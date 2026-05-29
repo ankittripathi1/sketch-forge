@@ -151,7 +151,7 @@ export function useSketchEngine(
     x2: number;
     y2: number;
   } | null>(null);
-  const isAddetiveSelection = useRef(false);
+  const isAdditiveSelection = useRef(false);
   const isDragging = useRef(false);
   const dragStart = useRef<Point>({ x: 0, y: 0 });
   const resizeHandle = useRef<number | null>(null);
@@ -333,17 +333,22 @@ export function useSketchEngine(
     return getSelectedElements(elements.current, selectedIds.current);
   }
 
-  const selectedElements = {
-    get current(): SketchElement[] {
-      return selectedElementsList();
-    },
-    set current(next: SketchElement[]) {
-      const nextIds = new Set(next.map((el) => el.id));
-      const nextById = new Map(next.map((el) => [el.id, el]));
-      elements.current = elements.current.map((el) => nextById.get(el.id) ?? el);
-      selectedIds.current = nextIds;
-    },
-  };
+  function setSelectedElements(next: SketchElement[]) {
+    const nextIds = new Set(next.map((el) => el.id));
+    const nextById = new Map(next.map((el) => [el.id, el]));
+    const existingIds = new Set(elements.current.map((el) => el.id));
+
+    elements.current = [
+      ...elements.current.map((el) => nextById.get(el.id) ?? el),
+      ...next.filter((el) => !existingIds.has(el.id)),
+    ];
+    selectedIds.current = nextIds;
+  }
+
+  function clearSelection() {
+    selectedIds.current = new Set();
+    setSelectedTool(null);
+  }
 
   function commitSelectedElements() {
     if (selectedIds.current.size === 0) return;
@@ -425,10 +430,8 @@ export function useSketchEngine(
    *
    * Implementation steps:
    *   1. Read the Gemini API key from the config ref (set in Settings).
-   *   2. Merge elements.current + selectedElements.current into one flat array.
-   *      Selected elements live in a separate ref while selected; we need to
-   *      include them so the model sees the full canvas, not just the unselected
-   *      portion.
+   *   2. Read elements.current directly; selected state is tracked separately
+   *      by id, so the element list is always the complete canvas.
    *   3. Call getAILayout() which serialises the elements, calls Gemini, and
    *      returns validated LayoutUpdate objects (see layoutAI.ts).
    *   4. Build an id → update map for O(1) lookups, then map both element
@@ -463,19 +466,11 @@ export function useSketchEngine(
 
       const updateMap = new Map(updates.map((u) => [u.id, u]));
       elements.current = applyLayoutUpdates(elements.current, updateMap);
-      selectedElements.current = applyLayoutUpdates(
-        selectedElements.current,
-        updateMap,
-      );
 
       // Any arrow bound to a shape that just moved should follow it. We pass
       // the full id set so all bindings get re-resolved against the new positions.
       const allIds = new Set(elements.current.map((e) => e.id));
       elements.current = syncBoundArrows(allIds, elements.current);
-      selectedElements.current = syncBoundArrows(
-        allIds,
-        selectedElements.current,
-      );
 
       // Commit as one history entry so ⌘Z undoes the entire beautify at once.
       history.current.push([...elements.current]);
@@ -510,12 +505,13 @@ export function useSketchEngine(
   ) {
     const result = recolorByTheme(
       elements.current,
-      selectedElements.current,
+      selectedElementsList(),
       isDark,
     );
     setStrokeColor(result.newDefaultStroke);
-    elements.current = result.elements;
-    selectedElements.current = result.selected;
+    elements.current = result.elements.map(
+      (el) => result.selected.find((selected) => selected.id === el.id) ?? el,
+    );
     if (result.changed && options.recordHistory !== false) {
       history.current.push([...elements.current]);
       syncHistoryStatus();
@@ -628,9 +624,9 @@ export function useSketchEngine(
           fontSize,
           fontWeight,
         });
-        selectedElements.current = [el];
+        setSelectedElements([el]);
         setSelectedTool("text");
-        history.current.push([...elements.current, el]);
+        history.current.push([...elements.current]);
         syncHistoryStatus();
         setTool("select");
         renderScene();
@@ -639,12 +635,12 @@ export function useSketchEngine(
       return;
     }
 
-    if (tool !== "select" && selectedElements.current.length > 0) {
+    if (tool !== "select" && selectedIds.current.size > 0) {
       commitSelectedElements();
     }
 
-    if (tool === "select" && selectedElements.current.length > 1) {
-      const hitSelected = selectedElements.current
+    if (tool === "select" && selectedIds.current.size > 1) {
+      const hitSelected = selectedElementsList()
         .slice()
         .reverse()
         .find((el) => hitTestElement(el, point, 8 / zoom.current));
@@ -656,9 +652,10 @@ export function useSketchEngine(
     }
 
     if (tool === "select") {
-      if (selectedElements.current.length === 1) {
+      const selected = selectedElementsList();
+      if (selected.length === 1) {
         const handle = hitTestHandle(
-          selectedElements.current[0]!,
+          selected[0]!,
           point,
           6 / zoom.current,
           zoom.current,
@@ -666,7 +663,7 @@ export function useSketchEngine(
         );
         if (handle !== null) {
           resizeHandle.current = handle;
-          resizeOrigin.current = { ...selectedElements.current[0]! };
+          resizeOrigin.current = { ...selected[0]! };
           return;
         }
       }
@@ -675,7 +672,7 @@ export function useSketchEngine(
         .reverse()
         .find((el) => hitTestElement(el, point, 8 / zoom.current));
       if (hit) {
-        selectedElements.current = [hit];
+        setSelectedElements([hit]);
         setSelectedTool(hit.tool);
         setStrokeColor(hit.strokeColor);
         setFillColor(hit.fillColor);
@@ -693,9 +690,9 @@ export function useSketchEngine(
         return;
       }
 
-      if (selectedElements.current.length > 0) {
+      if (selected.length > 0) {
         const boxPoint = canvasToScreen(point);
-        const el = selectedElements.current[0]!;
+        const el = selected[0]!;
         const { x, y, w, h } = getBoundingBox(el);
         const sMin = canvasToScreen({ x, y });
         const sMax = canvasToScreen({ x: x + w, y: y + h });
@@ -706,8 +703,7 @@ export function useSketchEngine(
           boxPoint.y < sMin.y ||
           boxPoint.y > sMax.y
         ) {
-          selectedElements.current = [];
-          setSelectedTool(null);
+          clearSelection();
           renderScene();
           renderSelection();
         }
@@ -720,7 +716,7 @@ export function useSketchEngine(
         x2: point.x,
         y2: point.y,
       };
-      isAddetiveSelection.current = e.shiftKey;
+      isAdditiveSelection.current = e.shiftKey;
       renderSelection();
       return;
     }
@@ -784,7 +780,7 @@ export function useSketchEngine(
     if (
       tool === "select" &&
       resizeHandle.current !== null &&
-      selectedElements.current.length === 1 &&
+      selectedIds.current.size === 1 &&
       resizeOrigin.current
     ) {
       const point = screenToCanvas(screenPoint);
@@ -793,7 +789,7 @@ export function useSketchEngine(
         resizeHandle.current,
         point,
       );
-      selectedElements.current = [updated];
+      setSelectedElements([updated]);
       const movedIds = new Set([updated.id]);
       elements.current = syncBoundArrows(movedIds, elements.current);
 
@@ -827,30 +823,30 @@ export function useSketchEngine(
     if (
       tool === "select" &&
       isDragging.current &&
-      selectedElements.current.length > 0
+      selectedIds.current.size > 0
     ) {
       const point = screenToCanvas(screenPoint);
       const dx = point.x - dragStart.current.x;
       const dy = point.y - dragStart.current.y;
       dragStart.current = point;
 
-      selectedElements.current = selectedElements.current.map((el) => ({
-        ...el,
-        x1: el.x1 + dx,
-        y1: el.y1 + dy,
-        x2: el.x2 + dx,
-        y2: el.y2 + dy,
-        points: el.points?.map((p) => ({ x: p.x + dx, y: p.y + dy })),
-      }));
+      elements.current = elements.current.map((el) =>
+        selectedIds.current.has(el.id)
+          ? {
+              ...el,
+              x1: el.x1 + dx,
+              y1: el.y1 + dy,
+              x2: el.x2 + dx,
+              y2: el.y2 + dy,
+              points: el.points?.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+            }
+          : el,
+      );
 
       // Drag bound arrows along with their target shapes.
-      const movedIds = new Set(selectedElements.current.map((el) => el.id));
+      const movedIds = new Set(selectedIds.current);
       if (movedIds.size > 0) {
         elements.current = syncBoundArrows(movedIds, elements.current);
-        selectedElements.current = syncBoundArrows(
-          movedIds,
-          selectedElements.current,
-        );
       }
 
       cancelAnimationFrame(rafId.current);
@@ -931,11 +927,11 @@ export function useSketchEngine(
         );
         if (newlySelected.length > 0) {
           const ids = newlySelected.map((el) => el.id);
-          selectedIds.current = isAddetiveSelection.current
+          selectedIds.current = isAdditiveSelection.current
             ? addToSelection(selectedIds.current, ids)
             : setSelection(ids);
         }
-        isAddetiveSelection.current = false;
+        isAdditiveSelection.current = false;
         selectionMarquee.current = null;
         renderScene();
         renderSelection();
@@ -946,9 +942,8 @@ export function useSketchEngine(
         resizeHandle.current = null;
         resizeOrigin.current = null;
         hoveredAnchor.current = null;
-        if (selectedElements.current.length > 0) {
-          selectedElements.current =
-            selectedElements.current.map(normalizeElement);
+        if (selectedIds.current.size > 0) {
+          setSelectedElements(selectedElementsList().map(normalizeElement));
           history.current.push([...elements.current]);
           syncHistoryStatus();
         }
@@ -956,9 +951,8 @@ export function useSketchEngine(
       }
 
       isDragging.current = false;
-      if (selectedElements.current.length > 0) {
-        selectedElements.current =
-          selectedElements.current.map(normalizeElement);
+      if (selectedIds.current.size > 0) {
+        setSelectedElements(selectedElementsList().map(normalizeElement));
         history.current.push([...elements.current]);
         syncHistoryStatus();
         renderSelection();
@@ -1048,9 +1042,9 @@ export function useSketchEngine(
       return;
     }
 
-    selectedElements.current = [justCreated];
+    setSelectedElements([justCreated]);
     setSelectedTool(justCreated.tool);
-    history.current.push([...elements.current, justCreated]);
+    history.current.push([...elements.current]);
     syncHistoryStatus();
     setTool("select");
     renderScene();
@@ -1086,9 +1080,10 @@ export function useSketchEngine(
     if (tool === "select") {
       const point = screenToCanvas(screenPoint);
 
-      if (selectedElements.current.length === 1) {
+      const selected = selectedElementsList();
+      if (selected.length === 1) {
         const handle = hitTestHandle(
-          selectedElements.current[0]!,
+          selected[0]!,
           point,
           6 / zoom.current,
           zoom.current,
@@ -1170,9 +1165,9 @@ export function useSketchEngine(
           fontSize,
           fontWeight,
         };
-        selectedElements.current = [el];
+        setSelectedElements([el]);
         setSelectedTool("text");
-        history.current.push([...elements.current, el]);
+        history.current.push([...elements.current]);
         syncHistoryStatus();
         setTool("select");
         renderScene();
@@ -1196,8 +1191,8 @@ export function useSketchEngine(
             hit.tool !== "freehand" &&
             hit.tool !== "highlighter"));
       if (hit && canEditText) {
-        if (!selectedElements.current.some((el) => el.id === hit.id)) {
-          selectedElements.current = [hit];
+        if (!selectedIds.current.has(hit.id)) {
+          setSelectedElements([hit]);
           setSelectedTool(hit.tool);
           renderScene();
           renderSelection();
@@ -1208,12 +1203,13 @@ export function useSketchEngine(
   }
 
   function editSelected() {
-    if (selectedElements.current.length !== 1) return;
-    const el = selectedElements.current[0]!;
+    const selected = selectedElementsList();
+    if (selected.length !== 1) return;
+    const el = selected[0]!;
     if (el.tool === "text") {
       const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
       const w = Math.abs(el.x2 - el.x1);
-      selectedElements.current = [];
+      clearSelection();
       renderScene();
       renderSelection();
       openTextEditor({
@@ -1229,16 +1225,13 @@ export function useSketchEngine(
         fixedWidth: true,
       }).then((result) => {
         if (result === null) {
-          selectedElements.current = [el];
+          setSelectedElements([el]);
           setSelectedTool(el.tool);
           renderSelection();
           return;
         }
         const updated = applyTextEdit(el, result);
-        selectedElements.current = [updated];
-        elements.current = elements.current.map((e) =>
-          e.id === el.id ? updated : e,
-        );
+        setSelectedElements([updated]);
         history.current.push([...elements.current]);
         syncHistoryStatus();
         renderScene();
@@ -1254,7 +1247,7 @@ export function useSketchEngine(
     ) {
       const { x, y, w } = getBoundingBox(el);
       const screenPos = canvasToScreen({ x, y });
-      selectedElements.current = [{ ...el, text: undefined }];
+      setSelectedElements([{ ...el, text: undefined }]);
       renderScene();
       renderSelection();
       openTextEditor({
@@ -1271,16 +1264,13 @@ export function useSketchEngine(
         align: "center",
       }).then((result) => {
         if (result === null) {
-          selectedElements.current = [el];
+          setSelectedElements([el]);
           setSelectedTool(el.tool);
           renderSelection();
           return;
         }
         const updated = { ...el, text: result.text.trim() || undefined };
-        selectedElements.current = [updated];
-        elements.current = elements.current.map((e) =>
-          e.id === el.id ? updated : e,
-        );
+        setSelectedElements([updated]);
         history.current.push([...elements.current]);
         syncHistoryStatus();
         renderScene();
@@ -1293,8 +1283,7 @@ export function useSketchEngine(
     const snapshot = history.current.undo();
     if (snapshot) {
       elements.current = snapshot;
-      selectedElements.current = [];
-      setSelectedTool(null);
+      clearSelection();
       syncHistoryStatus();
       renderScene();
       renderSelection();
@@ -1305,8 +1294,7 @@ export function useSketchEngine(
     const snapshot = history.current.redo();
     if (snapshot) {
       elements.current = snapshot;
-      selectedElements.current = [];
-      setSelectedTool(null);
+      clearSelection();
       syncHistoryStatus();
       renderScene();
       renderSelection();
@@ -1314,15 +1302,20 @@ export function useSketchEngine(
   }
 
   function deleteSelected() {
-    selectedElements.current = [];
-    setSelectedTool(null);
+    if (selectedIds.current.size === 0) return;
+    elements.current = elements.current.filter(
+      (el) => !selectedIds.current.has(el.id),
+    );
+    clearSelection();
+    history.current.push([...elements.current]);
+    syncHistoryStatus();
     renderScene();
     renderSelection();
   }
 
   function duplicateSelected() {
-    if (selectedElements.current.length === 0) return;
-    const originals = selectedElements.current;
+    const originals = selectedElementsList();
+    if (originals.length === 0) return;
     const duplicates = originals.map((element) => ({
       ...element,
       id: crypto.randomUUID(),
@@ -1338,7 +1331,7 @@ export function useSketchEngine(
     }));
 
     elements.current = [...elements.current, ...duplicates];
-    selectedElements.current = duplicates;
+    setSelectedElements(duplicates);
     history.current.push([...elements.current]);
     syncHistoryStatus();
     renderScene();
@@ -1346,8 +1339,7 @@ export function useSketchEngine(
   }
 
   function deselect() {
-    selectedElements.current = [];
-    setSelectedTool(null);
+    clearSelection();
     renderScene();
     renderSelection();
   }
@@ -1359,7 +1351,7 @@ export function useSketchEngine(
 
   function setElements(newElements: SketchElement[]) {
     elements.current = newElements;
-    selectedElements.current = [];
+    clearSelection();
     history.current = createHistory();
     history.current.push(newElements);
     syncHistoryStatus();
