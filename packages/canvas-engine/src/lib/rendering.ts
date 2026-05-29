@@ -16,7 +16,7 @@ export type RenderContext = {
   sceneCanvas: RefObject<HTMLCanvasElement | null>;
   interactionCanvas: RefObject<HTMLCanvasElement | null>;
   elements: RefObject<SketchElement[]>;
-  selectedElements: RefObject<SketchElement[]>;
+  selectedIds: RefObject<Set<string>>;
   currentElement: RefObject<SketchElement | null>;
   hoveredAnchor: RefObject<{
     shape: SketchElement;
@@ -43,13 +43,8 @@ export function createRenderers(ctx: RenderContext) {
     c2d.save();
     applyTransform(c2d, canvas, ctx.zoom.current!, ctx.panOffset.current!);
     const rc = rough.canvas(canvas);
-    const all = [
-      ...(ctx.elements.current ?? []),
-      ...(ctx.selectedElements.current ?? []),
-    ];
-    (ctx.elements.current ?? []).forEach((el) =>
-      drawElement(rc, el, renderScene, all),
-    );
+    const all = [...(ctx.elements.current ?? [])];
+    all.forEach((el) => drawElement(rc, el, renderScene, all));
     c2d.restore();
   }
 
@@ -65,7 +60,6 @@ export function createRenderers(ctx: RenderContext) {
       const rc = rough.canvas(canvas);
       drawElement(rc, ctx.currentElement.current, undefined, [
         ...(ctx.elements.current ?? []),
-        ...(ctx.selectedElements.current ?? []),
       ]);
     }
     if (ctx.hoveredAnchor.current) {
@@ -110,11 +104,9 @@ export function createRenderers(ctx: RenderContext) {
       );
     }
 
-    const all = [
-      ...(ctx.elements.current ?? []),
-      ...(ctx.selectedElements.current ?? []),
-    ];
-    (ctx.selectedElements.current ?? []).forEach((el) => {
+    const all = [...(ctx.elements.current ?? [])];
+    const selected = all.filter((el) => ctx.selectedIds.current.has(el.id));
+    selected.forEach((el) => {
       drawElement(rc, el, undefined, all);
       drawSelectionBox(c2d, el, ctx.zoom.current!, all);
     });
@@ -133,7 +125,7 @@ export function createRenderers(ctx: RenderContext) {
 
   function renderInteractionLayer() {
     if (
-      (ctx.selectedElements.current ?? []).length > 0 ||
+      ctx.selectedIds.current.size > 0 ||
       ctx.selectionMarquee.current
     ) {
       renderSelection();
