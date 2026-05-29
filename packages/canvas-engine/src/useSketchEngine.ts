@@ -58,6 +58,11 @@ type SelectInteraction =
     }
   | { type: "marquee"; additive: boolean };
 
+type CanvasInteraction =
+  | { type: "idle" }
+  | { type: "drawing" }
+  | { type: "panning"; lastScreenPoint: Point };
+
 /**
  * useSketchEngine
  *
@@ -163,12 +168,10 @@ export function useSketchEngine(
     y2: number;
   } | null>(null);
   const selectInteraction = useRef<SelectInteraction>({ type: "idle" });
+  const canvasInteraction = useRef<CanvasInteraction>({ type: "idle" });
   const elements = useRef<SketchElement[]>([]);
   const currentElement = useRef<SketchElement | null>(null);
-  const isDrawing = useRef(false);
   const isPanning = useRef(false);
-  const isPanningDragging = useRef(false);
-  const panStartPoint = useRef<Point>({ x: 0, y: 0 });
   const zoom = useRef(1);
   const panOffset = useRef<Point>({ x: 0, y: 0 });
   const rafId = useRef<number>(0);
@@ -604,8 +607,10 @@ export function useSketchEngine(
     if (tool === "select" && e.button === 2) return;
 
     if (isPanning.current) {
-      isPanningDragging.current = true;
-      panStartPoint.current = screenPoint;
+      canvasInteraction.current = {
+        type: "panning",
+        lastScreenPoint: screenPoint,
+      };
       return;
     }
 
@@ -738,7 +743,7 @@ export function useSketchEngine(
       return;
     }
 
-    isDrawing.current = true;
+    canvasInteraction.current = { type: "drawing" };
     let startBinding: ArrowBinding | undefined;
     let startX = point.x;
     let startY = point.y;
@@ -772,12 +777,16 @@ export function useSketchEngine(
   }
 
   function onPointerMove(screenPoint: Point) {
-    if (isPanning.current && isPanningDragging.current) {
+    if (canvasInteraction.current.type === "panning") {
+      const interaction = canvasInteraction.current;
       panOffset.current = {
-        x: panOffset.current.x + (screenPoint.x - panStartPoint.current.x),
-        y: panOffset.current.y + (screenPoint.y - panStartPoint.current.y),
+        x: panOffset.current.x + (screenPoint.x - interaction.lastScreenPoint.x),
+        y: panOffset.current.y + (screenPoint.y - interaction.lastScreenPoint.y),
       };
-      panStartPoint.current = screenPoint;
+      canvasInteraction.current = {
+        type: "panning",
+        lastScreenPoint: screenPoint,
+      };
       scheduleViewportRender();
       return;
     }
@@ -884,7 +893,7 @@ export function useSketchEngine(
     }
 
     // Hover-only anchor preview when the arrow tool is active but no draw in progress.
-    if (tool === "arrow" && !isDrawing.current) {
+    if (tool === "arrow" && canvasInteraction.current.type !== "drawing") {
       const point = screenToCanvas(screenPoint);
       const target = findBindableShape(point);
       const next = target
@@ -905,7 +914,11 @@ export function useSketchEngine(
       return;
     }
 
-    if (!isDrawing.current || !currentElement.current) return;
+    if (
+      canvasInteraction.current.type !== "drawing" ||
+      !currentElement.current
+    )
+      return;
     const point = screenToCanvas(screenPoint);
 
     // While drawing an arrow, snap the live endpoint to the nearest anchor of
@@ -940,8 +953,8 @@ export function useSketchEngine(
   }
 
   async function finalizeElement() {
-    if (isPanning.current) {
-      isPanningDragging.current = false;
+    if (canvasInteraction.current.type === "panning") {
+      canvasInteraction.current = { type: "idle" };
       return;
     }
 
@@ -991,8 +1004,12 @@ export function useSketchEngine(
       return;
     }
 
-    if (!isDrawing.current || !currentElement.current) return;
-    isDrawing.current = false;
+    if (
+      canvasInteraction.current.type !== "drawing" ||
+      !currentElement.current
+    )
+      return;
+    canvasInteraction.current = { type: "idle" };
     cancelAnimationFrame(rafId.current);
 
     if (tool === "eraser") {
@@ -1022,7 +1039,6 @@ export function useSketchEngine(
     }
 
     let justCreated = normalizeElement(currentElement.current!);
-    isDrawing.current = false;
     currentElement.current = null;
     hoveredAnchor.current = null;
 
@@ -1377,7 +1393,9 @@ export function useSketchEngine(
 
   function stopPanning() {
     isPanning.current = false;
-    isPanningDragging.current = false;
+    if (canvasInteraction.current.type === "panning") {
+      canvasInteraction.current = { type: "idle" };
+    }
   }
 
   function setElements(newElements: SketchElement[]) {
