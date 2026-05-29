@@ -42,6 +42,7 @@ import {
 } from "./tools/select";
 import { createRenderers } from "./lib/rendering";
 import { useCanvasUI } from "./store";
+import { buildDraftElement, updateDraftElement } from "./tools/drawing";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
@@ -723,34 +724,21 @@ export function useSketchEngine(
 
     canvasInteraction.current = { type: "drawing" };
     let startBinding: ArrowBinding | undefined;
-    let startX = point.x;
-    let startY = point.y;
+    let startPoint = point;
     if (tool === "arrow") {
       const target = findBindableShape(point);
       if (target) {
         startBinding = { elementId: target.shape.id, anchor: target.anchor };
-        const p = getAnchorPoint(target.shape, target.anchor);
-        startX = p.x;
-        startY = p.y;
+        startPoint = getAnchorPoint(target.shape, target.anchor);
       }
     }
-    currentElement.current = {
-      id: crypto.randomUUID(),
+    currentElement.current = buildDraftElement({
       tool,
-      seed: Math.floor(Math.random() * 100000),
-      strokeColor,
-      fillColor,
-      fillStyle,
-      strokeWidth,
-      x1: startX,
-      y1: startY,
-      x2: point.x,
-      y2: point.y,
-      points:
-        tool === "freehand" || tool === "highlighter" ? [point] : undefined,
-      opacity: tool === "highlighter" ? 0.35 : undefined,
+      point,
+      style: { strokeColor, fillColor, fillStyle, strokeWidth },
       startBinding,
-    };
+      startPoint,
+    });
     renderActiveElement();
   }
 
@@ -911,14 +899,10 @@ export function useSketchEngine(
     }
     hoveredAnchor.current = hint;
 
-    currentElement.current = {
-      ...currentElement.current,
-      x2: endX,
-      y2: endY,
-      points: currentElement.current.points
-        ? [...currentElement.current.points, point]
-        : undefined,
-    };
+    currentElement.current = updateDraftElement(currentElement.current, point, {
+      x: endX,
+      y: endY,
+    });
     cancelAnimationFrame(rafId.current);
     rafId.current = requestAnimationFrame(renderActiveElement);
   }
