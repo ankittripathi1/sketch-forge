@@ -1,6 +1,7 @@
 import type { Point, SketchElement } from "@repo/canvas-core/types";
 import {
   getBoundingBox,
+  getElementsBoundingBox,
   hitTestElement,
   hitTestHandle,
   isElementInsideRect,
@@ -56,22 +57,22 @@ export function findSingleSelectionHandle(
   return hitTestHandle(selected[0]!, point, tolerance, zoom, allElements);
 }
 
-export function isOutsidePrimarySelectionBounds(
+export function isPointInsideSelectionBounds(
   selected: SketchElement[],
   point: Point,
-  canvasToScreen: (point: Point) => Point,
+  padding = 0,
 ) {
   if (selected.length === 0) return false;
-  const boxPoint = canvasToScreen(point);
-  const { x, y, w, h } = getBoundingBox(selected[0]!);
-  const sMin = canvasToScreen({ x, y });
-  const sMax = canvasToScreen({ x: x + w, y: y + h });
+  const { x, y, w, h } =
+    selected.length === 1
+      ? getBoundingBox(selected[0]!)
+      : getElementsBoundingBox(selected);
 
   return (
-    boxPoint.x < sMin.x ||
-    boxPoint.x > sMax.x ||
-    boxPoint.y < sMin.y ||
-    boxPoint.y > sMax.y
+    point.x >= x - padding &&
+    point.x <= x + w + padding &&
+    point.y >= y - padding &&
+    point.y <= y + h + padding
   );
 }
 

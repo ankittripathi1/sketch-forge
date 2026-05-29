@@ -44,7 +44,7 @@ import {
   findHitSelectedElement,
   findSingleSelectionHandle,
   getMarqueeSelectedIds,
-  isOutsidePrimarySelectionBounds,
+  isPointInsideSelectionBounds,
   moveSelectedElements,
   updateSelectionMarquee,
   type SelectionMarquee,
@@ -663,24 +663,29 @@ export function useSketchEngine(
       commitSelectedElements();
     }
 
-    if (tool === "select" && selectedIds.current.size > 1) {
-      const hitSelected = findHitSelectedElement(
-        selectedElementsList(),
-        point,
-        8 / zoom.current,
-      );
-      if (hitSelected) {
-        selectInteraction.current = {
-          type: "dragging",
-          lastPoint: point,
-          moved: false,
-        };
-        return;
-      }
-    }
-
     if (tool === "select") {
       const selected = selectedElementsList();
+      if (selected.length > 1 && !e.shiftKey) {
+        const hitSelected = findHitSelectedElement(
+          selected,
+          point,
+          8 / zoom.current,
+        );
+        const hitGroupBounds = isPointInsideSelectionBounds(
+          selected,
+          point,
+          8 / zoom.current,
+        );
+        if (hitSelected || hitGroupBounds) {
+          selectInteraction.current = {
+            type: "dragging",
+            lastPoint: point,
+            moved: false,
+          };
+          return;
+        }
+      }
+
       if (selected.length === 1) {
         const handle = findSingleSelectionHandle(
           selected,
@@ -732,7 +737,7 @@ export function useSketchEngine(
       }
 
       if (selected.length > 0) {
-        if (isOutsidePrimarySelectionBounds(selected, point, canvasToScreen)) {
+        if (!isPointInsideSelectionBounds(selected, point, 8 / zoom.current)) {
           clearSelection();
           renderScene();
           renderSelection();
