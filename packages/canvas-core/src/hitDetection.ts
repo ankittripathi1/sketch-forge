@@ -204,17 +204,19 @@ export function isElementInsideRect(
 }
 
 export function getElementsBoundingBox(elements: SketchElement[]) {
+  if (elements.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
+
   const boxes = elements.map(getBoundingBox);
 
   const minX = Math.min(...boxes.map((b) => b.x));
   const minY = Math.min(...boxes.map((b) => b.y));
-  const maxX = Math.min(...boxes.map((b) => b.x + b.w));
-  const maxY = Math.min(...boxes.map((b) => b.y + b.h));
+  const maxX = Math.max(...boxes.map((b) => b.x + b.w));
+  const maxY = Math.max(...boxes.map((b) => b.y + b.h));
 
   return {
     x: minX,
     y: minY,
     w: maxX - minX,
-    h: maxY - minY
-  }
+    h: maxY - minY,
+  };
 }

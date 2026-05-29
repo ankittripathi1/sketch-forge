@@ -1,6 +1,6 @@
 import rough from "roughjs";
 import type { SketchElement } from "./types";
-import { getBoundingBox } from "./hitDetection";
+import { getBoundingBox, getElementsBoundingBox } from "./hitDetection";
 import { isColorDark } from "./colorUtils";
 import { highlightCodeLine } from "./codeHighlight";
 
@@ -1147,5 +1147,28 @@ export function drawSelectionBox(
     ctx.fill();
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+export function drawGroupSelectionBox(
+  ctx: CanvasRenderingContext2D,
+  elements: SketchElement[],
+  zoom = 1,
+) {
+  if (elements.length === 0) return;
+
+  const { x, y, w, h } = getElementsBoundingBox(elements);
+  const pad = 8 / zoom;
+  const lw = 1.5 / zoom;
+
+  ctx.save();
+  ctx.strokeStyle = "#6366f1";
+  ctx.lineWidth = lw;
+  ctx.setLineDash([7 / zoom, 4 / zoom]);
+  ctx.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = "rgba(99, 102, 241, 0.08)";
+  ctx.fillRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
   ctx.restore();
 }

@@ -13,6 +13,7 @@ export type {
 // Rendering
 export {
   drawElement,
+  drawGroupSelectionBox,
   drawSelectionBox,
   resolveArrowEndpoints,
 } from "./renderElement.js";
@@ -21,6 +22,7 @@ export type { RenderOptions } from "./renderToImage.js";
 
 // Hit detection
 export {
+  getElementsBoundingBox,
   getBoundingBox,
   hitTestElement,
   hitTestHandle,

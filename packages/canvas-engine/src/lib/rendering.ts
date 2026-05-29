@@ -7,6 +7,7 @@ import type {
 } from "@repo/canvas-core/types";
 import {
   drawElement,
+  drawGroupSelectionBox,
   drawSelectionBox,
   drawAnchorHints,
 } from "@repo/canvas-core/renderElement";
@@ -108,8 +109,12 @@ export function createRenderers(ctx: RenderContext) {
     const selected = all.filter((el) => ctx.selectedIds.current.has(el.id));
     selected.forEach((el) => {
       drawElement(rc, el, undefined, all);
-      drawSelectionBox(c2d, el, ctx.zoom.current!, all);
     });
+    if (selected.length === 1) {
+      drawSelectionBox(c2d, selected[0]!, ctx.zoom.current!, all);
+    } else if (selected.length > 1) {
+      drawGroupSelectionBox(c2d, selected, ctx.zoom.current!);
+    }
 
     if (ctx.hoveredAnchor.current) {
       drawAnchorHints(
