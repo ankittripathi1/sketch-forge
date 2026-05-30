@@ -15,6 +15,13 @@ export type DrawingStyle = {
   strokeWidth: number;
 };
 
+type BindableShape = { shape: SketchElement; anchor: AnchorSide };
+
+type FindBindableShape = (
+  point: Point,
+  exclude?: Set<string>,
+) => BindableShape | null;
+
 export function buildDraftElement({
   tool,
   point,
@@ -40,10 +47,57 @@ export function buildDraftElement({
     y1: startPoint.y,
     x2: point.x,
     y2: point.y,
-    points:
-      tool === "freehand" || tool === "highlighter" ? [point] : undefined,
+    points: tool === "freehand" || tool === "highlighter" ? [point] : undefined,
     opacity: tool === "highlighter" ? 0.35 : undefined,
     startBinding,
+  };
+}
+
+export function getDraftStart({
+  tool,
+  point,
+  findBindableShape,
+}: {
+  tool: Tool;
+  point: Point;
+  findBindableShape: FindBindableShape;
+}): { startBinding?: ArrowBinding; startPoint: Point } {
+  if (tool !== "arrow") return { startPoint: point };
+
+  const target = findBindableShape(point);
+  if (!target) return { startPoint: point };
+
+  return {
+    startBinding: {
+      elementId: target.shape.id,
+      anchor: target.anchor,
+    },
+    startPoint: getAnchorPoint(target.shape, target.anchor),
+  };
+}
+
+export function getDraftEnd({
+  element,
+  point,
+  findBindableShape,
+}: {
+  element: SketchElement;
+  point: Point;
+  findBindableShape: FindBindableShape;
+}): { endPoint: Point; anchorHint: BindableShape | null } {
+  if (element.tool !== "arrow") {
+    return { endPoint: point, anchorHint: null };
+  }
+
+  const exclude = new Set<string>();
+  if (element.startBinding) exclude.add(element.startBinding.elementId);
+
+  const target = findBindableShape(point, exclude);
+  if (!target) return { endPoint: point, anchorHint: null };
+
+  return {
+    endPoint: getAnchorPoint(target.shape, target.anchor),
+    anchorHint: target,
   };
 }
 
@@ -75,12 +129,7 @@ export function eraseIntersectingElements(
     const elMinY = Math.min(el.y1, el.y2);
     const elMaxY = Math.max(el.y1, el.y2);
 
-    return !(
-      elMinX < maxX &&
-      elMaxX > minX &&
-      elMinY < maxY &&
-      elMaxY > minY
-    );
+    return !(elMinX < maxX && elMaxX > minX && elMinY < maxY && elMaxY > minY);
   });
 }
 

@@ -2,14 +2,9 @@
 
 import { RefObject, useRef, useState } from "react";
 import { SketchElement, Point, Tool, FillStyle } from "@repo/canvas-core/types";
-import { getAnchorPoint } from "@repo/canvas-core/renderElement";
-import type { ArrowBinding, AnchorSide } from "@repo/canvas-core/types";
+import type { AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
-import {
-  hitTestElement,
-  hitTestHandle,
-  getBoundingBox,
-} from "@repo/canvas-core/hitDetection";
+import { hitTestElement, getBoundingBox } from "@repo/canvas-core/hitDetection";
 import {
   recognizeHandwriting,
   debounceForBackend,
@@ -17,20 +12,24 @@ import {
 } from "@repo/canvas-core/lib/recognition";
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
 import { measureTextBox, openTextEditor } from "@repo/canvas-core/textEditor";
-import {
-  DEFAULT_DARK_STROKE,
-  DEFAULT_LIGHT_STROKE,
-} from "@repo/canvas-core/colorUtils";
 import * as transforms from "./lib/transform";
 import * as geometry from "./lib/geometry";
 import { recolorByTheme } from "./lib/theme";
+import {
+  getToolTransitionStyle,
+  type DrawingToolbarStyle,
+} from "./lib/toolStyle";
 import { buildTextFromStrokes } from "./lib/scribble";
 import { applyLayoutUpdates } from "./lib/beautify";
 import {
   addToSelection,
+  deleteElementsByIds,
+  duplicateElements,
   getSelectedElements,
+  mergeElementsById,
   setSelection,
   toggleSelection,
+  updateElementsByIds,
 } from "./lib/selectionModel";
 import {
   panByOffset,
@@ -43,9 +42,11 @@ import {
   buildTextElement,
   canEditTextForElement,
 } from "./tools/text";
+import { buildImageElement } from "./tools/image";
 import {
   findSingleSelectionHandle,
   getResizeAnchorPreview,
+  getSelectCursor,
   getSelectFinalizeAction,
   getSelectPointerMoveAction,
   getSelectPointerDownAction,
@@ -59,24 +60,15 @@ import {
   bindArrowEnd,
   buildDraftElement,
   eraseIntersectingElements,
+  getDraftEnd,
+  getDraftStart,
   isStrokeDraft,
   updateDraftElement,
 } from "./tools/drawing";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
-const OFFSET = 24;
-
-const HANDLE_CURSORS = [
-  "nwse-resize",
-  "ns-resize",
-  "nesw-resize",
-  "ew-resize",
-  "ew-resize",
-  "nesw-resize",
-  "ns-resize",
-  "nwse-resize",
-];
+const DUPLICATE_OFFSET = 24;
 
 type CanvasInteraction =
   | { type: "idle" }
@@ -368,15 +360,8 @@ export function useSketchEngine(
   }
 
   function setSelectedElements(next: SketchElement[]) {
-    const nextIds = new Set(next.map((el) => el.id));
-    const nextById = new Map(next.map((el) => [el.id, el]));
-    const existingIds = new Set(elements.current.map((el) => el.id));
-
-    elements.current = [
-      ...elements.current.map((el) => nextById.get(el.id) ?? el),
-      ...next.filter((el) => !existingIds.has(el.id)),
-    ];
-    selectedIds.current = nextIds;
+    elements.current = mergeElementsById(elements.current, next);
+    selectedIds.current = setSelection(next.map((el) => el.id));
   }
 
   function clearSelection() {
@@ -393,13 +378,10 @@ export function useSketchEngine(
 
   function updateSelectedElements(updates: Partial<SketchElement>) {
     if (selectedIds.current.size === 0) return;
-    elements.current = elements.current.map((el) =>
-      selectedIds.current.has(el.id)
-        ? {
-            ...el,
-            ...updates,
-          }
-        : el,
+    elements.current = updateElementsByIds(
+      elements.current,
+      selectedIds.current,
+      updates,
     );
     pushHistorySnapshot([...elements.current]);
     renderSceneAndSelection();
@@ -553,19 +535,19 @@ export function useSketchEngine(
       commitSelectedElements();
     }
     setTool(nextTool);
-    if (nextTool === "highlighter") {
-      setStrokeColor("#f2d14f");
-      setFillColor("none");
-      setFillStyle("none");
-      setStrokeWidth(18);
-    } else if (tool === "highlighter") {
-      setStrokeColor(
-        canvasMode === "dark" ? DEFAULT_DARK_STROKE : DEFAULT_LIGHT_STROKE,
-      );
-      setFillColor("none");
-      setFillStyle("none");
-      setStrokeWidth(1.5);
-    }
+    const style = getToolTransitionStyle({
+      currentTool: tool,
+      nextTool,
+      canvasMode,
+    });
+    if (style) applyDrawingToolbarStyle(style);
+  }
+
+  function applyDrawingToolbarStyle(style: DrawingToolbarStyle) {
+    setStrokeColor(style.strokeColor);
+    setFillColor(style.fillColor);
+    setFillStyle(style.fillStyle);
+    setStrokeWidth(style.strokeWidth);
   }
 
   function syncToolbarStyleFromElement(element: SketchElement) {
@@ -591,6 +573,37 @@ export function useSketchEngine(
     setSelectedElements([element]);
     pushHistorySnapshot([...elements.current]);
     renderSceneAndSelection();
+  }
+
+  function commitCreatedElement(element: SketchElement) {
+    setSelectedElements([element]);
+    setSelectedTool(element.tool);
+    pushHistorySnapshot([...elements.current]);
+    setTool("select");
+    renderSceneAndSelection();
+  }
+
+  function openTextCreationEditor(screenPoint: Point, point: Point) {
+    commitSelectedElements();
+    openTextEditor({
+      x: screenPoint.x,
+      y: screenPoint.y,
+      width: 20,
+      fontFamily,
+      fontSize,
+      fontWeight,
+      color: strokeColor,
+      zoom: zoom.current,
+    }).then((result) => {
+      if (!result?.text.trim()) return;
+      const el = buildTextElement(point, result, {
+        strokeColor,
+        fontFamily,
+        fontSize,
+        fontWeight,
+      });
+      commitCreatedElement(el);
+    });
   }
 
   function normalizeElement(el: SketchElement): SketchElement {
@@ -665,31 +678,7 @@ export function useSketchEngine(
     const point = screenToCanvas(screenPoint);
 
     if (tool === "text") {
-      const point = screenToCanvas(screenPoint);
-      commitSelectedElements();
-      openTextEditor({
-        x: screenPoint.x,
-        y: screenPoint.y,
-        width: 20,
-        fontFamily,
-        fontSize,
-        fontWeight,
-        color: strokeColor,
-        zoom: zoom.current,
-      }).then((result) => {
-        if (!result?.text.trim()) return;
-        const el = buildTextElement(point, result, {
-          strokeColor,
-          fontFamily,
-          fontSize,
-          fontWeight,
-        });
-        setSelectedElements([el]);
-        setSelectedTool("text");
-        pushHistorySnapshot([...elements.current]);
-        setTool("select");
-        renderSceneAndSelection();
-      });
+      openTextCreationEditor(screenPoint, point);
       return;
     }
 
@@ -767,15 +756,11 @@ export function useSketchEngine(
     }
 
     canvasInteraction.current = { type: "drawing" };
-    let startBinding: ArrowBinding | undefined;
-    let startPoint = point;
-    if (tool === "arrow") {
-      const target = findBindableShape(point);
-      if (target) {
-        startBinding = { elementId: target.shape.id, anchor: target.anchor };
-        startPoint = getAnchorPoint(target.shape, target.anchor);
-      }
-    }
+    const { startBinding, startPoint } = getDraftStart({
+      tool,
+      point,
+      findBindableShape,
+    });
     currentElement.current = buildDraftElement({
       tool,
       point,
@@ -889,30 +874,18 @@ export function useSketchEngine(
     if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
       return;
     const point = screenToCanvas(screenPoint);
-
-    // While drawing an arrow, snap the live endpoint to the nearest anchor of
-    // the shape under the cursor (excluding the start-bound shape).
-    let endX = point.x;
-    let endY = point.y;
-    let hint: { shape: SketchElement; anchor: AnchorSide } | null = null;
-    if (currentElement.current.tool === "arrow") {
-      const exclude = new Set<string>();
-      const sb = currentElement.current.startBinding;
-      if (sb) exclude.add(sb.elementId);
-      const target = findBindableShape(point, exclude);
-      if (target) {
-        const p = getAnchorPoint(target.shape, target.anchor);
-        endX = p.x;
-        endY = p.y;
-        hint = { shape: target.shape, anchor: target.anchor };
-      }
-    }
-    hoveredAnchor.current = hint;
-
-    currentElement.current = updateDraftElement(currentElement.current, point, {
-      x: endX,
-      y: endY,
+    const { endPoint, anchorHint } = getDraftEnd({
+      element: currentElement.current,
+      point,
+      findBindableShape,
     });
+    hoveredAnchor.current = anchorHint;
+
+    currentElement.current = updateDraftElement(
+      currentElement.current,
+      point,
+      endPoint,
+    );
     scheduleActiveElementRender();
   }
 
@@ -1008,11 +981,7 @@ export function useSketchEngine(
       return;
     }
 
-    setSelectedElements([justCreated]);
-    setSelectedTool(justCreated.tool);
-    pushHistorySnapshot([...elements.current]);
-    setTool("select");
-    renderSceneAndSelection();
+    commitCreatedElement(justCreated);
   }
 
   function handleZoom(delta: number, cursorScreen: Point) {
@@ -1040,23 +1009,14 @@ export function useSketchEngine(
 
     if (tool === "select") {
       const point = screenToCanvas(screenPoint);
-
-      const selected = selectedElementsList();
-      if (selected.length === 1) {
-        const handle = hitTestHandle(
-          selected[0]!,
+      return (
+        getSelectCursor({
+          selected: selectedElementsList(),
+          elements: elements.current,
           point,
-          6 / zoom.current,
-          zoom.current,
-          [...elements.current],
-        );
-        if (handle !== null) return HANDLE_CURSORS[handle] ?? "pointer";
-      }
-
-      for (let i = elements.current.length - 1; i >= 0; i--) {
-        if (hitTestElement(elements.current[i]!, point, 8 / zoom.current))
-          return "pointer";
-      }
+          zoom: zoom.current,
+        }) ?? "crosshair"
+      );
     }
 
     if (tool === "text") return "text";
@@ -1072,20 +1032,7 @@ export function useSketchEngine(
     const canvasPoint = screenToCanvas(point);
     const reader = new FileReader();
     reader.onload = () => {
-      const el: SketchElement = {
-        id: crypto.randomUUID(),
-        tool: "image",
-        seed: Math.floor(Math.random() * 100000),
-        strokeColor: "#000000",
-        fillColor: "none",
-        fillStyle: "none",
-        strokeWidth: 0,
-        x1: canvasPoint.x,
-        y1: canvasPoint.y,
-        x2: canvasPoint.x + 200,
-        y2: canvasPoint.y + 200,
-        src: reader.result as string,
-      };
+      const el = buildImageElement(canvasPoint, reader.result as string);
       elements.current = [...elements.current, el];
       pushHistorySnapshot();
       renderScene();
@@ -1096,30 +1043,7 @@ export function useSketchEngine(
   function onDoubleClick(screenPoint: Point) {
     if (tool === "text") {
       const point = screenToCanvas(screenPoint);
-      commitSelectedElements();
-      openTextEditor({
-        x: screenPoint.x,
-        y: screenPoint.y,
-        width: 20,
-        fontFamily,
-        fontSize,
-        fontWeight,
-        color: strokeColor,
-        zoom: zoom.current,
-      }).then((result) => {
-        if (!result?.text.trim()) return;
-        const el = buildTextElement(point, result, {
-          strokeColor,
-          fontFamily,
-          fontSize,
-          fontWeight,
-        });
-        setSelectedElements([el]);
-        setSelectedTool("text");
-        pushHistorySnapshot([...elements.current]);
-        setTool("select");
-        renderSceneAndSelection();
-      });
+      openTextCreationEditor(screenPoint, point);
       return;
     }
 
@@ -1217,8 +1141,9 @@ export function useSketchEngine(
 
   function deleteSelected() {
     if (selectedIds.current.size === 0) return;
-    elements.current = elements.current.filter(
-      (el) => !selectedIds.current.has(el.id),
+    elements.current = deleteElementsByIds(
+      elements.current,
+      selectedIds.current,
     );
     clearSelection();
     pushHistorySnapshot([...elements.current]);
@@ -1228,19 +1153,7 @@ export function useSketchEngine(
   function duplicateSelected() {
     const originals = selectedElementsList();
     if (originals.length === 0) return;
-    const duplicates = originals.map((element) => ({
-      ...element,
-      id: crypto.randomUUID(),
-      x1: element.x1 + OFFSET,
-      y1: element.y1 + OFFSET,
-      x2: element.x2 + OFFSET,
-      y2: element.y2 + OFFSET,
-      seed: Math.floor(Math.random() * 100_000),
-      points: element.points?.map((point) => ({
-        x: point.x + OFFSET,
-        y: point.y + OFFSET,
-      })),
-    }));
+    const duplicates = duplicateElements(originals, DUPLICATE_OFFSET);
 
     elements.current = [...elements.current, ...duplicates];
     setSelectedElements(duplicates);

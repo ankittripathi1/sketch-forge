@@ -58,6 +58,17 @@ export type SelectFinalizeAction =
 
 type BindableShape = { shape: SketchElement; anchor: AnchorSide };
 
+const HANDLE_CURSORS = [
+  "nwse-resize",
+  "ns-resize",
+  "nesw-resize",
+  "ew-resize",
+  "ew-resize",
+  "nesw-resize",
+  "ns-resize",
+  "nwse-resize",
+];
+
 export function findHitSelectedElement(
   selected: SketchElement[],
   point: Point,
@@ -88,6 +99,29 @@ export function findSingleSelectionHandle(
 ) {
   if (selected.length !== 1) return null;
   return hitTestHandle(selected[0]!, point, tolerance, zoom, allElements);
+}
+
+export function getSelectCursor({
+  selected,
+  elements,
+  point,
+  zoom,
+}: {
+  selected: SketchElement[];
+  elements: SketchElement[];
+  point: Point;
+  zoom: number;
+}): string | null {
+  const handle = findSingleSelectionHandle(
+    selected,
+    point,
+    6 / zoom,
+    zoom,
+    elements,
+  );
+  if (handle !== null) return HANDLE_CURSORS[handle] ?? "pointer";
+
+  return findHitElement(elements, point, 8 / zoom) ? "pointer" : null;
 }
 
 export function isPointInsideSelectionBounds(
