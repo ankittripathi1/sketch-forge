@@ -13,6 +13,19 @@ export type TextStyle = {
   fontWeight: "normal" | "bold";
 };
 
+const NON_EDITABLE_LABEL_TOOLS = new Set([
+  "image",
+  "eraser",
+  "line",
+  "arrow",
+  "freehand",
+  "highlighter",
+]);
+
+export function canEditTextForElement(el: SketchElement): boolean {
+  return el.tool === "text" || !NON_EDITABLE_LABEL_TOOLS.has(el.tool);
+}
+
 /** Build a freshly-created text element at the given canvas point. */
 export function buildTextElement(
   point: Point,
@@ -48,5 +61,15 @@ export function applyTextEdit(
     text: result.text,
     x2: el.x1 + result.width,
     y2: el.y1 + result.height,
+  };
+}
+
+export function applyShapeTextEdit(
+  el: SketchElement,
+  result: TextEditorResult,
+): SketchElement {
+  return {
+    ...el,
+    text: result.text.trim() || undefined,
   };
 }

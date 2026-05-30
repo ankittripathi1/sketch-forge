@@ -37,7 +37,12 @@ import {
   panByPointerMove,
   zoomAroundScreenPoint,
 } from "./lib/viewport";
-import { buildTextElement, applyTextEdit } from "./tools/text";
+import {
+  applyShapeTextEdit,
+  applyTextEdit,
+  buildTextElement,
+  canEditTextForElement,
+} from "./tools/text";
 import {
   findSingleSelectionHandle,
   getResizeAnchorPreview,
@@ -576,6 +581,18 @@ export function useSketchEngine(
       setTextVerticalAlign(element.textVerticalAlign);
   }
 
+  function restoreSelectedElement(element: SketchElement) {
+    setSelectedElements([element]);
+    setSelectedTool(element.tool);
+    renderSelection();
+  }
+
+  function saveSelectedElementEdit(element: SketchElement) {
+    setSelectedElements([element]);
+    pushHistorySnapshot([...elements.current]);
+    renderSceneAndSelection();
+  }
+
   function normalizeElement(el: SketchElement): SketchElement {
     return geometry.normalizeElement(el);
   }
@@ -1111,16 +1128,7 @@ export function useSketchEngine(
       const hit = [...elements.current]
         .reverse()
         .find((el) => hitTestElement(el, point, 8 / zoom.current));
-      const canEditText =
-        hit &&
-        (hit.tool === "text" ||
-          (hit.tool !== "image" &&
-            hit.tool !== "eraser" &&
-            hit.tool !== "line" &&
-            hit.tool !== "arrow" &&
-            hit.tool !== "freehand" &&
-            hit.tool !== "highlighter"));
-      if (hit && canEditText) {
+      if (hit && canEditTextForElement(hit)) {
         if (!selectedIds.current.has(hit.id)) {
           setSelectedElements([hit]);
           setSelectedTool(hit.tool);
@@ -1153,24 +1161,13 @@ export function useSketchEngine(
         fixedWidth: true,
       }).then((result) => {
         if (result === null) {
-          setSelectedElements([el]);
-          setSelectedTool(el.tool);
-          renderSelection();
+          restoreSelectedElement(el);
           return;
         }
         const updated = applyTextEdit(el, result);
-        setSelectedElements([updated]);
-        pushHistorySnapshot([...elements.current]);
-        renderSceneAndSelection();
+        saveSelectedElementEdit(updated);
       });
-    } else if (
-      el.tool !== "image" &&
-      el.tool !== "eraser" &&
-      el.tool !== "line" &&
-      el.tool !== "arrow" &&
-      el.tool !== "freehand" &&
-      el.tool !== "highlighter"
-    ) {
+    } else if (canEditTextForElement(el)) {
       const { x, y, w } = getBoundingBox(el);
       const screenPos = canvasToScreen({ x, y });
       setSelectedElements([{ ...el, text: undefined }]);
@@ -1189,15 +1186,11 @@ export function useSketchEngine(
         align: "center",
       }).then((result) => {
         if (result === null) {
-          setSelectedElements([el]);
-          setSelectedTool(el.tool);
-          renderSelection();
+          restoreSelectedElement(el);
           return;
         }
-        const updated = { ...el, text: result.text.trim() || undefined };
-        setSelectedElements([updated]);
-        pushHistorySnapshot([...elements.current]);
-        renderSceneAndSelection();
+        const updated = applyShapeTextEdit(el, result);
+        saveSelectedElementEdit(updated);
       });
     }
   }
