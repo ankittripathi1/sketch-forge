@@ -4,32 +4,45 @@ import { RefObject, useRef, useState } from "react";
 import { SketchElement, Point, Tool, FillStyle } from "@repo/canvas-core/types";
 import type { AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
-import { getBoundingBox } from "@repo/canvas-core/hitDetection";
-import {
-  recognizeHandwriting,
-  debounceForBackend,
-  type RecognitionConfig,
-} from "@repo/canvas-core/lib/recognition";
-import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
-import { measureTextBox } from "@repo/canvas-core/textEditor";
+import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
 import * as transforms from "./lib/transform";
 import * as geometry from "./lib/geometry";
-import { recolorByTheme } from "./lib/theme";
 import {
-  getToolbarStyleFromElement,
-  getToolTransitionStyle,
-  type ToolbarStyle,
-} from "./lib/toolStyle";
-import { buildTextFromStrokes } from "./lib/scribble";
-import { applyLayoutUpdates } from "./lib/beautify";
+  applyThemeColors as applyControllerThemeColors,
+  beautifyLayout as beautifyControllerLayout,
+  type CanvasEffectsContext,
+} from "./lib/canvasEffectsController";
 import {
-  pushHistorySnapshot as pushSnapshotToHistory,
-  redoHistory,
-  undoHistory,
-} from "./lib/historyModel";
+  applyFillColor as applyControllerFillColor,
+  applyFillStyle as applyControllerFillStyle,
+  applyFontFamily as applyControllerFontFamily,
+  applyFontSize as applyControllerFontSize,
+  applyFontWeight as applyControllerFontWeight,
+  applyStrokeColor as applyControllerStrokeColor,
+  applyStrokeWidth as applyControllerStrokeWidth,
+  applyTextAlign as applyControllerTextAlign,
+  applyTextVerticalAlign as applyControllerTextVerticalAlign,
+  applyTool as applyControllerTool,
+  getTextEditorStyle,
+  syncToolbarStyleFromElement as syncControllerToolbarStyleFromElement,
+  type ToolStyleControllerContext,
+} from "./lib/toolStyleController";
 import {
-  deleteElementsByIds,
-  duplicateElements,
+  queueScribbleStroke,
+  type ScribbleControllerContext,
+} from "./lib/scribbleController";
+import {
+  deleteSelectedElements,
+  deselectCanvas,
+  duplicateSelectedElements,
+  handleImageDrop,
+  redoCanvas,
+  replaceCanvasElements,
+  type CanvasCommandsContext,
+  undoCanvas,
+} from "./lib/canvasCommands";
+import { pushHistorySnapshot as pushSnapshotToHistory } from "./lib/historyModel";
+import {
   getSelectedElements,
   mergeElementsById,
   setSelection,
@@ -43,7 +56,6 @@ import {
   type ViewportControllerContext,
   zoomViewport,
 } from "./lib/viewportController";
-import { buildImageElement } from "./tools/image";
 import {
   editSelectedText,
   handleTextDoubleClick,
@@ -158,9 +170,9 @@ export function useSketchEngine(
    * Mutable ref that mirrors recognitionBackend + recognitionApiKey state.
    *
    * Why a ref instead of reading state directly?
-   * flushScribbleBatch and beautifyLayout are async functions launched from
-   * setTimeout callbacks and event handlers. By the time they run, the React
-   * closure that created them may be stale — they'd read the old state values.
+   * Scribble recognition and AI beautify run asynchronously from timers and
+   * event handlers. By the time they run, the React closure that created them
+   * may be stale — they'd read the old state values.
    * Writing to a ref on every render (two lines below) ensures the async
    * callbacks always see the current config without needing to be in a
    * useEffect dependency array.
@@ -197,7 +209,7 @@ export function useSketchEngine(
   /**
    * IDs of freehand stroke elements waiting to be recognised as a batch.
    * Strokes are accumulated here during the debounce window, then consumed
-   * and cleared when flushScribbleBatch fires.
+   * and cleared by the scribble controller.
    */
   const pendingScribbleIds = useRef<string[]>([]);
   /**
@@ -264,78 +276,6 @@ export function useSketchEngine(
     scheduleViewportRender,
   } = renderers;
 
-  /**
-   * Flushes the accumulated scribble batch: runs recognition on all strokes
-   * drawn since the debounce timer last reset, and on success replaces the
-   * raw ink with a text element positioned at the same bounding box.
-   *
-   * Flow:
-   *   1. Drain pendingScribbleIds and look up the corresponding elements.
-   *   2. Extract each element's point array and pass them all together to
-   *      recognizeHandwriting — rendering them as one combined image gives
-   *      the recogniser full word context instead of isolated letters.
-   *   3. If the recogniser returns non-empty text:
-   *        a. Remove the raw stroke elements from elements.current.
-   *        b. Create a text element whose position spans the combined bbox
-   *           and whose fontSize is proportional to the stroke height.
-   *        c. Push a history snapshot so the conversion is undoable.
-   *   4. If the recogniser returns "" (failed / noise), the strokes are
-   *      left in place — the user can delete them manually or try again.
-   *
-   * scribblePending stays true for the ENTIRE duration (debounce + API call)
-   * and is cleared in the finally block regardless of success or failure.
-   */
-  async function flushScribbleBatch() {
-    const ids = new Set(pendingScribbleIds.current);
-    pendingScribbleIds.current = [];
-
-    // Nothing to process — clear the badge and return early.
-    if (!ids.size) {
-      setScribblePending(false);
-      return;
-    }
-
-    try {
-      // Locate the freehand stroke elements that belong to this batch.
-      // We filter by tool to avoid accidentally matching text elements that
-      // might have been given an id matching a pending scribble id (unlikely
-      // but defensive).
-      const strokeEls = elements.current.filter(
-        (el) => el.tool === "freehand" && ids.has(el.id),
-      );
-      if (!strokeEls.length) return;
-
-      // Each element's points array is one continuous ink stroke.  Filter
-      // out strokes with fewer than 3 points (stray taps / near-zero lines).
-      const strokes = strokeEls
-        .map((el) => el.points ?? [])
-        .filter((pts) => pts.length >= 3);
-
-      if (!strokes.length) return;
-
-      const text = await recognizeHandwriting(
-        strokes,
-        recognitionConfigRef.current,
-      );
-
-      const textEl = buildTextFromStrokes(strokes, text, {
-        strokeColor,
-        fontFamily,
-        fontWeight,
-      });
-      if (!textEl) return;
-
-      elements.current = elements.current.filter((el) => !ids.has(el.id));
-      elements.current = [...elements.current, textEl];
-      pushHistorySnapshot();
-      renderScene();
-    } finally {
-      // Always clear the pending flag — even if recognition throws or returns
-      // empty — so the badge doesn't get stuck in the "recognizing" state.
-      setScribblePending(false);
-    }
-  }
-
   function pushHistorySnapshot(snapshot = elements.current) {
     setHistoryStatus(pushSnapshotToHistory(history.current, snapshot));
   }
@@ -372,176 +312,11 @@ export function useSketchEngine(
     renderSceneAndSelection();
   }
 
-  function applyStrokeColor(color: string) {
-    setStrokeColor(color);
-    updateSelectedElements({ strokeColor: color });
-  }
-
-  function applyFillColor(color: string) {
-    setFillColor(color);
-    updateSelectedElements({ fillColor: color });
-  }
-
-  function applyFillStyle(style: FillStyle) {
-    setFillStyle(style);
-    updateSelectedElements({ fillStyle: style });
-  }
-
-  function applyStrokeWidth(width: number) {
-    setStrokeWidth(width);
-    updateSelectedElements({ strokeWidth: width });
-  }
-
-  function applyFontFamily(font: string) {
-    setFontFamily(font);
-    updateSelectedElements({ fontFamily: font });
-  }
-
-  function applyFontSize(size: number) {
-    setFontSize(size);
-    updateSelectedElements({ fontSize: size });
-  }
-
-  function applyFontWeight(weight: "normal" | "bold") {
-    setFontWeight(weight);
-    updateSelectedElements({ fontWeight: weight });
-  }
-
-  function applyTextAlign(align: "left" | "center" | "right") {
-    setTextAlign(align);
-    updateSelectedElements({ textAlign: align });
-  }
-
-  function applyTextVerticalAlign(v: "top" | "middle" | "bottom") {
-    setTextVerticalAlign(v);
-    updateSelectedElements({ textVerticalAlign: v });
-  }
-
-  /**
-   * Swap every element whose strokeColor is the "opposite" theme default to
-   * the new theme default.  Elements with custom colours are left untouched.
-   * A single history snapshot is created only when at least one element changed.
-   */
-  /**
-   * Beautify: sends every element on the canvas to Gemini and applies the
-   * returned layout plan as a single atomic, fully undoable operation.
-   *
-   * Implementation steps:
-   *   1. Read the Gemini API key from the config ref (set in Settings).
-   *   2. Read elements.current directly; selected state is tracked separately
-   *      by id, so the element list is always the complete canvas.
-   *   3. Call getAILayout() which serialises the elements, calls Gemini, and
-   *      returns validated LayoutUpdate objects (see layoutAI.ts).
-   *   4. Build an id → update map for O(1) lookups, then map both element
-   *      arrays through an `apply` function that merges coordinates and, for
-   *      text elements only, updated font properties.
-   *      Non-text properties (fontSize, fontWeight, text) are intentionally
-   *      gated on `el.tool === "text"` to avoid mutating shapes accidentally.
-   *   5. Push the new state as a history snapshot → ⌘Z reverts the whole
-   *      beautify in one step.
-   *
-   * @throws If no API key is configured (caught and alerted in handleBeautify).
-   * @throws On network or JSON parsing errors from getAILayout.
-   */
-  async function beautifyLayout() {
-    const apiKey = recognitionConfigRef.current.apiKey?.trim();
-    if (!apiKey) {
-      // Surface a clear error — the toolbar button is disabled when no key is
-      // set, but this guard handles programmatic calls.
-      throw new Error("A Gemini API key is required. Add it in Settings.");
-    }
-
-    const allElements = [...elements.current];
-    if (!allElements.length) return;
-
-    setIsBeautifying(true);
-    try {
-      const updates = await getAILayout(allElements, apiKey);
-
-      // If Gemini returned nothing usable (e.g. empty canvas, API error),
-      // bail out without touching elements or history.
-      if (!updates.length) return;
-
-      const updateMap = new Map(updates.map((u) => [u.id, u]));
-      elements.current = applyLayoutUpdates(elements.current, updateMap);
-
-      // Any arrow bound to a shape that just moved should follow it. We pass
-      // the full id set so all bindings get re-resolved against the new positions.
-      const allIds = new Set(elements.current.map((e) => e.id));
-      elements.current = syncBoundArrows(allIds, elements.current);
-
-      // Commit as one history entry so ⌘Z undoes the entire beautify at once.
-      pushHistorySnapshot([...elements.current]);
-      renderSceneAndSelection();
-    } finally {
-      // Always clear the loading state, whether the call succeeded or threw.
-      setIsBeautifying(false);
-    }
-  }
-
-  /**
-   * Recolours every element that uses the previous theme's default stroke to
-   * the new theme's default stroke, then resets the toolbar stroke to match.
-   *
-   * Only elements whose strokeColor exactly matches one of the two canonical
-   * defaults (DEFAULT_LIGHT_STROKE / DEFAULT_DARK_STROKE) are affected.
-   * Elements with custom colours (reds, blues, user-picked hex values, etc.)
-   * are left untouched — this is the intentional "smart switch" behaviour:
-   * the theme system manages its own defaults without clobbering user choices.
-   *
-   * A history snapshot is pushed only when at least one element actually
-   * changed, so switching between two themes of the same polarity (e.g.
-   * Midnight → Forest, both dark) produces no phantom undo entry.
-   *
-   * @param isDark  true when switching TO a dark theme, false for light.
-   */
-  function applyThemeColors(
-    isDark: boolean,
-    options: { recordHistory?: boolean } = {},
-  ) {
-    const result = recolorByTheme(
-      elements.current,
-      selectedElementsList(),
-      isDark,
-    );
-    setStrokeColor(result.newDefaultStroke);
-    elements.current = result.elements.map(
-      (el) => result.selected.find((selected) => selected.id === el.id) ?? el,
-    );
-    if (result.changed && options.recordHistory !== false) {
-      pushHistorySnapshot([...elements.current]);
-    }
-    renderSceneAndSelection();
-    return result.changed;
-  }
-
-  function applyTool(nextTool: Tool) {
-    if (tool !== nextTool) {
-      commitSelectedElements();
-    }
-    setTool(nextTool);
-    const style = getToolTransitionStyle({
-      currentTool: tool,
-      nextTool,
-      canvasMode,
-    });
-    if (style) applyToolbarStyle(style);
-  }
-
-  function applyToolbarStyle(style: ToolbarStyle) {
-    setStrokeColor(style.strokeColor);
-    setFillColor(style.fillColor);
-    setFillStyle(style.fillStyle);
-    setStrokeWidth(style.strokeWidth);
-    if (style.fontFamily) setFontFamily(style.fontFamily);
-    if (style.fontSize) setFontSize(style.fontSize);
-    if (style.fontWeight) setFontWeight(style.fontWeight);
-    if (style.textAlign) setTextAlign(style.textAlign);
-    if (style.textVerticalAlign) setTextVerticalAlign(style.textVerticalAlign);
-  }
-
   function syncToolbarStyleFromElement(element: SketchElement) {
-    applyToolbarStyle(getToolbarStyleFromElement(element));
+    syncControllerToolbarStyleFromElement(
+      toolStyleControllerContext(),
+      element,
+    );
   }
 
   function saveSelectedElementEdit(element: SketchElement) {
@@ -559,12 +334,30 @@ export function useSketchEngine(
   }
 
   function textEditorStyle() {
+    return getTextEditorStyle(toolStyleControllerContext());
+  }
+
+  function toolStyleControllerContext(): ToolStyleControllerContext {
     return {
+      tool,
+      canvasMode,
       strokeColor,
       fontFamily,
       fontSize,
       fontWeight,
       zoom: zoom.current,
+      setTool,
+      setStrokeColor,
+      setFillColor,
+      setFillStyle,
+      setStrokeWidth,
+      setFontFamily,
+      setFontSize,
+      setFontWeight,
+      setTextAlign,
+      setTextVerticalAlign,
+      updateSelectedElements,
+      commitSelectedElements,
     };
   }
 
@@ -598,31 +391,16 @@ export function useSketchEngine(
     handle: number,
     to: Point,
   ): SketchElement {
-    const resized = geometry.applyResize(
-      el,
+    return geometry.applyResizeWithTextMeasurement({
+      element: el,
       handle,
       to,
-      [...elements.current],
-      zoom.current,
-    );
-    if (resized.tool !== "text" || !resized.text) return resized;
-
-    const { x, y, w } = getBoundingBox(resized);
-    const measured = measureTextBox(resized.text, {
-      fontFamily: resized.fontFamily ?? fontFamily,
-      fontSize: resized.fontSize ?? fontSize,
-      fontWeight: resized.fontWeight ?? fontWeight,
-      width: Math.max(w, 20),
-      fixedWidth: true,
+      allElements: [...elements.current],
+      zoom: zoom.current,
+      fontFamily,
+      fontSize,
+      fontWeight,
     });
-
-    return {
-      ...resized,
-      x1: x,
-      x2: x + Math.max(w, 20),
-      y1: y,
-      y2: y + measured.height,
-    };
   }
 
   function findBindableShape(
@@ -672,14 +450,23 @@ export function useSketchEngine(
     };
   }
 
+  function scribbleControllerContext(): ScribbleControllerContext {
+    return {
+      pendingScribbleIds,
+      scribbleTimer,
+      recognitionConfig: recognitionConfigRef,
+      elements,
+      strokeColor,
+      fontFamily,
+      fontWeight,
+      setScribblePending,
+      pushHistorySnapshot,
+      renderScene,
+    };
+  }
+
   function queueScribble(id: string) {
-    pendingScribbleIds.current.push(id);
-    setScribblePending(true);
-    if (scribbleTimer.current) clearTimeout(scribbleTimer.current);
-    const debounceMs = debounceForBackend(recognitionConfigRef.current.backend);
-    scribbleTimer.current = setTimeout(() => {
-      void flushScribbleBatch();
-    }, debounceMs);
+    queueScribbleStroke(scribbleControllerContext(), id);
   }
 
   function drawingControllerContext(): DrawingControllerContext {
@@ -717,6 +504,34 @@ export function useSketchEngine(
       screenToCanvas,
       setZoomLevel,
       scheduleViewportRender,
+    };
+  }
+
+  function canvasCommandsContext(): CanvasCommandsContext {
+    return {
+      elements,
+      selectedIds,
+      history,
+      screenToCanvas,
+      selectedElementsList,
+      setSelectedElements,
+      setHistoryStatus,
+      clearSelection,
+      renderScene,
+      renderSceneAndSelection,
+    };
+  }
+
+  function canvasEffectsContext(): CanvasEffectsContext {
+    return {
+      elements,
+      recognitionConfig: recognitionConfigRef,
+      selectedElementsList,
+      setStrokeColor,
+      setIsBeautifying,
+      syncBoundArrows,
+      pushHistorySnapshot,
+      renderSceneAndSelection,
     };
   }
 
@@ -793,20 +608,7 @@ export function useSketchEngine(
   }
 
   function handleDrop(e: DragEvent, point: Point) {
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
-    const file = files[0]!;
-    if (!file.type.startsWith("image/")) return;
-
-    const canvasPoint = screenToCanvas(point);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const el = buildImageElement(canvasPoint, reader.result as string);
-      elements.current = [...elements.current, el];
-      pushHistorySnapshot();
-      renderScene();
-    };
-    reader.readAsDataURL(file);
+    handleImageDrop(canvasCommandsContext(), e, point);
   }
 
   function onDoubleClick(screenPoint: Point) {
@@ -818,50 +620,23 @@ export function useSketchEngine(
   }
 
   function undo() {
-    const { snapshot, status } = undoHistory(history.current);
-    setHistoryStatus(status);
-    if (snapshot) {
-      elements.current = snapshot;
-      clearSelection();
-      renderSceneAndSelection();
-    }
+    undoCanvas(canvasCommandsContext());
   }
 
   function redo() {
-    const { snapshot, status } = redoHistory(history.current);
-    setHistoryStatus(status);
-    if (snapshot) {
-      elements.current = snapshot;
-      clearSelection();
-      renderSceneAndSelection();
-    }
+    redoCanvas(canvasCommandsContext());
   }
 
   function deleteSelected() {
-    if (selectedIds.current.size === 0) return;
-    elements.current = deleteElementsByIds(
-      elements.current,
-      selectedIds.current,
-    );
-    clearSelection();
-    pushHistorySnapshot([...elements.current]);
-    renderSceneAndSelection();
+    deleteSelectedElements(canvasCommandsContext());
   }
 
   function duplicateSelected() {
-    const originals = selectedElementsList();
-    if (originals.length === 0) return;
-    const duplicates = duplicateElements(originals, DUPLICATE_OFFSET);
-
-    elements.current = [...elements.current, ...duplicates];
-    setSelectedElements(duplicates);
-    pushHistorySnapshot([...elements.current]);
-    renderSceneAndSelection();
+    duplicateSelectedElements(canvasCommandsContext(), DUPLICATE_OFFSET);
   }
 
   function deselect() {
-    clearSelection();
-    renderSceneAndSelection();
+    deselectCanvas(canvasCommandsContext());
   }
 
   function stopPanning() {
@@ -872,11 +647,7 @@ export function useSketchEngine(
   }
 
   function setElements(newElements: SketchElement[]) {
-    elements.current = newElements;
-    clearSelection();
-    history.current = createHistory();
-    pushHistorySnapshot(newElements);
-    renderSceneAndSelection();
+    replaceCanvasElements(canvasCommandsContext(), newElements);
   }
 
   return {
@@ -884,28 +655,41 @@ export function useSketchEngine(
     setElements,
     tool,
 
-    setTool: applyTool,
+    setTool: (nextTool: Tool) =>
+      applyControllerTool(toolStyleControllerContext(), nextTool),
     strokeColor,
-    setStrokeColor: applyStrokeColor,
+    setStrokeColor: (color: string) =>
+      applyControllerStrokeColor(toolStyleControllerContext(), color),
     fillColor,
-    setFillColor: applyFillColor,
+    setFillColor: (color: string) =>
+      applyControllerFillColor(toolStyleControllerContext(), color),
     fillStyle,
-    setFillStyle: applyFillStyle,
+    setFillStyle: (style: FillStyle) =>
+      applyControllerFillStyle(toolStyleControllerContext(), style),
     strokeWidth,
-    setStrokeWidth: applyStrokeWidth,
+    setStrokeWidth: (width: number) =>
+      applyControllerStrokeWidth(toolStyleControllerContext(), width),
     selectedTool,
     fontFamily,
-    setFontFamily: applyFontFamily,
+    setFontFamily: (font: string) =>
+      applyControllerFontFamily(toolStyleControllerContext(), font),
     fontSize,
-    setFontSize: applyFontSize,
+    setFontSize: (size: number) =>
+      applyControllerFontSize(toolStyleControllerContext(), size),
     fontWeight,
-    setFontWeight: applyFontWeight,
+    setFontWeight: (weight: "normal" | "bold") =>
+      applyControllerFontWeight(toolStyleControllerContext(), weight),
     textAlign,
-    setTextAlign: applyTextAlign,
+    setTextAlign: (align: "left" | "center" | "right") =>
+      applyControllerTextAlign(toolStyleControllerContext(), align),
     textVerticalAlign,
-    setTextVerticalAlign: applyTextVerticalAlign,
-    applyThemeColors,
-    beautifyLayout,
+    setTextVerticalAlign: (align: "top" | "middle" | "bottom") =>
+      applyControllerTextVerticalAlign(toolStyleControllerContext(), align),
+    applyThemeColors: (
+      isDark: boolean,
+      options?: { recordHistory?: boolean },
+    ) => applyControllerThemeColors(canvasEffectsContext(), isDark, options),
+    beautifyLayout: () => beautifyControllerLayout(canvasEffectsContext()),
     isBeautifying,
     zoomLevel,
     panOffsetDisplay,

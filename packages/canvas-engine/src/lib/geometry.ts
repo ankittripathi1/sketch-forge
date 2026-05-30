@@ -1,17 +1,11 @@
-import type {
-  SketchElement,
-  Point,
-  AnchorSide,
-} from "@repo/canvas-core/types";
+import type { SketchElement, Point, AnchorSide } from "@repo/canvas-core/types";
 import {
   getAnchorPoint,
   getAllAnchorPoints,
   resolveArrowEndpoints,
 } from "@repo/canvas-core/renderElement";
-import {
-  hitTestElement,
-  getBoundingBox,
-} from "@repo/canvas-core/hitDetection";
+import { hitTestElement, getBoundingBox } from "@repo/canvas-core/hitDetection";
+import { measureTextBox } from "@repo/canvas-core/textEditor";
 
 export function normalizeElement(el: SketchElement): SketchElement {
   if (
@@ -72,9 +66,7 @@ export function syncBoundArrows(
     if (el.tool !== "arrow") return el;
     let next = el;
     if (el.startBinding && shapeIds.has(el.startBinding.elementId)) {
-      const target = allShapes.find(
-        (e) => e.id === el.startBinding!.elementId,
-      );
+      const target = allShapes.find((e) => e.id === el.startBinding!.elementId);
       if (target) {
         const p = getAnchorPoint(target, el.startBinding.anchor);
         next = { ...next, x1: p.x, y1: p.y };
@@ -225,7 +217,6 @@ export function applyResize(
       break;
   }
 
-
   if (el.tool === "freehand" || el.tool === "highlighter") {
     return {
       ...el,
@@ -241,4 +232,44 @@ export function applyResize(
   }
 
   return { ...el, x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
+}
+
+export function applyResizeWithTextMeasurement({
+  element,
+  handle,
+  to,
+  allElements,
+  zoom,
+  fontFamily,
+  fontSize,
+  fontWeight,
+}: {
+  element: SketchElement;
+  handle: number;
+  to: Point;
+  allElements: SketchElement[];
+  zoom: number;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: "normal" | "bold";
+}): SketchElement {
+  const resized = applyResize(element, handle, to, allElements, zoom);
+  if (resized.tool !== "text" || !resized.text) return resized;
+
+  const { x, y, w } = getBoundingBox(resized);
+  const measured = measureTextBox(resized.text, {
+    fontFamily: resized.fontFamily ?? fontFamily,
+    fontSize: resized.fontSize ?? fontSize,
+    fontWeight: resized.fontWeight ?? fontWeight,
+    width: Math.max(w, 20),
+    fixedWidth: true,
+  });
+
+  return {
+    ...resized,
+    x1: x,
+    x2: x + Math.max(w, 20),
+    y1: y,
+    y2: y + measured.height,
+  };
 }
