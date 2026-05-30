@@ -133,6 +133,11 @@ export function createRenderers(ctx: RenderContext) {
     renderActiveElement();
   }
 
+  function renderSceneAndSelection() {
+    renderScene();
+    renderSelection();
+  }
+
   function scheduleViewportRender() {
     cancelAnimationFrame(ctx.viewportRafId.current!);
     (ctx.viewportRafId as { current: number }).current = requestAnimationFrame(
@@ -160,8 +165,7 @@ export function createRenderers(ctx: RenderContext) {
     cancelAnimationFrame(ctx.interactionRafId.current!);
     (ctx.interactionRafId as { current: number }).current =
       requestAnimationFrame(() => {
-        renderScene();
-        renderSelection();
+        renderSceneAndSelection();
       });
   }
 
@@ -170,6 +174,7 @@ export function createRenderers(ctx: RenderContext) {
     renderActiveElement,
     renderSelection,
     renderInteractionLayer,
+    renderSceneAndSelection,
     scheduleSelectionRender,
     scheduleActiveElementRender,
     scheduleSceneAndSelectionRender,

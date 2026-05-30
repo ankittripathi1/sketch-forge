@@ -267,6 +267,7 @@ export function useSketchEngine(
     renderScene,
     renderActiveElement,
     renderSelection,
+    renderSceneAndSelection,
     scheduleSelectionRender,
     scheduleActiveElementRender,
     scheduleSceneAndSelectionRender,
@@ -336,8 +337,7 @@ export function useSketchEngine(
 
       elements.current = elements.current.filter((el) => !ids.has(el.id));
       elements.current = [...elements.current, textEl];
-      history.current.push(elements.current);
-      syncHistoryStatus();
+      pushHistorySnapshot();
       renderScene();
     } finally {
       // Always clear the pending flag — even if recognition throws or returns
@@ -351,6 +351,11 @@ export function useSketchEngine(
       canUndo: history.current.canUndo(),
       canRedo: history.current.canRedo(),
     });
+  }
+
+  function pushHistorySnapshot(snapshot = elements.current) {
+    history.current.push(snapshot);
+    syncHistoryStatus();
   }
 
   function selectedElementsList() {
@@ -378,8 +383,7 @@ export function useSketchEngine(
     if (selectedIds.current.size === 0) return;
     selectedIds.current = new Set();
     setSelectedTool(null);
-    renderScene();
-    renderSelection();
+    renderSceneAndSelection();
   }
 
   function updateSelectedElements(updates: Partial<SketchElement>) {
@@ -392,10 +396,8 @@ export function useSketchEngine(
           }
         : el,
     );
-    history.current.push([...elements.current]);
-    syncHistoryStatus();
-    renderScene();
-    renderSelection();
+    pushHistorySnapshot([...elements.current]);
+    renderSceneAndSelection();
   }
 
   function applyStrokeColor(color: string) {
@@ -497,10 +499,8 @@ export function useSketchEngine(
       elements.current = syncBoundArrows(allIds, elements.current);
 
       // Commit as one history entry so ⌘Z undoes the entire beautify at once.
-      history.current.push([...elements.current]);
-      syncHistoryStatus();
-      renderScene();
-      renderSelection();
+      pushHistorySnapshot([...elements.current]);
+      renderSceneAndSelection();
     } finally {
       // Always clear the loading state, whether the call succeeded or threw.
       setIsBeautifying(false);
@@ -537,11 +537,9 @@ export function useSketchEngine(
       (el) => result.selected.find((selected) => selected.id === el.id) ?? el,
     );
     if (result.changed && options.recordHistory !== false) {
-      history.current.push([...elements.current]);
-      syncHistoryStatus();
+      pushHistorySnapshot([...elements.current]);
     }
-    renderScene();
-    renderSelection();
+    renderSceneAndSelection();
     return result.changed;
   }
 
@@ -563,6 +561,19 @@ export function useSketchEngine(
       setFillStyle("none");
       setStrokeWidth(1.5);
     }
+  }
+
+  function syncToolbarStyleFromElement(element: SketchElement) {
+    setStrokeColor(element.strokeColor);
+    setFillColor(element.fillColor);
+    setFillStyle(element.fillStyle);
+    setStrokeWidth(element.strokeWidth);
+    if (element.fontFamily) setFontFamily(element.fontFamily);
+    if (element.fontSize) setFontSize(element.fontSize);
+    if (element.fontWeight) setFontWeight(element.fontWeight);
+    if (element.textAlign) setTextAlign(element.textAlign);
+    if (element.textVerticalAlign)
+      setTextVerticalAlign(element.textVerticalAlign);
   }
 
   function normalizeElement(el: SketchElement): SketchElement {
@@ -619,8 +630,7 @@ export function useSketchEngine(
 
   function commitSelectedElementSnapshot({ render = false } = {}) {
     setSelectedElements(selectedElementsList().map(normalizeElement));
-    history.current.push([...elements.current]);
-    syncHistoryStatus();
+    pushHistorySnapshot([...elements.current]);
     if (render) renderSelection();
   }
 
@@ -659,11 +669,9 @@ export function useSketchEngine(
         });
         setSelectedElements([el]);
         setSelectedTool("text");
-        history.current.push([...elements.current]);
-        syncHistoryStatus();
+        pushHistorySnapshot([...elements.current]);
         setTool("select");
-        renderScene();
-        renderSelection();
+        renderSceneAndSelection();
       });
       return;
     }
@@ -706,38 +714,24 @@ export function useSketchEngine(
             action.element.id,
           );
           setSelectedTool(null);
-          renderScene();
-          renderSelection();
+          renderSceneAndSelection();
           return;
 
         case "select-element":
           setSelectedElements([action.element]);
           setSelectedTool(action.element.tool);
-          setStrokeColor(action.element.strokeColor);
-          setFillColor(action.element.fillColor);
-          setFillStyle(action.element.fillStyle);
-          setStrokeWidth(action.element.strokeWidth);
-          if (action.element.fontFamily)
-            setFontFamily(action.element.fontFamily);
-          if (action.element.fontSize) setFontSize(action.element.fontSize);
-          if (action.element.fontWeight)
-            setFontWeight(action.element.fontWeight);
-          if (action.element.textAlign) setTextAlign(action.element.textAlign);
-          if (action.element.textVerticalAlign)
-            setTextVerticalAlign(action.element.textVerticalAlign);
+          syncToolbarStyleFromElement(action.element);
           selectInteraction.current = {
             type: "dragging",
             lastPoint: point,
             moved: false,
           };
-          renderScene();
-          renderSelection();
+          renderSceneAndSelection();
           return;
 
         case "clear-selection":
           clearSelection();
-          renderScene();
-          renderSelection();
+          renderSceneAndSelection();
           return;
 
         case "start-marquee":
@@ -930,8 +924,7 @@ export function useSketchEngine(
             setSelectedTool(null);
           }
           selectionMarquee.current = null;
-          renderScene();
-          renderSelection();
+          renderSceneAndSelection();
           return;
 
         case "finish-resize":
@@ -963,10 +956,8 @@ export function useSketchEngine(
         currentElement.current,
       );
       currentElement.current = null;
-      history.current.push(elements.current);
-      syncHistoryStatus();
-      renderScene();
-      renderSelection();
+      pushHistorySnapshot();
+      renderSceneAndSelection();
       return;
     }
 
@@ -978,8 +969,7 @@ export function useSketchEngine(
 
     if (isStrokeDraft(tool)) {
       elements.current = [...elements.current, justCreated];
-      history.current.push(elements.current);
-      syncHistoryStatus();
+      pushHistorySnapshot();
       renderScene();
 
       if (tool === "freehand" && scribbleEnabled) {
@@ -1003,11 +993,9 @@ export function useSketchEngine(
 
     setSelectedElements([justCreated]);
     setSelectedTool(justCreated.tool);
-    history.current.push([...elements.current]);
-    syncHistoryStatus();
+    pushHistorySnapshot([...elements.current]);
     setTool("select");
-    renderScene();
-    renderSelection();
+    renderSceneAndSelection();
   }
 
   function handleZoom(delta: number, cursorScreen: Point) {
@@ -1082,8 +1070,7 @@ export function useSketchEngine(
         src: reader.result as string,
       };
       elements.current = [...elements.current, el];
-      history.current.push(elements.current);
-      syncHistoryStatus();
+      pushHistorySnapshot();
       renderScene();
     };
     reader.readAsDataURL(file);
@@ -1104,30 +1091,17 @@ export function useSketchEngine(
         zoom: zoom.current,
       }).then((result) => {
         if (!result?.text.trim()) return;
-        const el: SketchElement = {
-          id: crypto.randomUUID(),
-          tool: "text",
-          seed: Math.floor(Math.random() * 100000),
+        const el = buildTextElement(point, result, {
           strokeColor,
-          fillColor: "none",
-          fillStyle: "none",
-          strokeWidth: 0,
-          x1: point.x,
-          y1: point.y,
-          x2: point.x + result.width,
-          y2: point.y + result.height,
-          text: result.text,
           fontFamily,
           fontSize,
           fontWeight,
-        };
+        });
         setSelectedElements([el]);
         setSelectedTool("text");
-        history.current.push([...elements.current]);
-        syncHistoryStatus();
+        pushHistorySnapshot([...elements.current]);
         setTool("select");
-        renderScene();
-        renderSelection();
+        renderSceneAndSelection();
       });
       return;
     }
@@ -1150,8 +1124,7 @@ export function useSketchEngine(
         if (!selectedIds.current.has(hit.id)) {
           setSelectedElements([hit]);
           setSelectedTool(hit.tool);
-          renderScene();
-          renderSelection();
+          renderSceneAndSelection();
         }
         editSelected();
       }
@@ -1166,8 +1139,7 @@ export function useSketchEngine(
       const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
       const w = Math.abs(el.x2 - el.x1);
       clearSelection();
-      renderScene();
-      renderSelection();
+      renderSceneAndSelection();
       openTextEditor({
         currentText: el.text ?? "",
         x: screenPos.x,
@@ -1188,10 +1160,8 @@ export function useSketchEngine(
         }
         const updated = applyTextEdit(el, result);
         setSelectedElements([updated]);
-        history.current.push([...elements.current]);
-        syncHistoryStatus();
-        renderScene();
-        renderSelection();
+        pushHistorySnapshot([...elements.current]);
+        renderSceneAndSelection();
       });
     } else if (
       el.tool !== "image" &&
@@ -1204,8 +1174,7 @@ export function useSketchEngine(
       const { x, y, w } = getBoundingBox(el);
       const screenPos = canvasToScreen({ x, y });
       setSelectedElements([{ ...el, text: undefined }]);
-      renderScene();
-      renderSelection();
+      renderSceneAndSelection();
       openTextEditor({
         currentText: el.text ?? "",
         x: screenPos.x,
@@ -1227,10 +1196,8 @@ export function useSketchEngine(
         }
         const updated = { ...el, text: result.text.trim() || undefined };
         setSelectedElements([updated]);
-        history.current.push([...elements.current]);
-        syncHistoryStatus();
-        renderScene();
-        renderSelection();
+        pushHistorySnapshot([...elements.current]);
+        renderSceneAndSelection();
       });
     }
   }
@@ -1241,8 +1208,7 @@ export function useSketchEngine(
       elements.current = snapshot;
       clearSelection();
       syncHistoryStatus();
-      renderScene();
-      renderSelection();
+      renderSceneAndSelection();
     }
   }
 
@@ -1252,8 +1218,7 @@ export function useSketchEngine(
       elements.current = snapshot;
       clearSelection();
       syncHistoryStatus();
-      renderScene();
-      renderSelection();
+      renderSceneAndSelection();
     }
   }
 
@@ -1263,10 +1228,8 @@ export function useSketchEngine(
       (el) => !selectedIds.current.has(el.id),
     );
     clearSelection();
-    history.current.push([...elements.current]);
-    syncHistoryStatus();
-    renderScene();
-    renderSelection();
+    pushHistorySnapshot([...elements.current]);
+    renderSceneAndSelection();
   }
 
   function duplicateSelected() {
@@ -1288,16 +1251,13 @@ export function useSketchEngine(
 
     elements.current = [...elements.current, ...duplicates];
     setSelectedElements(duplicates);
-    history.current.push([...elements.current]);
-    syncHistoryStatus();
-    renderScene();
-    renderSelection();
+    pushHistorySnapshot([...elements.current]);
+    renderSceneAndSelection();
   }
 
   function deselect() {
     clearSelection();
-    renderScene();
-    renderSelection();
+    renderSceneAndSelection();
   }
 
   function stopPanning() {
@@ -1311,10 +1271,8 @@ export function useSketchEngine(
     elements.current = newElements;
     clearSelection();
     history.current = createHistory();
-    history.current.push(newElements);
-    syncHistoryStatus();
-    renderScene();
-    renderSelection();
+    pushHistorySnapshot(newElements);
+    renderSceneAndSelection();
   }
 
   return {
