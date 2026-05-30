@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { isColorDark } from "@repo/canvas-core/colorUtils";
+import { isColorDark } from "@repo/common";
 import { CANVAS_THEME_DEFAULTS } from "../config/canvasPreferences";
 import type { CanvasBackground, CanvasMode } from "../types";
 

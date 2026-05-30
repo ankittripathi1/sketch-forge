@@ -40,3 +40,9 @@ yarn-error.log*
 # Local DB artifacts
 *.db
 ruvector.db
+
+# Local AI / agent tooling (machine-specific, not for the repo)
+.antigravitycli/
+.gemini/
+.aider*
+.impeccable.md

@@ -17,7 +17,7 @@ import {
   getBackgroundStyle,
 } from "@/features/canvas";
 import type { FillStyle } from "@repo/canvas-core/types";
-import { isColorDark } from "@repo/canvas-core/colorUtils";
+import { isColorDark } from "@repo/common";
 import { useSketchEngine, useCanvasUI } from "@repo/canvas-engine";
 import {
   Book,
@@ -30,15 +30,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
 /**
- * CanvasPage
+ * `CanvasPage`
  *
- * The root component for the canvas editor.  Its responsibilities are:
+ * The root component for the canvas editor. Its responsibilities are:
  *
  *   1. Owning the background appearance state (pattern type, paper colour,
- *      grid/dot colour) — kept here rather than in the engine because the
+ *      grid/dot `colour`) — kept here rather than in the engine because the
  *      background is rendered via CSS on the container div, not on the canvas.
  *
- *   2. Bridging the useSketchEngine hook with the UI panels (Toolbar, StylePanel,
+ *   2. Bridging the `useSketchEngine` hook with the UI panels (Toolbar, StylePanel,
  *      BackgroundPicker, SettingsPanel).  The hook exposes a stable API; this
  *      component wires the right handlers to the right panels.
  *

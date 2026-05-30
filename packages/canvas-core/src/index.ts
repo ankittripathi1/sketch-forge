@@ -34,13 +34,6 @@ export {
 export { createHistory } from "./history.js";
 export type { HistoryState } from "./history.js";
 
-// Color utilities
-export {
-  isColorDark,
-  DEFAULT_LIGHT_STROKE,
-  DEFAULT_DARK_STROKE,
-} from "./colorUtils.js";
-
 // Text editing
 export { openTextEditor } from "./textEditor.js";
 export type { TextEditorResult } from "./textEditor.js";
