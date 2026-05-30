@@ -4,7 +4,7 @@ import { RefObject, useRef, useState } from "react";
 import { SketchElement, Point, Tool, FillStyle } from "@repo/canvas-core/types";
 import type { AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
-import { hitTestElement, getBoundingBox } from "@repo/canvas-core/hitDetection";
+import { getBoundingBox } from "@repo/canvas-core/hitDetection";
 import {
   recognizeHandwriting,
   debounceForBackend,
@@ -28,58 +28,53 @@ import {
   undoHistory,
 } from "./lib/historyModel";
 import {
-  addToSelection,
   deleteElementsByIds,
   duplicateElements,
   getSelectedElements,
   mergeElementsById,
   setSelection,
-  toggleSelection,
   updateElementsByIds,
 } from "./lib/selectionModel";
 import {
-  panByOffset,
-  panByPointerMove,
-  zoomAroundScreenPoint,
-} from "./lib/viewport";
-import {
-  canEditTextForElement,
-  getTextEditPreviewElement,
-  openTextCreationEditor,
-  openTextEditEditor,
-} from "./tools/text";
+  beginPanning,
+  getCursorForPoint as getViewportCursorForPoint,
+  handlePanningMove,
+  panViewport,
+  type ViewportControllerContext,
+  zoomViewport,
+} from "./lib/viewportController";
 import { buildImageElement } from "./tools/image";
 import {
+  editSelectedText,
+  handleTextDoubleClick,
+  startTextCreation as startTextControllerCreation,
+  type TextControllerContext,
+} from "./tools/textController";
+import {
   findSingleSelectionHandle,
-  getResizeAnchorPreview,
-  getSelectCursor,
-  getSelectFinalizeAction,
-  getSelectPointerMoveAction,
-  getSelectPointerDownAction,
-  moveSelectedElements,
   type SelectionMarquee,
   type SelectInteraction,
 } from "./tools/select";
+import {
+  finalizeSelectInteraction as finalizeSelectControllerInteraction,
+  handleSelectPointerDown as handleSelectControllerPointerDown,
+  handleSelectPointerMove as handleSelectControllerPointerMove,
+  type SelectControllerContext,
+} from "./tools/selectController";
 import { createRenderers } from "./lib/rendering";
 import { useCanvasUI } from "./store";
 import {
-  bindArrowEnd,
-  buildDraftElement,
-  eraseIntersectingElements,
-  getDraftEnd,
-  getDraftStart,
-  isStrokeDraft,
-  updateDraftElement,
-} from "./tools/drawing";
+  finalizeDrawingInteraction as finalizeDrawingControllerInteraction,
+  handleDrawingPointerMove as handleDrawingControllerPointerMove,
+  startDrawing as startDrawingController,
+  updateArrowHover as updateControllerArrowHover,
+  type CanvasInteraction,
+  type DrawingControllerContext,
+} from "./tools/drawingController";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
 const DUPLICATE_OFFSET = 24;
-
-type CanvasInteraction =
-  | { type: "idle" }
-  | { type: "drawing" }
-  | { type: "panning"; lastScreenPoint: Point };
 
 /**
  * useSketchEngine
@@ -233,14 +228,6 @@ export function useSketchEngine(
    */
   function canvasToScreen(point: Point): Point {
     return transforms.canvasToScreen(point, zoom.current, panOffset.current);
-  }
-
-  function getDeviceScale(canvas: HTMLCanvasElement) {
-    return transforms.getDeviceScale(canvas);
-  }
-
-  function clearCanvas(canvas: HTMLCanvasElement) {
-    return transforms.clearCanvas(canvas);
   }
 
   /**
@@ -557,12 +544,6 @@ export function useSketchEngine(
     applyToolbarStyle(getToolbarStyleFromElement(element));
   }
 
-  function restoreSelectedElement(element: SketchElement) {
-    setSelectedElements([element]);
-    setSelectedTool(element.tool);
-    renderSelection();
-  }
-
   function saveSelectedElementEdit(element: SketchElement) {
     setSelectedElements([element]);
     pushHistorySnapshot([...elements.current]);
@@ -587,15 +568,25 @@ export function useSketchEngine(
     };
   }
 
-  function startTextCreation(screenPoint: Point, point: Point) {
-    commitSelectedElements();
-    openTextCreationEditor({
-      screenPoint,
-      point,
-      style: textEditorStyle(),
-    }).then((element) => {
-      if (element) commitCreatedElement(element);
-    });
+  function textControllerContext(): TextControllerContext {
+    return {
+      tool,
+      elements,
+      selectedIds,
+      zoom,
+      screenToCanvas,
+      canvasToScreen,
+      textEditorStyle,
+      selectedElementsList,
+      commitSelectedElements,
+      commitCreatedElement,
+      saveSelectedElementEdit,
+      clearSelection,
+      setSelectedElements,
+      setSelectedTool,
+      renderSceneAndSelection,
+      renderSelection,
+    };
   }
 
   function normalizeElement(el: SketchElement): SketchElement {
@@ -656,332 +647,119 @@ export function useSketchEngine(
     if (render) renderSelection();
   }
 
-  function beginPanning(screenPoint: Point) {
-    canvasInteraction.current = {
-      type: "panning",
-      lastScreenPoint: screenPoint,
+  function selectControllerContext(): SelectControllerContext {
+    return {
+      elements,
+      selectedIds,
+      selectionMarquee,
+      selectInteraction,
+      hoveredAnchor,
+      zoom,
+      screenToCanvas,
+      selectedElementsList,
+      setSelectedElements,
+      setSelectedTool,
+      syncToolbarStyleFromElement,
+      clearSelection,
+      applyResize,
+      syncBoundArrows,
+      findBindableShape,
+      commitSelectedElementSnapshot,
+      renderSceneAndSelection,
+      renderSelection,
+      scheduleSelectionRender,
+      scheduleSceneAndSelectionRender,
     };
   }
 
-  function startDrawing(point: Point) {
-    canvasInteraction.current = { type: "drawing" };
-    const { startBinding, startPoint } = getDraftStart({
-      tool,
-      point,
-      findBindableShape,
-    });
-    currentElement.current = buildDraftElement({
-      tool,
-      point,
-      style: { strokeColor, fillColor, fillStyle, strokeWidth },
-      startBinding,
-      startPoint,
-    });
-    renderActiveElement();
+  function queueScribble(id: string) {
+    pendingScribbleIds.current.push(id);
+    setScribblePending(true);
+    if (scribbleTimer.current) clearTimeout(scribbleTimer.current);
+    const debounceMs = debounceForBackend(recognitionConfigRef.current.backend);
+    scribbleTimer.current = setTimeout(() => {
+      void flushScribbleBatch();
+    }, debounceMs);
   }
 
-  function handleSelectPointerDown(point: Point, shiftKey: boolean) {
-    const selected = selectedElementsList();
-    const action = getSelectPointerDownAction({
-      point,
-      selected,
-      elements: elements.current,
-      zoom: zoom.current,
-      shiftKey,
-    });
+  function drawingControllerContext(): DrawingControllerContext {
+    return {
+      tool,
+      style: { strokeColor, fillColor, fillStyle, strokeWidth },
+      canvasInteraction,
+      currentElement,
+      hoveredAnchor,
+      elements,
+      interactionCanvas: interactionCavasRef,
+      rafId,
+      scribbleEnabled,
+      queueScribble,
+      findBindableShape,
+      normalizeElement,
+      commitCreatedElement,
+      pushHistorySnapshot,
+      renderActiveElement,
+      renderScene,
+      renderSceneAndSelection,
+      scheduleActiveElementRender,
+    };
+  }
 
-    switch (action.type) {
-      case "start-drag":
-        selectInteraction.current = {
-          type: "dragging",
-          lastPoint: point,
-          moved: false,
-        };
-        return;
-
-      case "start-resize":
-        selectInteraction.current = {
-          type: "resizing",
-          handle: action.handle,
-          origin: action.origin,
-          moved: false,
-        };
-        return;
-
-      case "toggle-element":
-        selectedIds.current = toggleSelection(
-          selectedIds.current,
-          action.element.id,
-        );
-        setSelectedTool(null);
-        renderSceneAndSelection();
-        return;
-
-      case "select-element":
-        setSelectedElements([action.element]);
-        setSelectedTool(action.element.tool);
-        syncToolbarStyleFromElement(action.element);
-        selectInteraction.current = {
-          type: "dragging",
-          lastPoint: point,
-          moved: false,
-        };
-        renderSceneAndSelection();
-        return;
-
-      case "clear-selection":
-        clearSelection();
-        renderSceneAndSelection();
-        return;
-
-      case "start-marquee":
-        selectionMarquee.current = action.marquee;
-        selectInteraction.current = {
-          type: "marquee",
-          additive: action.additive,
-        };
-        renderSelection();
-        return;
-
-      case "none":
-        return;
-    }
+  function viewportControllerContext(): ViewportControllerContext {
+    return {
+      tool,
+      canvasInteraction,
+      panOffset,
+      zoom,
+      elements,
+      isPanning,
+      selectedElementsList,
+      screenToCanvas,
+      setZoomLevel,
+      scheduleViewportRender,
+    };
   }
 
   function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
     if (tool === "select" && e.button === 2) return;
-    if (isPanning.current) return beginPanning(screenPoint);
+    if (isPanning.current) {
+      return beginPanning(viewportControllerContext(), screenPoint);
+    }
 
     const point = screenToCanvas(screenPoint);
-    if (tool === "text") return startTextCreation(screenPoint, point);
+    if (tool === "text") {
+      return startTextControllerCreation(
+        textControllerContext(),
+        screenPoint,
+        point,
+      );
+    }
 
     if (tool !== "select" && selectedIds.current.size > 0) {
       commitSelectedElements();
     }
 
-    if (tool === "select") return handleSelectPointerDown(point, e.shiftKey);
-    startDrawing(point);
-  }
-
-  function handlePanningMove(screenPoint: Point) {
-    if (canvasInteraction.current.type !== "panning") return false;
-
-    const interaction = canvasInteraction.current;
-    panOffset.current = panByPointerMove(
-      panOffset.current,
-      interaction.lastScreenPoint,
-      screenPoint,
-    );
-    canvasInteraction.current = {
-      type: "panning",
-      lastScreenPoint: screenPoint,
-    };
-    scheduleViewportRender();
-    return true;
-  }
-
-  function handleSelectPointerMove(screenPoint: Point) {
-    const action = getSelectPointerMoveAction({
-      interaction: selectInteraction.current,
-      screenPoint,
-      screenToCanvas,
-      selectionMarquee: selectionMarquee.current,
-      selectedCount: selectedIds.current.size,
-    });
-
-    switch (action.type) {
-      case "update-marquee":
-        selectionMarquee.current = action.marquee;
-        scheduleSelectionRender();
-        return true;
-
-      case "resize": {
-        const updated = applyResize(
-          action.interaction.origin,
-          action.interaction.handle,
-          action.point,
-        );
-        selectInteraction.current = { ...action.interaction, moved: true };
-        setSelectedElements([updated]);
-        const movedIds = new Set([updated.id]);
-        elements.current = syncBoundArrows(movedIds, elements.current);
-        hoveredAnchor.current = getResizeAnchorPreview({
-          updated,
-          handle: action.interaction.handle,
-          point: action.point,
-          findBindableShape,
-        });
-
-        scheduleSceneAndSelectionRender();
-        return true;
-      }
-
-      case "drag": {
-        selectInteraction.current = {
-          ...action.interaction,
-          lastPoint: action.point,
-          moved: true,
-        };
-        elements.current = moveSelectedElements(
-          elements.current,
-          selectedIds.current,
-          action.dx,
-          action.dy,
-        );
-
-        const movedIds = new Set(selectedIds.current);
-        if (movedIds.size > 0) {
-          elements.current = syncBoundArrows(movedIds, elements.current);
-        }
-
-        scheduleSceneAndSelectionRender();
-        return true;
-      }
-
-      case "none":
-        return false;
+    if (tool === "select") {
+      return handleSelectControllerPointerDown(
+        selectControllerContext(),
+        point,
+        e.shiftKey,
+      );
     }
-  }
-
-  function updateArrowHover(screenPoint: Point) {
-    if (tool === "arrow" && canvasInteraction.current.type !== "drawing") {
-      const point = screenToCanvas(screenPoint);
-      const target = findBindableShape(point);
-      const next = target
-        ? { shape: target.shape, anchor: target.anchor }
-        : null;
-      const prev = hoveredAnchor.current;
-      const changed =
-        (!prev && next) ||
-        (prev && !next) ||
-        (prev &&
-          next &&
-          (prev.shape.id !== next.shape.id || prev.anchor !== next.anchor));
-      if (changed) {
-        hoveredAnchor.current = next;
-        scheduleActiveElementRender();
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  function handleDrawingPointerMove(screenPoint: Point) {
-    if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
-      return;
-
-    const point = screenToCanvas(screenPoint);
-    const { endPoint, anchorHint } = getDraftEnd({
-      element: currentElement.current,
-      point,
-      findBindableShape,
-    });
-    hoveredAnchor.current = anchorHint;
-
-    currentElement.current = updateDraftElement(
-      currentElement.current,
-      point,
-      endPoint,
-    );
-    scheduleActiveElementRender();
+    startDrawingController(drawingControllerContext(), point);
   }
 
   function onPointerMove(screenPoint: Point) {
-    if (handlePanningMove(screenPoint)) return;
-    if (tool === "select" && handleSelectPointerMove(screenPoint)) return;
-    if (updateArrowHover(screenPoint)) return;
-    handleDrawingPointerMove(screenPoint);
-  }
-
-  function finalizeSelectInteraction() {
-    const action = getSelectFinalizeAction({
-      interaction: selectInteraction.current,
-      selectionMarquee: selectionMarquee.current,
-      elements: elements.current,
-    });
-    selectInteraction.current = { type: "idle" };
-
-    switch (action.type) {
-      case "finish-marquee":
-        if (action.ids.length > 0) {
-          selectedIds.current = action.additive
-            ? addToSelection(selectedIds.current, action.ids)
-            : setSelection(action.ids);
-        } else if (!action.additive) {
-          selectedIds.current = setSelection([]);
-          setSelectedTool(null);
-        }
-        selectionMarquee.current = null;
-        renderSceneAndSelection();
-        return;
-
-      case "finish-resize":
-        hoveredAnchor.current = null;
-        if (action.moved && selectedIds.current.size > 0) {
-          commitSelectedElementSnapshot();
-        }
-        return;
-
-      case "finish-drag":
-        if (!action.moved || selectedIds.current.size === 0) return;
-        commitSelectedElementSnapshot({ render: true });
-        return;
-
-      case "none":
-        return;
-    }
-  }
-
-  function finalizeDrawingInteraction() {
-    if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
+    if (handlePanningMove(viewportControllerContext(), screenPoint)) return;
+    if (
+      tool === "select" &&
+      handleSelectControllerPointerMove(selectControllerContext(), screenPoint)
+    )
       return;
-
-    canvasInteraction.current = { type: "idle" };
-    cancelAnimationFrame(rafId.current);
-
-    if (tool === "eraser") {
-      elements.current = eraseIntersectingElements(
-        elements.current,
-        currentElement.current,
-      );
-      currentElement.current = null;
-      pushHistorySnapshot();
-      renderSceneAndSelection();
-      return;
-    }
-
-    let justCreated = normalizeElement(currentElement.current!);
-    currentElement.current = null;
-    hoveredAnchor.current = null;
-
-    justCreated = bindArrowEnd(justCreated, findBindableShape);
-
-    if (isStrokeDraft(tool)) {
-      elements.current = [...elements.current, justCreated];
-      pushHistorySnapshot();
-      renderScene();
-
-      if (tool === "freehand" && scribbleEnabled) {
-        pendingScribbleIds.current.push(justCreated.id);
-        setScribblePending(true);
-        if (scribbleTimer.current) clearTimeout(scribbleTimer.current);
-        // Use a longer window for Tesseract — writers pause between letters
-        // and 800 ms fires too early, splitting each letter into its own batch.
-        const debounceMs = debounceForBackend(
-          recognitionConfigRef.current.backend,
-        );
-        scribbleTimer.current = setTimeout(() => {
-          void flushScribbleBatch();
-        }, debounceMs);
-      }
-
-      const interactionCanvas = interactionCavasRef.current;
-      if (interactionCanvas) clearCanvas(interactionCanvas);
-      return;
-    }
-
-    commitCreatedElement(justCreated);
+    const point = screenToCanvas(screenPoint);
+    const drawingCtx = drawingControllerContext();
+    if (updateControllerArrowHover(drawingCtx, point)) return;
+    handleDrawingControllerPointerMove(drawingCtx, point);
   }
 
   async function finalizeElement() {
@@ -990,47 +768,28 @@ export function useSketchEngine(
       return;
     }
 
-    if (tool === "select") return finalizeSelectInteraction();
-    finalizeDrawingInteraction();
+    if (tool === "select") {
+      return finalizeSelectControllerInteraction(selectControllerContext());
+    }
+    finalizeDrawingControllerInteraction(drawingControllerContext());
   }
 
   function handleZoom(delta: number, cursorScreen: Point) {
-    const next = zoomAroundScreenPoint({
-      currentZoom: zoom.current,
-      panOffset: panOffset.current,
+    zoomViewport({
+      ctx: viewportControllerContext(),
       cursorScreen,
       delta,
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
     });
-    zoom.current = next.zoom;
-    setZoomLevel(Math.round(next.zoom * 100));
-    panOffset.current = next.panOffset;
-    scheduleViewportRender();
   }
 
   function onPan(dx: number, dy: number) {
-    panOffset.current = panByOffset(panOffset.current, dx, dy);
-    scheduleViewportRender();
+    panViewport(viewportControllerContext(), dx, dy);
   }
 
   function getCursorForPoint(screenPoint: Point): string {
-    if (isPanning.current) return "grab";
-
-    if (tool === "select") {
-      const point = screenToCanvas(screenPoint);
-      return (
-        getSelectCursor({
-          selected: selectedElementsList(),
-          elements: elements.current,
-          point,
-          zoom: zoom.current,
-        }) ?? "crosshair"
-      );
-    }
-
-    if (tool === "text") return "text";
-    return "crosshair";
+    return getViewportCursorForPoint(viewportControllerContext(), screenPoint);
   }
 
   function handleDrop(e: DragEvent, point: Point) {
@@ -1051,64 +810,11 @@ export function useSketchEngine(
   }
 
   function onDoubleClick(screenPoint: Point) {
-    if (tool === "text") {
-      const point = screenToCanvas(screenPoint);
-      startTextCreation(screenPoint, point);
-      return;
-    }
-
-    if (tool === "select") {
-      const point = screenToCanvas(screenPoint);
-      const hit = [...elements.current]
-        .reverse()
-        .find((el) => hitTestElement(el, point, 8 / zoom.current));
-      if (hit && canEditTextForElement(hit)) {
-        if (!selectedIds.current.has(hit.id)) {
-          setSelectedElements([hit]);
-          setSelectedTool(hit.tool);
-          renderSceneAndSelection();
-        }
-        editSelected();
-      }
-    }
+    handleTextDoubleClick(textControllerContext(), screenPoint);
   }
 
   function editSelected() {
-    const selected = selectedElementsList();
-    if (selected.length !== 1) return;
-    const el = selected[0]!;
-    if (el.tool === "text") {
-      const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
-      clearSelection();
-      renderSceneAndSelection();
-      openTextEditEditor({
-        element: el,
-        screenPoint: screenPos,
-        style: textEditorStyle(),
-      }).then((updated) => {
-        if (!updated) {
-          restoreSelectedElement(el);
-          return;
-        }
-        saveSelectedElementEdit(updated);
-      });
-    } else if (canEditTextForElement(el)) {
-      const { x, y } = getBoundingBox(el);
-      const screenPos = canvasToScreen({ x, y });
-      setSelectedElements([getTextEditPreviewElement(el)]);
-      renderSceneAndSelection();
-      openTextEditEditor({
-        element: el,
-        screenPoint: { x: screenPos.x, y: screenPos.y },
-        style: textEditorStyle(),
-      }).then((updated) => {
-        if (!updated) {
-          restoreSelectedElement(el);
-          return;
-        }
-        saveSelectedElementEdit(updated);
-      });
-    }
+    editSelectedText(textControllerContext());
   }
 
   function undo() {
