@@ -11,16 +11,22 @@ import {
   type RecognitionConfig,
 } from "@repo/canvas-core/lib/recognition";
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
-import { measureTextBox, openTextEditor } from "@repo/canvas-core/textEditor";
+import { measureTextBox } from "@repo/canvas-core/textEditor";
 import * as transforms from "./lib/transform";
 import * as geometry from "./lib/geometry";
 import { recolorByTheme } from "./lib/theme";
 import {
+  getToolbarStyleFromElement,
   getToolTransitionStyle,
-  type DrawingToolbarStyle,
+  type ToolbarStyle,
 } from "./lib/toolStyle";
 import { buildTextFromStrokes } from "./lib/scribble";
 import { applyLayoutUpdates } from "./lib/beautify";
+import {
+  pushHistorySnapshot as pushSnapshotToHistory,
+  redoHistory,
+  undoHistory,
+} from "./lib/historyModel";
 import {
   addToSelection,
   deleteElementsByIds,
@@ -37,10 +43,10 @@ import {
   zoomAroundScreenPoint,
 } from "./lib/viewport";
 import {
-  applyShapeTextEdit,
-  applyTextEdit,
-  buildTextElement,
   canEditTextForElement,
+  getTextEditPreviewElement,
+  openTextCreationEditor,
+  openTextEditEditor,
 } from "./tools/text";
 import { buildImageElement } from "./tools/image";
 import {
@@ -343,16 +349,8 @@ export function useSketchEngine(
     }
   }
 
-  function syncHistoryStatus() {
-    setHistoryStatus({
-      canUndo: history.current.canUndo(),
-      canRedo: history.current.canRedo(),
-    });
-  }
-
   function pushHistorySnapshot(snapshot = elements.current) {
-    history.current.push(snapshot);
-    syncHistoryStatus();
+    setHistoryStatus(pushSnapshotToHistory(history.current, snapshot));
   }
 
   function selectedElementsList() {
@@ -540,27 +538,23 @@ export function useSketchEngine(
       nextTool,
       canvasMode,
     });
-    if (style) applyDrawingToolbarStyle(style);
+    if (style) applyToolbarStyle(style);
   }
 
-  function applyDrawingToolbarStyle(style: DrawingToolbarStyle) {
+  function applyToolbarStyle(style: ToolbarStyle) {
     setStrokeColor(style.strokeColor);
     setFillColor(style.fillColor);
     setFillStyle(style.fillStyle);
     setStrokeWidth(style.strokeWidth);
+    if (style.fontFamily) setFontFamily(style.fontFamily);
+    if (style.fontSize) setFontSize(style.fontSize);
+    if (style.fontWeight) setFontWeight(style.fontWeight);
+    if (style.textAlign) setTextAlign(style.textAlign);
+    if (style.textVerticalAlign) setTextVerticalAlign(style.textVerticalAlign);
   }
 
   function syncToolbarStyleFromElement(element: SketchElement) {
-    setStrokeColor(element.strokeColor);
-    setFillColor(element.fillColor);
-    setFillStyle(element.fillStyle);
-    setStrokeWidth(element.strokeWidth);
-    if (element.fontFamily) setFontFamily(element.fontFamily);
-    if (element.fontSize) setFontSize(element.fontSize);
-    if (element.fontWeight) setFontWeight(element.fontWeight);
-    if (element.textAlign) setTextAlign(element.textAlign);
-    if (element.textVerticalAlign)
-      setTextVerticalAlign(element.textVerticalAlign);
+    applyToolbarStyle(getToolbarStyleFromElement(element));
   }
 
   function restoreSelectedElement(element: SketchElement) {
@@ -583,26 +577,24 @@ export function useSketchEngine(
     renderSceneAndSelection();
   }
 
-  function openTextCreationEditor(screenPoint: Point, point: Point) {
-    commitSelectedElements();
-    openTextEditor({
-      x: screenPoint.x,
-      y: screenPoint.y,
-      width: 20,
+  function textEditorStyle() {
+    return {
+      strokeColor,
       fontFamily,
       fontSize,
       fontWeight,
-      color: strokeColor,
       zoom: zoom.current,
-    }).then((result) => {
-      if (!result?.text.trim()) return;
-      const el = buildTextElement(point, result, {
-        strokeColor,
-        fontFamily,
-        fontSize,
-        fontWeight,
-      });
-      commitCreatedElement(el);
+    };
+  }
+
+  function startTextCreation(screenPoint: Point, point: Point) {
+    commitSelectedElements();
+    openTextCreationEditor({
+      screenPoint,
+      point,
+      style: textEditorStyle(),
+    }).then((element) => {
+      if (element) commitCreatedElement(element);
     });
   }
 
@@ -664,97 +656,14 @@ export function useSketchEngine(
     if (render) renderSelection();
   }
 
-  function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
-    if (tool === "select" && e.button === 2) return;
+  function beginPanning(screenPoint: Point) {
+    canvasInteraction.current = {
+      type: "panning",
+      lastScreenPoint: screenPoint,
+    };
+  }
 
-    if (isPanning.current) {
-      canvasInteraction.current = {
-        type: "panning",
-        lastScreenPoint: screenPoint,
-      };
-      return;
-    }
-
-    const point = screenToCanvas(screenPoint);
-
-    if (tool === "text") {
-      openTextCreationEditor(screenPoint, point);
-      return;
-    }
-
-    if (tool !== "select" && selectedIds.current.size > 0) {
-      commitSelectedElements();
-    }
-
-    if (tool === "select") {
-      const selected = selectedElementsList();
-      const action = getSelectPointerDownAction({
-        point,
-        selected,
-        elements: elements.current,
-        zoom: zoom.current,
-        shiftKey: e.shiftKey,
-      });
-
-      switch (action.type) {
-        case "start-drag":
-          selectInteraction.current = {
-            type: "dragging",
-            lastPoint: point,
-            moved: false,
-          };
-          return;
-
-        case "start-resize":
-          selectInteraction.current = {
-            type: "resizing",
-            handle: action.handle,
-            origin: action.origin,
-            moved: false,
-          };
-          return;
-
-        case "toggle-element":
-          selectedIds.current = toggleSelection(
-            selectedIds.current,
-            action.element.id,
-          );
-          setSelectedTool(null);
-          renderSceneAndSelection();
-          return;
-
-        case "select-element":
-          setSelectedElements([action.element]);
-          setSelectedTool(action.element.tool);
-          syncToolbarStyleFromElement(action.element);
-          selectInteraction.current = {
-            type: "dragging",
-            lastPoint: point,
-            moved: false,
-          };
-          renderSceneAndSelection();
-          return;
-
-        case "clear-selection":
-          clearSelection();
-          renderSceneAndSelection();
-          return;
-
-        case "start-marquee":
-          selectionMarquee.current = action.marquee;
-          selectInteraction.current = {
-            type: "marquee",
-            additive: action.additive,
-          };
-          renderSelection();
-          return;
-
-        case "none":
-          return;
-      }
-      return;
-    }
-
+  function startDrawing(point: Point) {
     canvasInteraction.current = { type: "drawing" };
     const { startBinding, startPoint } = getDraftStart({
       tool,
@@ -771,86 +680,170 @@ export function useSketchEngine(
     renderActiveElement();
   }
 
-  function onPointerMove(screenPoint: Point) {
-    if (canvasInteraction.current.type === "panning") {
-      const interaction = canvasInteraction.current;
-      panOffset.current = panByPointerMove(
-        panOffset.current,
-        interaction.lastScreenPoint,
-        screenPoint,
-      );
-      canvasInteraction.current = {
-        type: "panning",
-        lastScreenPoint: screenPoint,
-      };
-      scheduleViewportRender();
-      return;
+  function handleSelectPointerDown(point: Point, shiftKey: boolean) {
+    const selected = selectedElementsList();
+    const action = getSelectPointerDownAction({
+      point,
+      selected,
+      elements: elements.current,
+      zoom: zoom.current,
+      shiftKey,
+    });
+
+    switch (action.type) {
+      case "start-drag":
+        selectInteraction.current = {
+          type: "dragging",
+          lastPoint: point,
+          moved: false,
+        };
+        return;
+
+      case "start-resize":
+        selectInteraction.current = {
+          type: "resizing",
+          handle: action.handle,
+          origin: action.origin,
+          moved: false,
+        };
+        return;
+
+      case "toggle-element":
+        selectedIds.current = toggleSelection(
+          selectedIds.current,
+          action.element.id,
+        );
+        setSelectedTool(null);
+        renderSceneAndSelection();
+        return;
+
+      case "select-element":
+        setSelectedElements([action.element]);
+        setSelectedTool(action.element.tool);
+        syncToolbarStyleFromElement(action.element);
+        selectInteraction.current = {
+          type: "dragging",
+          lastPoint: point,
+          moved: false,
+        };
+        renderSceneAndSelection();
+        return;
+
+      case "clear-selection":
+        clearSelection();
+        renderSceneAndSelection();
+        return;
+
+      case "start-marquee":
+        selectionMarquee.current = action.marquee;
+        selectInteraction.current = {
+          type: "marquee",
+          additive: action.additive,
+        };
+        renderSelection();
+        return;
+
+      case "none":
+        return;
+    }
+  }
+
+  function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
+    if (tool === "select" && e.button === 2) return;
+    if (isPanning.current) return beginPanning(screenPoint);
+
+    const point = screenToCanvas(screenPoint);
+    if (tool === "text") return startTextCreation(screenPoint, point);
+
+    if (tool !== "select" && selectedIds.current.size > 0) {
+      commitSelectedElements();
     }
 
-    if (tool === "select") {
-      const action = getSelectPointerMoveAction({
-        interaction: selectInteraction.current,
-        screenPoint,
-        screenToCanvas,
-        selectionMarquee: selectionMarquee.current,
-        selectedCount: selectedIds.current.size,
-      });
+    if (tool === "select") return handleSelectPointerDown(point, e.shiftKey);
+    startDrawing(point);
+  }
 
-      switch (action.type) {
-        case "update-marquee":
-          selectionMarquee.current = action.marquee;
-          scheduleSelectionRender();
-          return;
+  function handlePanningMove(screenPoint: Point) {
+    if (canvasInteraction.current.type !== "panning") return false;
 
-        case "resize": {
-          const updated = applyResize(
-            action.interaction.origin,
-            action.interaction.handle,
-            action.point,
-          );
-          selectInteraction.current = { ...action.interaction, moved: true };
-          setSelectedElements([updated]);
-          const movedIds = new Set([updated.id]);
-          elements.current = syncBoundArrows(movedIds, elements.current);
-          hoveredAnchor.current = getResizeAnchorPreview({
-            updated,
-            handle: action.interaction.handle,
-            point: action.point,
-            findBindableShape,
-          });
+    const interaction = canvasInteraction.current;
+    panOffset.current = panByPointerMove(
+      panOffset.current,
+      interaction.lastScreenPoint,
+      screenPoint,
+    );
+    canvasInteraction.current = {
+      type: "panning",
+      lastScreenPoint: screenPoint,
+    };
+    scheduleViewportRender();
+    return true;
+  }
 
-          scheduleSceneAndSelectionRender();
-          return;
-        }
+  function handleSelectPointerMove(screenPoint: Point) {
+    const action = getSelectPointerMoveAction({
+      interaction: selectInteraction.current,
+      screenPoint,
+      screenToCanvas,
+      selectionMarquee: selectionMarquee.current,
+      selectedCount: selectedIds.current.size,
+    });
 
-        case "drag": {
-          selectInteraction.current = {
-            ...action.interaction,
-            lastPoint: action.point,
-            moved: true,
-          };
-          elements.current = moveSelectedElements(
-            elements.current,
-            selectedIds.current,
-            action.dx,
-            action.dy,
-          );
+    switch (action.type) {
+      case "update-marquee":
+        selectionMarquee.current = action.marquee;
+        scheduleSelectionRender();
+        return true;
 
-          const movedIds = new Set(selectedIds.current);
-          if (movedIds.size > 0) {
-            elements.current = syncBoundArrows(movedIds, elements.current);
-          }
+      case "resize": {
+        const updated = applyResize(
+          action.interaction.origin,
+          action.interaction.handle,
+          action.point,
+        );
+        selectInteraction.current = { ...action.interaction, moved: true };
+        setSelectedElements([updated]);
+        const movedIds = new Set([updated.id]);
+        elements.current = syncBoundArrows(movedIds, elements.current);
+        hoveredAnchor.current = getResizeAnchorPreview({
+          updated,
+          handle: action.interaction.handle,
+          point: action.point,
+          findBindableShape,
+        });
 
-          scheduleSceneAndSelectionRender();
-          return;
-        }
-
-        case "none":
-          break;
+        scheduleSceneAndSelectionRender();
+        return true;
       }
-    }
 
-    // Hover-only anchor preview when the arrow tool is active but no draw in progress.
+      case "drag": {
+        selectInteraction.current = {
+          ...action.interaction,
+          lastPoint: action.point,
+          moved: true,
+        };
+        elements.current = moveSelectedElements(
+          elements.current,
+          selectedIds.current,
+          action.dx,
+          action.dy,
+        );
+
+        const movedIds = new Set(selectedIds.current);
+        if (movedIds.size > 0) {
+          elements.current = syncBoundArrows(movedIds, elements.current);
+        }
+
+        scheduleSceneAndSelectionRender();
+        return true;
+      }
+
+      case "none":
+        return false;
+    }
+  }
+
+  function updateArrowHover(screenPoint: Point) {
     if (tool === "arrow" && canvasInteraction.current.type !== "drawing") {
       const point = screenToCanvas(screenPoint);
       const target = findBindableShape(point);
@@ -868,11 +861,16 @@ export function useSketchEngine(
         hoveredAnchor.current = next;
         scheduleActiveElementRender();
       }
-      return;
+      return true;
     }
 
+    return false;
+  }
+
+  function handleDrawingPointerMove(screenPoint: Point) {
     if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
       return;
+
     const point = screenToCanvas(screenPoint);
     const { endPoint, anchorHint } = getDraftEnd({
       element: currentElement.current,
@@ -889,54 +887,56 @@ export function useSketchEngine(
     scheduleActiveElementRender();
   }
 
-  async function finalizeElement() {
-    if (canvasInteraction.current.type === "panning") {
-      canvasInteraction.current = { type: "idle" };
-      return;
+  function onPointerMove(screenPoint: Point) {
+    if (handlePanningMove(screenPoint)) return;
+    if (tool === "select" && handleSelectPointerMove(screenPoint)) return;
+    if (updateArrowHover(screenPoint)) return;
+    handleDrawingPointerMove(screenPoint);
+  }
+
+  function finalizeSelectInteraction() {
+    const action = getSelectFinalizeAction({
+      interaction: selectInteraction.current,
+      selectionMarquee: selectionMarquee.current,
+      elements: elements.current,
+    });
+    selectInteraction.current = { type: "idle" };
+
+    switch (action.type) {
+      case "finish-marquee":
+        if (action.ids.length > 0) {
+          selectedIds.current = action.additive
+            ? addToSelection(selectedIds.current, action.ids)
+            : setSelection(action.ids);
+        } else if (!action.additive) {
+          selectedIds.current = setSelection([]);
+          setSelectedTool(null);
+        }
+        selectionMarquee.current = null;
+        renderSceneAndSelection();
+        return;
+
+      case "finish-resize":
+        hoveredAnchor.current = null;
+        if (action.moved && selectedIds.current.size > 0) {
+          commitSelectedElementSnapshot();
+        }
+        return;
+
+      case "finish-drag":
+        if (!action.moved || selectedIds.current.size === 0) return;
+        commitSelectedElementSnapshot({ render: true });
+        return;
+
+      case "none":
+        return;
     }
+  }
 
-    if (tool === "select") {
-      const action = getSelectFinalizeAction({
-        interaction: selectInteraction.current,
-        selectionMarquee: selectionMarquee.current,
-        elements: elements.current,
-      });
-      selectInteraction.current = { type: "idle" };
-
-      switch (action.type) {
-        case "finish-marquee":
-          if (action.ids.length > 0) {
-            selectedIds.current = action.additive
-              ? addToSelection(selectedIds.current, action.ids)
-              : setSelection(action.ids);
-          } else if (!action.additive) {
-            selectedIds.current = setSelection([]);
-            setSelectedTool(null);
-          }
-          selectionMarquee.current = null;
-          renderSceneAndSelection();
-          return;
-
-        case "finish-resize":
-          hoveredAnchor.current = null;
-          if (action.moved && selectedIds.current.size > 0) {
-            commitSelectedElementSnapshot();
-          }
-          return;
-
-        case "finish-drag":
-          if (!action.moved || selectedIds.current.size === 0) return;
-          commitSelectedElementSnapshot({ render: true });
-          return;
-
-        case "none":
-          return;
-      }
-      return;
-    }
-
+  function finalizeDrawingInteraction() {
     if (canvasInteraction.current.type !== "drawing" || !currentElement.current)
       return;
+
     canvasInteraction.current = { type: "idle" };
     cancelAnimationFrame(rafId.current);
 
@@ -982,6 +982,16 @@ export function useSketchEngine(
     }
 
     commitCreatedElement(justCreated);
+  }
+
+  async function finalizeElement() {
+    if (canvasInteraction.current.type === "panning") {
+      canvasInteraction.current = { type: "idle" };
+      return;
+    }
+
+    if (tool === "select") return finalizeSelectInteraction();
+    finalizeDrawingInteraction();
   }
 
   function handleZoom(delta: number, cursorScreen: Point) {
@@ -1043,7 +1053,7 @@ export function useSketchEngine(
   function onDoubleClick(screenPoint: Point) {
     if (tool === "text") {
       const point = screenToCanvas(screenPoint);
-      openTextCreationEditor(screenPoint, point);
+      startTextCreation(screenPoint, point);
       return;
     }
 
@@ -1069,72 +1079,54 @@ export function useSketchEngine(
     const el = selected[0]!;
     if (el.tool === "text") {
       const screenPos = canvasToScreen({ x: el.x1, y: el.y1 });
-      const w = Math.abs(el.x2 - el.x1);
       clearSelection();
       renderSceneAndSelection();
-      openTextEditor({
-        currentText: el.text ?? "",
-        x: screenPos.x,
-        y: screenPos.y,
-        width: w,
-        fontFamily: el.fontFamily ?? fontFamily,
-        fontSize: el.fontSize ?? fontSize,
-        fontWeight: el.fontWeight ?? fontWeight,
-        color: el.strokeColor,
-        zoom: zoom.current,
-        fixedWidth: true,
-      }).then((result) => {
-        if (result === null) {
+      openTextEditEditor({
+        element: el,
+        screenPoint: screenPos,
+        style: textEditorStyle(),
+      }).then((updated) => {
+        if (!updated) {
           restoreSelectedElement(el);
           return;
         }
-        const updated = applyTextEdit(el, result);
         saveSelectedElementEdit(updated);
       });
     } else if (canEditTextForElement(el)) {
-      const { x, y, w } = getBoundingBox(el);
+      const { x, y } = getBoundingBox(el);
       const screenPos = canvasToScreen({ x, y });
-      setSelectedElements([{ ...el, text: undefined }]);
+      setSelectedElements([getTextEditPreviewElement(el)]);
       renderSceneAndSelection();
-      openTextEditor({
-        currentText: el.text ?? "",
-        x: screenPos.x,
-        y: screenPos.y,
-        width: w,
-        fontFamily: el.fontFamily ?? fontFamily,
-        fontSize: el.fontSize ?? fontSize,
-        fontWeight: el.fontWeight ?? fontWeight,
-        color: el.strokeColor,
-        zoom: zoom.current,
-        fixedWidth: true,
-        align: "center",
-      }).then((result) => {
-        if (result === null) {
+      openTextEditEditor({
+        element: el,
+        screenPoint: { x: screenPos.x, y: screenPos.y },
+        style: textEditorStyle(),
+      }).then((updated) => {
+        if (!updated) {
           restoreSelectedElement(el);
           return;
         }
-        const updated = applyShapeTextEdit(el, result);
         saveSelectedElementEdit(updated);
       });
     }
   }
 
   function undo() {
-    const snapshot = history.current.undo();
+    const { snapshot, status } = undoHistory(history.current);
+    setHistoryStatus(status);
     if (snapshot) {
       elements.current = snapshot;
       clearSelection();
-      syncHistoryStatus();
       renderSceneAndSelection();
     }
   }
 
   function redo() {
-    const snapshot = history.current.redo();
+    const { snapshot, status } = redoHistory(history.current);
+    setHistoryStatus(status);
     if (snapshot) {
       elements.current = snapshot;
       clearSelection();
-      syncHistoryStatus();
       renderSceneAndSelection();
     }
   }

@@ -1,4 +1,4 @@
-import type { FillStyle, Tool } from "@repo/canvas-core/types";
+import type { FillStyle, SketchElement, Tool } from "@repo/canvas-core/types";
 import {
   DEFAULT_DARK_STROKE,
   DEFAULT_LIGHT_STROKE,
@@ -10,6 +10,16 @@ export type DrawingToolbarStyle = {
   fillStyle: FillStyle;
   strokeWidth: number;
 };
+
+export type TextToolbarStyle = {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: "normal" | "bold";
+  textAlign?: "left" | "center" | "right";
+  textVerticalAlign?: "top" | "middle" | "bottom";
+};
+
+export type ToolbarStyle = DrawingToolbarStyle & TextToolbarStyle;
 
 export function getToolTransitionStyle({
   currentTool,
@@ -40,4 +50,20 @@ export function getToolTransitionStyle({
   }
 
   return null;
+}
+
+export function getToolbarStyleFromElement(
+  element: SketchElement,
+): ToolbarStyle {
+  return {
+    strokeColor: element.strokeColor,
+    fillColor: element.fillColor,
+    fillStyle: element.fillStyle,
+    strokeWidth: element.strokeWidth,
+    fontFamily: element.fontFamily,
+    fontSize: element.fontSize,
+    fontWeight: element.fontWeight,
+    textAlign: element.textAlign,
+    textVerticalAlign: element.textVerticalAlign,
+  };
 }

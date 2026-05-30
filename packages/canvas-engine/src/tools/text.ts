@@ -1,4 +1,6 @@
 import type { Point, SketchElement } from "@repo/canvas-core/types";
+import { getBoundingBox } from "@repo/canvas-core/hitDetection";
+import { openTextEditor } from "@repo/canvas-core/textEditor";
 
 export type TextEditorResult = {
   text: string;
@@ -11,6 +13,10 @@ export type TextStyle = {
   fontFamily: string;
   fontSize: number;
   fontWeight: "normal" | "bold";
+};
+
+export type TextEditorStyle = TextStyle & {
+  zoom: number;
 };
 
 const NON_EDITABLE_LABEL_TOOLS = new Set([
@@ -72,4 +78,68 @@ export function applyShapeTextEdit(
     ...el,
     text: result.text.trim() || undefined,
   };
+}
+
+export function getTextEditPreviewElement(el: SketchElement): SketchElement {
+  return canEditTextForElement(el) && el.tool !== "text"
+    ? { ...el, text: undefined }
+    : el;
+}
+
+export async function openTextCreationEditor({
+  screenPoint,
+  point,
+  style,
+}: {
+  screenPoint: Point;
+  point: Point;
+  style: TextEditorStyle;
+}): Promise<SketchElement | null> {
+  const result = await openTextEditor({
+    x: screenPoint.x,
+    y: screenPoint.y,
+    width: 20,
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontWeight: style.fontWeight,
+    color: style.strokeColor,
+    zoom: style.zoom,
+  });
+
+  if (!result?.text.trim()) return null;
+  return buildTextElement(point, result, style);
+}
+
+export async function openTextEditEditor({
+  element,
+  screenPoint,
+  style,
+}: {
+  element: SketchElement;
+  screenPoint: Point;
+  style: TextEditorStyle;
+}): Promise<SketchElement | null> {
+  const isTextElement = element.tool === "text";
+  const width = isTextElement
+    ? Math.abs(element.x2 - element.x1)
+    : getBoundingBox(element).w;
+
+  const result = await openTextEditor({
+    currentText: element.text ?? "",
+    x: screenPoint.x,
+    y: screenPoint.y,
+    width,
+    fontFamily: element.fontFamily ?? style.fontFamily,
+    fontSize: element.fontSize ?? style.fontSize,
+    fontWeight: element.fontWeight ?? style.fontWeight,
+    color: element.strokeColor,
+    zoom: style.zoom,
+    fixedWidth: true,
+    align: isTextElement ? undefined : "center",
+  });
+
+  if (result === null) return null;
+  return isTextElement
+    ? applyTextEdit(element, result)
+    : applyShapeTextEdit(element, result);
 }
