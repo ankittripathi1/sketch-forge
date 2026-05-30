@@ -1,7 +1,9 @@
 {
-  "name": "@repo/canvas-engine",
+  "name": "@repo/math",
   "version": "0.0.0",
   "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
@@ -9,18 +11,8 @@
   "scripts": {
     "check-types": "tsc --noEmit"
   },
-  "dependencies": {
-    "@repo/canvas-core": "*",
-    "@repo/math": "*",
-    "roughjs": "^4.6.6",
-    "zustand": "^5.0.13"
-  },
-  "peerDependencies": {
-    "react": "^19.2.0"
-  },
   "devDependencies": {
     "@repo/typescript-config": "*",
-    "@types/react": "19.2.2",
     "typescript": "^6.0.3"
   }
 }

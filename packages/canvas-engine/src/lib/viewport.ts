@@ -1,5 +1,5 @@
 import type { Point } from "@repo/canvas-core/types";
-import { screenToCanvas } from "./transform";
+import { screenToCanvas } from "@repo/math";
 
 export function panByOffset(panOffset: Point, dx: number, dy: number): Point {
   return {

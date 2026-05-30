@@ -5,7 +5,10 @@ import { SketchElement, Point, Tool, ActiveTool, FillStyle } from "@repo/canvas-
 import type { AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
 import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
-import * as transforms from "./lib/transform";
+import {
+  screenToCanvas as screenToCanvasMath,
+  canvasToScreen as canvasToScreenMath,
+} from "@repo/math";
 import * as geometry from "./lib/geometry";
 import {
   applyThemeColors as applyControllerThemeColors,
@@ -231,7 +234,7 @@ export function useSketchEngine(
    * Used in all pointer event handlers to translate cursor positions.
    */
   function screenToCanvas(point: Point): Point {
-    return transforms.screenToCanvas(point, zoom.current, panOffset.current);
+    return screenToCanvasMath(point, zoom.current, panOffset.current);
   }
 
   /**
@@ -239,7 +242,7 @@ export function useSketchEngine(
    * editor textarea over an existing text element.
    */
   function canvasToScreen(point: Point): Point {
-    return transforms.canvasToScreen(point, zoom.current, panOffset.current);
+    return canvasToScreenMath(point, zoom.current, panOffset.current);
   }
 
   /**
