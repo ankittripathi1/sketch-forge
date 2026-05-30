@@ -1,4 +1,4 @@
-import type { Point, SketchElement, Tool } from "@repo/canvas-core/types";
+import type { ActiveTool, Point, SketchElement } from "@repo/canvas-core/types";
 import {
   panByOffset,
   panByPointerMove,
@@ -14,7 +14,7 @@ type CanvasInteraction =
   | { type: "panning"; lastScreenPoint: Point };
 
 export type ViewportControllerContext = {
-  tool: Tool;
+  tool: ActiveTool;
   canvasInteraction: Ref<CanvasInteraction>;
   panOffset: Ref<Point>;
   zoom: Ref<number>;

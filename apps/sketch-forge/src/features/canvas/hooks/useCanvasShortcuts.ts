@@ -2,11 +2,11 @@
 
 import { useEffect } from "react";
 import type { MutableRefObject } from "react";
-import type { Tool } from "@repo/canvas-core/types";
+import type { ActiveTool } from "@repo/canvas-core/types";
 
 interface UseCanvasShortcutsOptions {
-  tool: Tool;
-  setTool: (tool: Tool) => void;
+  tool: ActiveTool;
+  setTool: (tool: ActiveTool) => void;
   deleteSelected: () => void;
   deselect: () => void;
   duplicateSelected: () => void;

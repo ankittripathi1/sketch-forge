@@ -1,4 +1,7 @@
-/** Drawing tool identifier. 'select', 'text', and 'image' are canvas-only. */
+/**
+ * Element kind that can be drawn and **persisted**. Mirrors `@repo/schema`'s
+ * `ToolSchema` exactly — never add interaction-only modes here.
+ */
 export type Tool =
   | "rectangle"
   | "ellipse"
@@ -9,8 +12,13 @@ export type Tool =
   | "highlighter"
   | "eraser"
   | "text"
-  | "image"
-  | "select";
+  | "image";
+
+/**
+ * Tool selectable in the UI, including the interaction-only `"select"` mode.
+ * Use this for the *current/active* tool; use {@link Tool} for an element's kind.
+ */
+export type ActiveTool = Tool | "select";
 
 /** Fill rendering mode for closed shapes. */
 export type FillStyle = "none" | "hachure" | "solid";

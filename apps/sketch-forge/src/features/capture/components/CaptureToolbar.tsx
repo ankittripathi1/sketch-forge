@@ -1,11 +1,11 @@
 "use client";
 
 import { Pencil, Type, Undo2, CheckCircle2 } from "lucide-react";
-import { Tool } from "@repo/canvas-core/types";
+import { ActiveTool } from "@repo/canvas-core/types";
 
 interface CaptureToolbarProps {
-  tool: Tool;
-  setTool: (tool: Tool) => void;
+  tool: ActiveTool;
+  setTool: (tool: ActiveTool) => void;
   strokeColor: string;
   setStrokeColor: (color: string) => void;
   strokeWidth: number;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SketchElement as CanonicalSketchElement } from "@repo/canvas-core/types";
 
 export const ToolSchema = z.enum([
   "rectangle",
@@ -66,3 +67,16 @@ export const UpdateCanvasSchema = z.object({
   elements: z.array(SketchElementSchema).optional(),
   thumbnail: z.string().optional(),
 });
+
+// Generic equality helper - both sides must be assignable to each other.
+type AssertEqual<A, B> = [A] extends [B]
+  ? [B] extends [A]
+    ? true
+    : false
+  : false;
+
+// Bidirectional drift check. if either direction fails, tsc errors here.
+const _sketchElementDriftCheck: AssertEqual<
+  z.infer<typeof SketchElementSchema>,
+  CanonicalSketchElement
+> = true;

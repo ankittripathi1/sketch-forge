@@ -15,10 +15,10 @@ import {
   Undo2,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { Tool } from "@repo/canvas-core/types";
+import { ActiveTool } from "@repo/canvas-core/types";
 
 const TOOL_GROUPS: {
-  items: { icon: ReactNode; value: Tool; label: string }[];
+  items: { icon: ReactNode; value: ActiveTool; label: string }[];
 }[] = [
   {
     items: [
@@ -85,8 +85,8 @@ const TOOL_GROUPS: {
 ];
 
 interface ToolbarProps {
-  tool: Tool;
-  onToolChange: (t: Tool) => void;
+  tool: ActiveTool;
+  onToolChange: (t: ActiveTool) => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;

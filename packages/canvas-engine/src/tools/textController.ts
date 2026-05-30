@@ -1,4 +1,4 @@
-import type { Point, SketchElement, Tool } from "@repo/canvas-core/types";
+import type { ActiveTool, Point, SketchElement, Tool } from "@repo/canvas-core/types";
 import { hitTestElement } from "@repo/canvas-core/hitDetection";
 import {
   canEditTextForElement,
@@ -11,7 +11,7 @@ import {
 type Ref<T> = { current: T };
 
 export type TextControllerContext = {
-  tool: Tool;
+  tool: ActiveTool;
   elements: Ref<SketchElement[]>;
   selectedIds: Ref<Set<string>>;
   zoom: Ref<number>;

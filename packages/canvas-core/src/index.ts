@@ -1,6 +1,7 @@
 // Types
 export type {
   Tool,
+  ActiveTool,
   FillStyle,
   Point,
   SketchElement,

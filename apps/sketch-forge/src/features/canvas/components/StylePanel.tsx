@@ -4,6 +4,7 @@ import { ChevronDown, Pipette, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Tool,
+  ActiveTool,
   FillStyle,
   TextAlign,
   TextVerticalAlign,
@@ -167,7 +168,7 @@ function isHexColor(value: string) {
 }
 
 interface StylePanelProps {
-  tool: Tool;
+  tool: ActiveTool;
   selectedTool: Tool | null;
   onStrokeColor: (c: string) => void;
   onFillColor: (c: string) => void;

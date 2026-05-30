@@ -1,4 +1,4 @@
-import type { FillStyle, SketchElement, Tool } from "@repo/canvas-core/types";
+import type { ActiveTool, FillStyle, SketchElement } from "@repo/canvas-core/types";
 import {
   getToolbarStyleFromElement,
   getToolTransitionStyle,
@@ -7,14 +7,14 @@ import {
 import type { TextEditorStyle } from "../tools/text";
 
 export type ToolStyleControllerContext = {
-  tool: Tool;
+  tool: ActiveTool;
   canvasMode: "light" | "dark";
   strokeColor: string;
   fontFamily: string;
   fontSize: number;
   fontWeight: "normal" | "bold";
   zoom: number;
-  setTool: (tool: Tool) => void;
+  setTool: (tool: ActiveTool) => void;
   setStrokeColor: (color: string) => void;
   setFillColor: (color: string) => void;
   setFillStyle: (style: FillStyle) => void;
@@ -51,7 +51,7 @@ export function syncToolbarStyleFromElement(
   applyToolbarStyle(ctx, getToolbarStyleFromElement(element));
 }
 
-export function applyTool(ctx: ToolStyleControllerContext, nextTool: Tool) {
+export function applyTool(ctx: ToolStyleControllerContext, nextTool: ActiveTool) {
   if (ctx.tool !== nextTool) {
     ctx.commitSelectedElements();
   }

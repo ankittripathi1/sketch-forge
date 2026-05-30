@@ -1,4 +1,4 @@
-import type { FillStyle, SketchElement, Tool } from "@repo/canvas-core/types";
+import type { ActiveTool, FillStyle, SketchElement } from "@repo/canvas-core/types";
 import {
   DEFAULT_DARK_STROKE,
   DEFAULT_LIGHT_STROKE,
@@ -26,8 +26,8 @@ export function getToolTransitionStyle({
   nextTool,
   canvasMode,
 }: {
-  currentTool: Tool;
-  nextTool: Tool;
+  currentTool: ActiveTool;
+  nextTool: ActiveTool;
   canvasMode: "light" | "dark";
 }): DrawingToolbarStyle | null {
   if (nextTool === "highlighter") {

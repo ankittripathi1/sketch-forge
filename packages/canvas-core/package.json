@@ -25,7 +25,6 @@
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
     "@lezer/highlight": "^1.2.3",
-    "@repo/schema": "*",
     "prismjs": "^1.30.0",
     "roughjs": "^4.6.6",
     "tesseract.js": "^7.0.0"

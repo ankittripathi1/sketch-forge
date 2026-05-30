@@ -1,7 +1,7 @@
 "use client";
 
 import { RefObject, useRef, useState } from "react";
-import { SketchElement, Point, Tool, FillStyle } from "@repo/canvas-core/types";
+import { SketchElement, Point, Tool, ActiveTool, FillStyle } from "@repo/canvas-core/types";
 import type { AnchorSide } from "@repo/canvas-core/types";
 import { createHistory } from "@repo/canvas-core/history";
 import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
@@ -157,7 +157,7 @@ export function useSketchEngine(
   } = useCanvasUI();
 
   // ── Engine-internal state: stays in the hook (state machine + flow flags). ──
-  const [tool, setTool] = useState<Tool>("rectangle");
+  const [tool, setTool] = useState<ActiveTool>("rectangle");
   const [historyStatus, setHistoryStatus] = useState({
     canUndo: false,
     canRedo: false,
@@ -471,7 +471,8 @@ export function useSketchEngine(
 
   function drawingControllerContext(): DrawingControllerContext {
     return {
-      tool,
+      // Drawing handlers early-return when tool === "select", so narrowing here is safe.
+      tool: tool as Tool,
       style: { strokeColor, fillColor, fillStyle, strokeWidth },
       canvasInteraction,
       currentElement,
@@ -655,7 +656,7 @@ export function useSketchEngine(
     setElements,
     tool,
 
-    setTool: (nextTool: Tool) =>
+    setTool: (nextTool: ActiveTool) =>
       applyControllerTool(toolStyleControllerContext(), nextTool),
     strokeColor,
     setStrokeColor: (color: string) =>
