@@ -53,7 +53,7 @@ export function LoginForm() {
             Sign in
           </h1>
           <p className="mt-1 text-sm leading-relaxed text-text-secondary">
-            Your folders, pages, templates, and canvas saves need an account.
+            Your folders, pages, and canvas saves need an account.
           </p>
 
           <a

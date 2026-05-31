@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import type { MutableRefObject } from "react";
-import type { ActiveTool } from "@repo/canvas-core/types";
+import type { ActiveTool } from "@repo/element/types";
 
 interface UseCanvasShortcutsOptions {
   tool: ActiveTool;

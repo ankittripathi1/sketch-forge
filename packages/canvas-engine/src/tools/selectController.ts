@@ -3,12 +3,12 @@ import type {
   Point,
   SketchElement,
   Tool,
-} from "@repo/canvas-core/types";
+} from "@repo/element/types";
 import {
   addToSelection,
   setSelection,
   toggleSelection,
-} from "../lib/selectionModel";
+} from "@repo/element/selection";
 import {
   getResizeAnchorPreview,
   getSelectFinalizeAction,

@@ -1,13 +1,15 @@
-import { createHistory, type HistoryState } from "@repo/canvas-core/history";
-import type { Point, SketchElement } from "@repo/canvas-core/types";
-import { deleteElementsByIds, duplicateElements } from "./selectionModel";
-import {
-  pushHistorySnapshot,
-  redoHistory,
-  undoHistory,
-  type HistoryStatus,
-} from "./historyModel";
+import { createHistory, type HistoryState } from "@repo/element/history";
+import type { Point, SketchElement } from "@repo/element/types";
+import { redoHistory, undoHistory, type HistoryStatus } from "./historyModel";
 import { buildImageElement } from "../tools/image";
+import type { CanvasAppState } from "../appState";
+import {
+  actionDeleteSelected,
+  actionDeselect,
+  actionDuplicateSelected,
+} from "../actions/selection";
+import { dispatchAction } from "../actions/manager";
+import { actionAddElement, actionReplaceScene } from "../actions/elements";
 
 type Ref<T> = { current: T };
 
@@ -15,29 +17,27 @@ export type CanvasCommandsContext = {
   elements: Ref<SketchElement[]>;
   selectedIds: Ref<Set<string>>;
   history: Ref<HistoryState>;
+  setSceneElements: (elements: SketchElement[]) => void;
+  getAppState: () => CanvasAppState;
+  applyAppState: (updates: Partial<CanvasAppState>) => void;
+  onChange?: () => void;
   screenToCanvas: (point: Point) => Point;
-  selectedElementsList: () => SketchElement[];
-  setSelectedElements: (next: SketchElement[]) => void;
   setHistoryStatus: (status: HistoryStatus) => void;
   clearSelection: () => void;
   renderScene: () => void;
   renderSceneAndSelection: () => void;
 };
 
-function recordHistory(
-  ctx: CanvasCommandsContext,
-  snapshot = ctx.elements.current,
-) {
-  ctx.setHistoryStatus(pushHistorySnapshot(ctx.history.current, snapshot));
-}
-
 export function undoCanvas(ctx: CanvasCommandsContext) {
   const { snapshot, status } = undoHistory(ctx.history.current);
   ctx.setHistoryStatus(status);
   if (!snapshot) return;
 
-  ctx.elements.current = snapshot;
-  ctx.clearSelection();
+  dispatchAction(ctx, actionReplaceScene, {
+    elements: snapshot,
+    captureUpdate: "none",
+  });
+  ctx.onChange?.();
   ctx.renderSceneAndSelection();
 }
 
@@ -46,20 +46,18 @@ export function redoCanvas(ctx: CanvasCommandsContext) {
   ctx.setHistoryStatus(status);
   if (!snapshot) return;
 
-  ctx.elements.current = snapshot;
-  ctx.clearSelection();
+  dispatchAction(ctx, actionReplaceScene, {
+    elements: snapshot,
+    captureUpdate: "none",
+  });
+  ctx.onChange?.();
   ctx.renderSceneAndSelection();
 }
 
 export function deleteSelectedElements(ctx: CanvasCommandsContext) {
-  if (ctx.selectedIds.current.size === 0) return;
+  const result = dispatchAction(ctx, actionDeleteSelected, undefined);
+  if (!result) return;
 
-  ctx.elements.current = deleteElementsByIds(
-    ctx.elements.current,
-    ctx.selectedIds.current,
-  );
-  ctx.clearSelection();
-  recordHistory(ctx, [...ctx.elements.current]);
   ctx.renderSceneAndSelection();
 }
 
@@ -67,18 +65,16 @@ export function duplicateSelectedElements(
   ctx: CanvasCommandsContext,
   offset: number,
 ) {
-  const originals = ctx.selectedElementsList();
-  if (originals.length === 0) return;
+  const result = dispatchAction(ctx, actionDuplicateSelected, { offset });
+  if (!result) return;
 
-  const duplicates = duplicateElements(originals, offset);
-  ctx.elements.current = [...ctx.elements.current, ...duplicates];
-  ctx.setSelectedElements(duplicates);
-  recordHistory(ctx, [...ctx.elements.current]);
   ctx.renderSceneAndSelection();
 }
 
 export function deselectCanvas(ctx: CanvasCommandsContext) {
-  ctx.clearSelection();
+  const result = dispatchAction(ctx, actionDeselect, undefined);
+  if (!result) return;
+
   ctx.renderSceneAndSelection();
 }
 
@@ -86,10 +82,10 @@ export function replaceCanvasElements(
   ctx: CanvasCommandsContext,
   newElements: SketchElement[],
 ) {
-  ctx.elements.current = newElements;
-  ctx.clearSelection();
   ctx.history.current = createHistory();
-  recordHistory(ctx, newElements);
+  dispatchAction(ctx, actionReplaceScene, {
+    elements: newElements,
+  });
   ctx.renderSceneAndSelection();
 }
 
@@ -107,8 +103,10 @@ export function handleImageDrop(
   const reader = new FileReader();
   reader.onload = () => {
     const element = buildImageElement(canvasPoint, reader.result as string);
-    ctx.elements.current = [...ctx.elements.current, element];
-    recordHistory(ctx);
+    dispatchAction(ctx, actionAddElement, {
+      element,
+      select: false,
+    });
     ctx.renderScene();
   };
   reader.readAsDataURL(file);

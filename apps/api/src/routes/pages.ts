@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware, AuthVariables } from "../middleware/auth.js";
-import { db, pages, folders, reviewLogs } from "@repo/db";
+import { db, pages, reviewLogs } from "@repo/db";
 import { and, eq, asc, lte, or, isNull, sql, like } from "drizzle-orm";
 import {
   CreatePageSchema,
@@ -199,24 +199,7 @@ pagesRouter.post("/", async (c) => {
     );
   }
 
-  let elements = parsed.data.elements || [];
-
-  // If no elements provided and folderId is present, check for default template
-  if (elements.length === 0 && parsed.data.folderId) {
-    const folder = await db.query.folders.findFirst({
-      where: and(
-        eq(folders.id, parsed.data.folderId),
-        eq(folders.userId, userId),
-      ),
-      with: {
-        defaultTemplate: true,
-      },
-    });
-
-    if (folder?.defaultTemplate) {
-      elements = folder.defaultTemplate.elements as SketchElement[];
-    }
-  }
+  const elements = parsed.data.elements || [];
 
   const searchableText = extractSearchableText(elements);
 

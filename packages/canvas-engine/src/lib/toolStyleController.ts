@@ -1,4 +1,4 @@
-import type { ActiveTool, FillStyle, SketchElement } from "@repo/canvas-core/types";
+import type { ActiveTool, FillStyle, SketchElement } from "@repo/element/types";
 import {
   getToolbarStyleFromElement,
   getToolTransitionStyle,

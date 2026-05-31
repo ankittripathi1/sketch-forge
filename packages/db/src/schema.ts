@@ -1,6 +1,5 @@
 import {
   AnyPgColumn,
-  boolean,
   doublePrecision,
   index,
   integer,
@@ -34,7 +33,6 @@ export const userRelations = relations(userTable, ({ many }) => ({
   magicLinkTokens: many(magicLinkTokens),
   folders: many(folders),
   pages: many(pages),
-  templates: many(templates),
   reviewLogs: many(reviewLogs),
 }));
 
@@ -102,12 +100,6 @@ export const folders = pgTable(
     parentId: uuid("parent_id").references((): AnyPgColumn => folders.id, {
       onDelete: "cascade",
     }),
-    templateId: uuid("template_id").references(
-      (): AnyPgColumn => templates.id,
-      {
-        onDelete: "set null",
-      },
-    ),
     name: text("name").notNull(),
     icon: text("icon"),
     color: text("color"),
@@ -135,45 +127,6 @@ export const foldersRelations = relations(folders, ({ one, many }) => ({
   }),
   children: many(folders, { relationName: "folder_children" }),
   pages: many(pages),
-  defaultTemplate: one(templates, {
-    fields: [folders.templateId],
-    references: [templates.id],
-  }),
-}));
-
-export const templates = pgTable(
-  "templates",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").references(() => userTable.id, {
-      onDelete: "set null",
-    }),
-    folderId: uuid("folder_id").references(() => folders.id, {
-      onDelete: "set null",
-    }),
-    name: text("name").notNull(),
-    description: text("description"),
-    elements: jsonb("elements").notNull(), // SketchElement[]
-    thumbnail: text("thumbnail"),
-    isSystem: boolean("is_system").default(false).notNull(),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-  },
-  (table) => ({
-    userIdIdx: index("templates_user_id_idx").on(table.userId),
-    isSystemIdx: index("templates_is_system_idx").on(table.isSystem),
-  }),
-);
-
-export const templatesRelations = relations(templates, ({ one, many }) => ({
-  user: one(userTable, {
-    fields: [templates.userId],
-    references: [userTable.id],
-  }),
-  folder: one(folders, {
-    fields: [templates.folderId],
-    references: [folders.id],
-  }),
-  foldersWithThisDefault: many(folders),
 }));
 
 export const pages = pgTable(

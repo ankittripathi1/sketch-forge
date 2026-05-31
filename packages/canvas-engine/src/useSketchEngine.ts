@@ -1,15 +1,21 @@
 "use client";
 
 import { RefObject, useRef, useState } from "react";
-import { SketchElement, Point, Tool, ActiveTool, FillStyle } from "@repo/canvas-core/types";
-import type { AnchorSide } from "@repo/canvas-core/types";
-import { createHistory } from "@repo/canvas-core/history";
+import {
+  SketchElement,
+  Point,
+  Tool,
+  ActiveTool,
+  FillStyle,
+} from "@repo/element/types";
+import type { AnchorSide } from "@repo/element/types";
+import { createHistory } from "@repo/element/history";
 import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
 import {
   screenToCanvas as screenToCanvasMath,
   canvasToScreen as canvasToScreenMath,
 } from "@repo/math";
-import * as geometry from "./lib/geometry";
+import * as geometry from "@repo/element/transform";
 import {
   applyThemeColors as applyControllerThemeColors,
   beautifyLayout as beautifyControllerLayout,
@@ -25,7 +31,6 @@ import {
   applyStrokeWidth as applyControllerStrokeWidth,
   applyTextAlign as applyControllerTextAlign,
   applyTextVerticalAlign as applyControllerTextVerticalAlign,
-  applyTool as applyControllerTool,
   getTextEditorStyle,
   syncToolbarStyleFromElement as syncControllerToolbarStyleFromElement,
   type ToolStyleControllerContext,
@@ -44,13 +49,7 @@ import {
   type CanvasCommandsContext,
   undoCanvas,
 } from "./lib/canvasCommands";
-import { pushHistorySnapshot as pushSnapshotToHistory } from "./lib/historyModel";
-import {
-  getSelectedElements,
-  mergeElementsById,
-  setSelection,
-  updateElementsByIds,
-} from "./lib/selectionModel";
+import { getSelectedElements } from "@repo/element/selection";
 import {
   beginPanning,
   getCursorForPoint as getViewportCursorForPoint,
@@ -86,46 +85,13 @@ import {
   type CanvasInteraction,
   type DrawingControllerContext,
 } from "./tools/drawingController";
+import { createScene } from "./scene";
+import { createEditorController } from "./editor/editorController";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
 const DUPLICATE_OFFSET = 24;
 
-/**
- * useSketchEngine
- *
- * The central state machine for the canvas editor.  This single hook owns
- * ALL mutable canvas state and exposes a stable API that the page component
- * and UI panels consume.
- *
- * Architecture notes:
- *
- * TWO-CANVAS DESIGN
- *   The renderer uses two stacked <canvas> elements:
- *   - sceneCanvas (bottom): committed, stable elements — re-drawn only when the
- *     element list changes (add, delete, undo, redo, beautify, theme change).
- *   - interactionCanvas (top): transient state — the element being drawn right
- *     now, selection boxes, resize handles, the marquee rectangle.  This layer
- *     is redrawn on every pointer-move via requestAnimationFrame.
- *   Splitting the layers prevents expensive full-scene re-renders during fast
- *   pointer interactions.
- *
- * REFS vs STATE
- *   Elements, selection, zoom, pan, and drawing state are stored in refs rather
- *   than React state.  This lets them be mutated synchronously inside pointer
- *   event handlers without triggering re-renders on every mouse move.
- *   React state is used only for values that directly drive JSX: tool, colors,
- *   zoom display, history availability, and async operation flags.
- *
- * HISTORY
- *   The history module (createHistory) keeps a stack of element snapshots.
- *   Each snapshot is a plain SketchElement[].  undo() / redo() swap the entire
- *   array in one step.  The selected elements are merged into the snapshot so
- *   that selection state is also undoable.
- *
- * @param sceneCanvasRef       Ref to the bottom canvas (committed scene).
- * @param interactionCavasRef  Ref to the top canvas (transient interaction).
- */
 export function useSketchEngine(
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>,
   interactionCavasRef: RefObject<HTMLCanvasElement | null>,
@@ -159,7 +125,6 @@ export function useSketchEngine(
     setRecognitionApiKey,
   } = useCanvasUI();
 
-  // ── Engine-internal state: stays in the hook (state machine + flow flags). ──
   const [tool, setTool] = useState<ActiveTool>("rectangle");
   const [historyStatus, setHistoryStatus] = useState({
     canUndo: false,
@@ -169,17 +134,6 @@ export function useSketchEngine(
   const [zoomLevel, setZoomLevel] = useState(100);
   const [scribblePending, setScribblePending] = useState(false);
   const [isBeautifying, setIsBeautifying] = useState(false);
-  /**
-   * Mutable ref that mirrors recognitionBackend + recognitionApiKey state.
-   *
-   * Why a ref instead of reading state directly?
-   * Scribble recognition and AI beautify run asynchronously from timers and
-   * event handlers. By the time they run, the React closure that created them
-   * may be stale — they'd read the old state values.
-   * Writing to a ref on every render (two lines below) ensures the async
-   * callbacks always see the current config without needing to be in a
-   * useEffect dependency array.
-   */
   const recognitionConfigRef = useRef<RecognitionConfig>({
     backend: "tesseract",
   });
@@ -193,6 +147,7 @@ export function useSketchEngine(
   const selectInteraction = useRef<SelectInteraction>({ type: "idle" });
   const canvasInteraction = useRef<CanvasInteraction>({ type: "idle" });
   const elements = useRef<SketchElement[]>([]);
+  const scene = useRef(createScene());
   const currentElement = useRef<SketchElement | null>(null);
   const isPanning = useRef(false);
   const zoom = useRef(1);
@@ -200,60 +155,26 @@ export function useSketchEngine(
   const rafId = useRef<number>(0);
   const viewportRafId = useRef<number>(0);
   const history = useRef(createHistory());
-  /**
-   * The shape + anchor side the cursor is currently snapping to while drawing
-   * or repositioning an arrow endpoint. Drives the anchor-hint overlay so the
-   * user can see exactly where the arrow will connect before releasing.
-   */
   const hoveredAnchor = useRef<{
     shape: SketchElement;
     anchor: AnchorSide;
   } | null>(null);
-  /**
-   * IDs of freehand stroke elements waiting to be recognised as a batch.
-   * Strokes are accumulated here during the debounce window, then consumed
-   * and cleared by the scribble controller.
-   */
   const pendingScribbleIds = useRef<string[]>([]);
-  /**
-   * Handle for the debounce setTimeout.  Cleared and restarted each time a
-   * new stroke is added, so the timer only fires after the user pauses.
-   */
   const scribbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync the config ref on every render so async callbacks read fresh values.
-  // This runs synchronously during render — before any effects or timers.
   recognitionConfigRef.current = {
     backend: recognitionBackend,
     apiKey: recognitionApiKey,
   };
 
-  /**
-   * Converts a screen-space point (CSS pixels relative to the canvas element)
-   * to canvas-space coordinates, accounting for pan offset and zoom level.
-   * Used in all pointer event handlers to translate cursor positions.
-   */
   function screenToCanvas(point: Point): Point {
     return screenToCanvasMath(point, zoom.current, panOffset.current);
   }
 
-  /**
-   * Inverse of screenToCanvas.  Used when positioning the floating text
-   * editor textarea over an existing text element.
-   */
   function canvasToScreen(point: Point): Point {
     return canvasToScreenMath(point, zoom.current, panOffset.current);
   }
 
-  /**
-   * Redraws the entire committed scene onto the bottom canvas.
-   *
-   * Called after any operation that changes elements.current:
-   * add, delete, undo, redo, theme change, beautify, scribble conversion.
-   *
-   * The onImageLoad callback passed to drawElement is renderScene itself,
-   * so that image elements trigger a repaint once their src has loaded.
-   */
   const renderers = createRenderers({
     sceneCanvas: sceneCanvasRef,
     interactionCanvas: interactionCavasRef,
@@ -279,39 +200,70 @@ export function useSketchEngine(
     scheduleViewportRender,
   } = renderers;
 
-  function pushHistorySnapshot(snapshot = elements.current) {
-    setHistoryStatus(pushSnapshotToHistory(history.current, snapshot));
-  }
+  const setCurrentItemStyle = (style: {
+    strokeColor: string;
+    fillColor: string;
+    fillStyle: FillStyle;
+    strokeWidth: number;
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: "normal" | "bold";
+    textAlign: "left" | "center" | "right";
+    textVerticalAlign: "top" | "middle" | "bottom";
+  }) => {
+    setStrokeColor(style.strokeColor);
+    setFillColor(style.fillColor);
+    setFillStyle(style.fillStyle);
+    setStrokeWidth(style.strokeWidth);
+    setFontFamily(style.fontFamily);
+    setFontSize(style.fontSize);
+    setFontWeight(style.fontWeight);
+    setTextAlign(style.textAlign);
+    setTextVerticalAlign(style.textVerticalAlign);
+  };
+
+  const editor = createEditorController({
+    elements,
+    scene,
+    history,
+    selectedIds,
+    activeTool: tool,
+    selectedTool,
+    zoom,
+    zoomLevel,
+    panOffset,
+    canvasMode,
+    isPanning,
+    isBeautifying,
+    scribblePending,
+    currentItemStyle: {
+      strokeColor,
+      fillColor,
+      fillStyle,
+      strokeWidth,
+      fontFamily,
+      fontSize,
+      fontWeight,
+      textAlign,
+      textVerticalAlign,
+    },
+    setActiveTool: setTool,
+    setSelectedTool,
+    setHistoryStatus,
+    setCurrentItemStyle,
+    setZoomLevel,
+    setPanOffsetDisplay,
+    setIsBeautifying,
+    setScribblePending,
+    onChange,
+  });
 
   function selectedElementsList() {
     return getSelectedElements(elements.current, selectedIds.current);
   }
 
-  function setSelectedElements(next: SketchElement[]) {
-    elements.current = mergeElementsById(elements.current, next);
-    selectedIds.current = setSelection(next.map((el) => el.id));
-  }
-
-  function clearSelection() {
-    selectedIds.current = new Set();
-    setSelectedTool(null);
-  }
-
-  function commitSelectedElements() {
-    if (selectedIds.current.size === 0) return;
-    selectedIds.current = new Set();
-    setSelectedTool(null);
-    renderSceneAndSelection();
-  }
-
   function updateSelectedElements(updates: Partial<SketchElement>) {
-    if (selectedIds.current.size === 0) return;
-    elements.current = updateElementsByIds(
-      elements.current,
-      selectedIds.current,
-      updates,
-    );
-    pushHistorySnapshot([...elements.current]);
+    if (!editor.updateSelectedElements(updates)) return;
     renderSceneAndSelection();
   }
 
@@ -323,22 +275,34 @@ export function useSketchEngine(
   }
 
   function saveSelectedElementEdit(element: SketchElement) {
-    setSelectedElements([element]);
-    pushHistorySnapshot([...elements.current]);
+    editor.saveSelectedElementEdit(element);
     renderSceneAndSelection();
   }
 
-  function commitCreatedElement(element: SketchElement) {
-    setSelectedElements([element]);
-    setSelectedTool(element.tool);
-    pushHistorySnapshot([...elements.current]);
-    setTool("select");
+  function commitCreatedElement(
+    element: SketchElement,
+    options: { select?: boolean; nextTool?: ActiveTool } = {},
+  ) {
+    editor.commitCreatedElement(element, options);
     renderSceneAndSelection();
+  }
+
+  function commitSceneElements(nextElements: SketchElement[]) {
+    editor.commitSceneElements(nextElements);
   }
 
   function textEditorStyle() {
     return getTextEditorStyle(toolStyleControllerContext());
   }
+
+  function commitSelectedElements() {
+    editor.commitSelectedElements();
+    renderSceneAndSelection();
+  }
+
+  const clearSelection = editor.clearSelection;
+  const setSelectedElements = editor.setSelectedElements;
+  const pushHistorySnapshot = editor.pushHistorySnapshot;
 
   function toolStyleControllerContext(): ToolStyleControllerContext {
     return {
@@ -423,8 +387,10 @@ export function useSketchEngine(
   }
 
   function commitSelectedElementSnapshot({ render = false } = {}) {
-    setSelectedElements(selectedElementsList().map(normalizeElement));
-    pushHistorySnapshot([...elements.current]);
+    const normalized = selectedElementsList().map(normalizeElement);
+    editor.commitUpdatedElements(normalized, {
+      selectedElementIds: normalized.map((element) => element.id),
+    });
     if (render) renderSelection();
   }
 
@@ -474,7 +440,6 @@ export function useSketchEngine(
 
   function drawingControllerContext(): DrawingControllerContext {
     return {
-      // Drawing handlers early-return when tool === "select", so narrowing here is safe.
       tool: tool as Tool,
       style: { strokeColor, fillColor, fillStyle, strokeWidth },
       canvasInteraction,
@@ -488,7 +453,7 @@ export function useSketchEngine(
       findBindableShape,
       normalizeElement,
       commitCreatedElement,
-      pushHistorySnapshot,
+      commitSceneElements,
       renderActiveElement,
       renderScene,
       renderSceneAndSelection,
@@ -516,9 +481,11 @@ export function useSketchEngine(
       elements,
       selectedIds,
       history,
+      setSceneElements: editor.setSceneElements,
+      getAppState: editor.getAppState,
+      applyAppState: editor.applyAppState,
+      onChange,
       screenToCanvas,
-      selectedElementsList,
-      setSelectedElements,
       setHistoryStatus,
       clearSelection,
       renderScene,
@@ -659,8 +626,7 @@ export function useSketchEngine(
     setElements,
     tool,
 
-    setTool: (nextTool: ActiveTool) =>
-      applyControllerTool(toolStyleControllerContext(), nextTool),
+    setTool: editor.applyActiveTool,
     strokeColor,
     setStrokeColor: (color: string) =>
       applyControllerStrokeColor(toolStyleControllerContext(), color),

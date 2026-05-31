@@ -1,7 +1,7 @@
 "use client";
 
 import { RefObject, useEffect } from "react";
-import { Point } from "@repo/canvas-core/types";
+import { Point } from "@repo/element/types";
 
 interface SketchCanvasProps {
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>;

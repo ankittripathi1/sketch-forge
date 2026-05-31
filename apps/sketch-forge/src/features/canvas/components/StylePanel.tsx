@@ -8,7 +8,7 @@ import {
   FillStyle,
   TextAlign,
   TextVerticalAlign,
-} from "@repo/canvas-core/types";
+} from "@repo/element/types";
 import { useCanvasUI } from "@repo/canvas-engine";
 
 /**

@@ -1,5 +1,5 @@
-import type { ActiveTool, Point, SketchElement, Tool } from "@repo/canvas-core/types";
-import { hitTestElement } from "@repo/canvas-core/hitDetection";
+import type { ActiveTool, Point, SketchElement, Tool } from "@repo/element/types";
+import { hitTestElement } from "@repo/element/bounds";
 import {
   canEditTextForElement,
   getTextEditPreviewElement,

@@ -15,7 +15,7 @@ import {
   Undo2,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ActiveTool } from "@repo/canvas-core/types";
+import { ActiveTool } from "@repo/element/types";
 
 const TOOL_GROUPS: {
   items: { icon: ReactNode; value: ActiveTool; label: string }[];

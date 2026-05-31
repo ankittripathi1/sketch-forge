@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SketchElement as CanonicalSketchElement } from "@repo/canvas-core/types";
+import type { SketchElement as CanonicalSketchElement } from "@repo/element/types";
 
 export const ToolSchema = z.enum([
   "rectangle",

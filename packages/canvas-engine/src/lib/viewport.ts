@@ -1,4 +1,4 @@
-import type { Point } from "@repo/canvas-core/types";
+import type { Point } from "@repo/element/types";
 import { screenToCanvas } from "@repo/math";
 
 export function panByOffset(panOffset: Point, dx: number, dy: number): Point {

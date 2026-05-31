@@ -1,11 +1,13 @@
 "use client";
 
 import {
-  ReactNode,
-  ButtonHTMLAttributes,
   forwardRef,
   isValidElement,
   cloneElement,
+  type ButtonHTMLAttributes,
+  type MouseEventHandler,
+  type ReactNode,
+  type Ref,
 } from "react";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -15,6 +17,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   appName?: string;
   asChild?: boolean;
 }
+
+type AsChildProps = {
+  [key: string]: unknown;
+  className?: string;
+  onClick?: MouseEventHandler<HTMLElement>;
+  ref?: Ref<HTMLElement>;
+};
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -64,21 +73,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ? () => alert(`Hello from your ${appName} app!`)
       : props.onClick;
 
-    if (
-      asChild &&
-      isValidElement<{
-        className?: string;
-        onClick?: React.MouseEventHandler<HTMLButtonElement>;
-      }>(children)
-    ) {
+    if (asChild && isValidElement<AsChildProps>(children)) {
+      const forwardedProps = props as Record<string, unknown>;
+      const resolvedOnClick =
+        (onClickHandler as MouseEventHandler<HTMLElement> | undefined) ||
+        children.props.onClick;
+
       return cloneElement(children, {
+        ...forwardedProps,
         className: [classes, children.props.className]
           .filter(Boolean)
           .join(" "),
-        ref: ref as any,
-        ...props,
-        onClick: onClickHandler || children.props.onClick,
-      } as any);
+        ref: ref as Ref<HTMLElement>,
+        onClick: resolvedOnClick,
+      });
     }
 
     return (

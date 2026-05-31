@@ -2,7 +2,7 @@ import type {
   ActiveTool,
   FillStyle,
   SketchElement,
-} from "@repo/canvas-core/types";
+} from "@repo/element/types";
 import {  DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 
 

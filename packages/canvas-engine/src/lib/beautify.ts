@@ -1,4 +1,4 @@
-import type { SketchElement } from "@repo/canvas-core/types";
+import type { SketchElement } from "@repo/element/types";
 
 export type LayoutUpdate = {
   id: string;

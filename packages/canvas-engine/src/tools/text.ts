@@ -1,5 +1,5 @@
-import type { Point, SketchElement } from "@repo/canvas-core/types";
-import { getBoundingBox } from "@repo/canvas-core/hitDetection";
+import type { Point, SketchElement } from "@repo/element/types";
+import { getBoundingBox } from "@repo/element/bounds";
 import { openTextEditor } from "@repo/canvas-core/textEditor";
 
 export type TextEditorResult = {

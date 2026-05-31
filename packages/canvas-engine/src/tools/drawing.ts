@@ -6,7 +6,7 @@ import type {
   Point,
   SketchElement,
   Tool,
-} from "@repo/canvas-core/types";
+} from "@repo/element/types";
 
 export type DrawingStyle = {
   strokeColor: string;

@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@repo/typescript-config": "*",
-    "@repo/canvas-core": "*",
+    "@repo/element": "*",
     "typescript": "^6.0.3"
   },
   "dependencies": {

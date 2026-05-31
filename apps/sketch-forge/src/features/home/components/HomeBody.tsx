@@ -543,7 +543,7 @@ function CTASection() {
         </h2>
         <p className="mx-auto mt-5 max-w-[44ch] text-[15px] leading-7 text-text-secondary">
           Open a canvas, draw something rough, and shape it later. No signup
-          wall, no template menu, no friction.
+          wall, no setup menu, no friction.
         </p>
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link

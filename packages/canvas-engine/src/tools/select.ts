@@ -1,11 +1,11 @@
-import type { AnchorSide, Point, SketchElement } from "@repo/canvas-core/types";
+import type { AnchorSide, Point, SketchElement } from "@repo/element/types";
 import {
   getBoundingBox,
   getElementsBoundingBox,
   hitTestElement,
   hitTestHandle,
   isElementInsideRect,
-} from "@repo/canvas-core/hitDetection";
+} from "@repo/element/bounds";
 
 export type SelectInteraction =
   | { type: "idle" }

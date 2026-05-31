@@ -1,8 +1,8 @@
-import type { SketchElement } from "@repo/canvas-core/types";
+import type { SketchElement } from "@repo/element/types";
 import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
 import { applyLayoutUpdates } from "./beautify";
-import { recolorByTheme } from "./theme";
+import { recolorByTheme } from "@repo/element/recolor";
 
 type Ref<T> = { current: T };
 

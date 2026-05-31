@@ -16,7 +16,7 @@ import {
   getCanvasPrefsKey,
   getBackgroundStyle,
 } from "@/features/canvas";
-import type { FillStyle } from "@repo/canvas-core/types";
+import type { FillStyle } from "@repo/element/types";
 import { isColorDark } from "@repo/common";
 import { useSketchEngine, useCanvasUI } from "@repo/canvas-engine";
 import {

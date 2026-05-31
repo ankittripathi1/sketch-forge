@@ -1,4 +1,4 @@
-import type { Point, SketchElement } from "@repo/canvas-core/types";
+import type { Point, SketchElement } from "@repo/element/types";
 
 export type ScribbleStyle = {
   strokeColor: string;

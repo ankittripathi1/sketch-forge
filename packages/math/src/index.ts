@@ -1,1 +1,1 @@
-export * from "./coords.js"
+export * from "./coords";

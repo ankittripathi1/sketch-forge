@@ -1,6 +1,6 @@
 import rough from "roughjs";
 import type { SketchElement } from "./types";
-import { getBoundingBox, getElementsBoundingBox } from "./hitDetection";
+import { getBoundingBox, getElementsBoundingBox } from "@repo/element/bounds";
 import { isColorDark } from "@repo/common";
 import { highlightCodeLine } from "./codeHighlight";
 

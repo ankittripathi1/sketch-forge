@@ -4,7 +4,7 @@ import type {
   Point,
   SketchElement,
   Tool,
-} from "@repo/canvas-core/types";
+} from "@repo/element/types";
 import { clearCanvas } from "../lib/transform";
 import {
   bindArrowEnd,
@@ -46,8 +46,11 @@ export type DrawingControllerContext = {
     exclude?: Set<string>,
   ) => BindableShape | null;
   normalizeElement: (element: SketchElement) => SketchElement;
-  commitCreatedElement: (element: SketchElement) => void;
-  pushHistorySnapshot: (snapshot?: SketchElement[]) => void;
+  commitCreatedElement: (
+    element: SketchElement,
+    options?: { select?: boolean; nextTool?: Tool | "select" },
+  ) => void;
+  commitSceneElements: (elements: SketchElement[]) => void;
   renderActiveElement: () => void;
   renderScene: () => void;
   renderSceneAndSelection: () => void;
@@ -127,12 +130,12 @@ export function finalizeDrawingInteraction(ctx: DrawingControllerContext) {
   cancelAnimationFrame(ctx.rafId.current);
 
   if (ctx.tool === "eraser") {
-    ctx.elements.current = eraseIntersectingElements(
+    const nextElements = eraseIntersectingElements(
       ctx.elements.current,
       ctx.currentElement.current,
     );
     ctx.currentElement.current = null;
-    ctx.pushHistorySnapshot();
+    ctx.commitSceneElements(nextElements);
     ctx.renderSceneAndSelection();
     return;
   }
@@ -144,8 +147,7 @@ export function finalizeDrawingInteraction(ctx: DrawingControllerContext) {
   justCreated = bindArrowEnd(justCreated, ctx.findBindableShape);
 
   if (isStrokeDraft(ctx.tool)) {
-    ctx.elements.current = [...ctx.elements.current, justCreated];
-    ctx.pushHistorySnapshot();
+    ctx.commitCreatedElement(justCreated, { select: false });
     ctx.renderScene();
 
     if (ctx.tool === "freehand" && ctx.scribbleEnabled) {

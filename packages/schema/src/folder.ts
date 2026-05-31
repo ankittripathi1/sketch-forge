@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const CreateFolderSchema = z.object({
   parentId: z.string().uuid().optional().nullable(),
-  templateId: z.string().uuid().optional().nullable(),
   name: z.string().min(1).max(255),
   icon: z.string().optional().nullable(),
   color: z

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { SketchElement } from "@repo/canvas-core/types";
+import { SketchElement } from "@repo/element/types";
 import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createEntity, fetchEntity, updateEntity } from "@/api/canvas";

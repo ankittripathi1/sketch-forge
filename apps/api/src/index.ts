@@ -6,7 +6,6 @@ import auth from "./routes/auth.js";
 import canvases from "./routes/canvases.js";
 import folders from "./routes/folders.js";
 import pages from "./routes/pages.js";
-import templates from "./routes/templates.js";
 import stats from "./routes/stats.js";
 
 const app = new Hono();
@@ -30,7 +29,6 @@ app.route("/auth", auth);
 app.route("/canvases", canvases);
 app.route("/folders", folders);
 app.route("/pages", pages);
-app.route("/templates", templates);
 app.route("/stats", stats);
 
 app.get("/health", (c) => c.json({ status: "Ok" }));

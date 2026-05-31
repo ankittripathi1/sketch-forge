@@ -1,4 +1,4 @@
-import type { ActiveTool, Point, SketchElement } from "@repo/canvas-core/types";
+import type { ActiveTool, Point, SketchElement } from "@repo/element/types";
 import {
   panByOffset,
   panByPointerMove,

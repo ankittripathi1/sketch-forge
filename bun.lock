@@ -189,7 +189,7 @@
         "zod": "^4.4.3",
       },
       "devDependencies": {
-        "@repo/canvas-core": "*",
+        "@repo/element": "*",
         "@repo/typescript-config": "*",
         "typescript": "^6.0.3",
       },

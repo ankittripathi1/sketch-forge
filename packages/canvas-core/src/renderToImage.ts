@@ -1,6 +1,6 @@
 import rough from "roughjs";
 import { drawElement } from "./renderElement";
-import { getBoundingBox } from "./hitDetection";
+import { getBoundingBox } from "@repo/element/bounds";
 import type { SketchElement } from "./types";
 
 export interface RenderOptions {

@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { FillStyle } from "@repo/canvas-core/types";
+import type { FillStyle } from "@repo/element/types";
 
 type FontWeight = "normal" | "bold";
 type TextAlign = "left" | "center" | "right";

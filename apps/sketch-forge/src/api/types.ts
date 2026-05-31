@@ -1,5 +1,5 @@
 import type { PageStatus, UpdatePage } from "@repo/schema";
-import type { SketchElement } from "@repo/canvas-core/types";
+import type { SketchElement } from "@repo/element/types";
 
 export interface Page {
   id: string;

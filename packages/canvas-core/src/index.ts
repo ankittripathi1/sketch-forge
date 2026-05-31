@@ -1,4 +1,5 @@
-// Types
+// Element domain types — re-exported from @repo/element for back-compat.
+// Prefer importing directly from "@repo/element/types".
 export type {
   Tool,
   ActiveTool,
@@ -9,7 +10,7 @@ export type {
   TextVerticalAlign,
   ArrowBinding,
   AnchorSide,
-} from "./types.js";
+} from "@repo/element/types";
 
 // Rendering
 export {
@@ -17,23 +18,23 @@ export {
   drawGroupSelectionBox,
   drawSelectionBox,
   resolveArrowEndpoints,
-} from "./renderElement.js";
-export { renderCanvasToBlob } from "./renderToImage.js";
-export type { RenderOptions } from "./renderToImage.js";
+} from "./renderElement";
+export { renderCanvasToBlob } from "./renderToImage";
+export type { RenderOptions } from "./renderToImage";
 
-// Hit detection
+// Hit detection / bounds — re-exported from @repo/element for back-compat.
 export {
   getElementsBoundingBox,
   getBoundingBox,
   hitTestElement,
   hitTestHandle,
   isElementInsideRect,
-} from "./hitDetection.js";
+} from "@repo/element/bounds";
 
-// History
-export { createHistory } from "./history.js";
-export type { HistoryState } from "./history.js";
+// History — re-exported from @repo/element for back-compat.
+export { createHistory } from "@repo/element/history";
+export type { HistoryState } from "@repo/element/history";
 
 // Text editing
-export { openTextEditor } from "./textEditor.js";
-export type { TextEditorResult } from "./textEditor.js";
+export { openTextEditor } from "./textEditor";
+export type { TextEditorResult } from "./textEditor";

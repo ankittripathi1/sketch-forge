@@ -5,7 +5,7 @@ import { useSketchEngine } from "@repo/canvas-engine";
 import { SketchCanvas } from "@/features/canvas";
 import { CaptureToolbar, FolderPicker } from "@/features/capture";
 import { useRouter } from "next/navigation";
-import { SketchElement } from "@repo/canvas-core/types";
+import { SketchElement } from "@repo/element/types";
 import { Loader2 } from "lucide-react";
 
 export default function QuickCapturePage() {

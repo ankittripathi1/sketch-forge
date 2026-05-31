@@ -2,13 +2,14 @@
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
   "globalEnv": [
-    "RESENT_API_KEY",
+    "RESEND_API_KEY",
     "HASH_SALT",
     "FRONTEND_URL",
     "JWT_SECRET",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
     "API_INTERNAL_URL",
+    "API_URL",
     "CORS_ORIGINS",
     "NEXT_PUBLIC_API_URL",
     "NODE_ENV"

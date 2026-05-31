@@ -1,5 +1,5 @@
-import type { HistoryState } from "@repo/canvas-core/history";
-import type { SketchElement } from "@repo/canvas-core/types";
+import type { HistoryState } from "@repo/element/history";
+import type { SketchElement } from "@repo/element/types";
 
 export type HistoryStatus = {
   canUndo: boolean;

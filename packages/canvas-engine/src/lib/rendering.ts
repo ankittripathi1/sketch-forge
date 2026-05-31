@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import rough from "roughjs";
-import type { AnchorSide, Point, SketchElement } from "@repo/canvas-core/types";
+import type { AnchorSide, Point, SketchElement } from "@repo/element/types";
 import {
   drawElement,
   drawGroupSelectionBox,

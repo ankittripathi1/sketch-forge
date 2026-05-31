@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Type, Undo2, CheckCircle2 } from "lucide-react";
-import { ActiveTool } from "@repo/canvas-core/types";
+import { ActiveTool } from "@repo/element/types";
 
 interface CaptureToolbarProps {
   tool: ActiveTool;
