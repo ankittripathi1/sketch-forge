@@ -7,6 +7,7 @@ import type {
   SketchElement,
   Tool,
 } from "@repo/element/types";
+import { randomId } from "@repo/common";
 
 export type DrawingStyle = {
   strokeColor: string;
@@ -36,7 +37,7 @@ export function buildDraftElement({
   startPoint?: Point;
 }): SketchElement {
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     tool,
     seed: Math.floor(Math.random() * 100000),
     strokeColor: style.strokeColor,

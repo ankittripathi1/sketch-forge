@@ -1,4 +1,5 @@
 import type { SketchElement } from "./types";
+import { randomId } from "@repo/common";
 
 export function getSelectedElements(
   elements: SketchElement[],
@@ -48,7 +49,7 @@ export function duplicateElements(
 ): SketchElement[] {
   return elements.map((element) => ({
     ...element,
-    id: crypto.randomUUID(),
+    id: randomId(),
     x1: element.x1 + offset,
     y1: element.y1 + offset,
     x2: element.x2 + offset,

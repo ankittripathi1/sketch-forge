@@ -1,6 +1,7 @@
 import type { Point, SketchElement } from "@repo/element/types";
 import { getBoundingBox } from "@repo/element/bounds";
 import { openTextEditor } from "@repo/canvas-core/textEditor";
+import { randomId } from "@repo/common";
 
 export type TextEditorResult = {
   text: string;
@@ -39,7 +40,7 @@ export function buildTextElement(
   style: TextStyle,
 ): SketchElement {
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     tool: "text",
     seed: Math.floor(Math.random() * 100000),
     strokeColor: style.strokeColor,

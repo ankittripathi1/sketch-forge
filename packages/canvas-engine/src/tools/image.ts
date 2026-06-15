@@ -1,8 +1,9 @@
 import type { Point, SketchElement } from "@repo/element/types";
+import { randomId } from "@repo/common";
 
 export function buildImageElement(point: Point, src: string): SketchElement {
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     tool: "image",
     seed: Math.floor(Math.random() * 100000),
     strokeColor: "#000000",

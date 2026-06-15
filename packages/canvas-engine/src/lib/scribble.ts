@@ -1,4 +1,5 @@
 import type { Point, SketchElement } from "@repo/element/types";
+import { randomId } from "@repo/common";
 
 export type ScribbleStyle = {
   strokeColor: string;
@@ -30,7 +31,7 @@ export function buildTextFromStrokes(
   const strokeHeight = y2 - y1;
 
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     tool: "text",
     seed: Math.floor(Math.random() * 100_000),
     strokeColor: style.strokeColor,
