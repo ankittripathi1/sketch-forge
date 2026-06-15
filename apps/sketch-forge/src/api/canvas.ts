@@ -1,11 +1,11 @@
-const API = "http://localhost:4001";
-
 export type EntityType = "pages" | "canvases";
 
 export async function fetchEntity(type: EntityType, id: string) {
-  const res = await fetch(`${API}/${type}/${id}`, { credentials: "include" });
+  const res = await fetch(`${PUBLIC_API_URL}/${type}/${id}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
-    throw new Error(`Load failed: ${res.status}`);
+    throw new ApiError(`Load failed ${res.status}`);
   }
   return res.json();
 }
@@ -14,7 +14,7 @@ export async function createEntity(
   type: EntityType,
   body: Record<string, unknown>,
 ) {
-  const res = await fetch(`${API}/${type}`, {
+  const res = await fetch(`${PUBLIC_API_URL}/${type}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -29,7 +29,7 @@ export async function updateEntity(
   id: string,
   body: Record<string, unknown>,
 ) {
-  const res = await fetch(`${API}/${type}/${id}`, {
+  const res = await fetch(`${PUBLIC_API_URL}/${type}/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

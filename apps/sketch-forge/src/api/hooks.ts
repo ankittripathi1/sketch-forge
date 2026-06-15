@@ -63,6 +63,16 @@ export function useFolderDetail(id: string) {
   });
 }
 
+export function useFolders(options: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.dashboard,
+    queryFn: getDashboardData,
+    staleTime: 5 * 60_000,
+    enable: options?.enabled ?? true,
+    select: (data) => data.folders,
+  });
+}
+
 export function useSearchPages(query: string) {
   return useQuery({
     queryKey: queryKeys.search(query),
