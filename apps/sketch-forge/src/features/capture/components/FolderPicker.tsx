@@ -1,15 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { FolderPlus, X, Check } from "lucide-react";
-
-interface FolderData {
-  id: string;
-  name: string;
-  parentId: string | null;
-  icon: string | null;
-  color: string | null;
-}
+import { useFolders } from "@/api/hooks";
 
 interface FolderPickerProps {
   isOpen: boolean;
@@ -18,32 +11,8 @@ interface FolderPickerProps {
 }
 
 export function FolderPicker({ isOpen, onClose, onSelect }: FolderPickerProps) {
-  const [folders, setFolders] = useState<FolderData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchFolders();
-    }
-  }, [isOpen]);
-
-  const fetchFolders = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("http://localhost:4001/folders", {
-        credentials: "include",
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setFolders(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch folders:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data: folders = [], isLoading } = useFolders({ enabled: isOpen });
 
   const buildTree = (
     parentId: string | null = null,

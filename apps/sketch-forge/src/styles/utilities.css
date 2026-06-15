@@ -31,6 +31,10 @@
     font-family: Kalam, cursive;
   }
 
+  .font-display {
+    font-family: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  }
+
   .font-serif-display {
     font-family: Spectral, "Iowan Old Style", Georgia, serif;
   }

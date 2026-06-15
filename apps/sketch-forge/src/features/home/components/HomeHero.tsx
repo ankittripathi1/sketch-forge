@@ -2,45 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Circle,
-  Diamond,
-  MousePointer2,
-  Pencil,
-  Square,
-  Type,
-} from "lucide-react";
+import { ArrowDown, ArrowRight } from "lucide-react";
 import {
   motion,
-  useMotionTemplate,
-  useMotionValue,
   useReducedMotion,
   useScroll,
-  useSpring,
   useTransform,
   type Transition,
 } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
-const spring: Transition = { type: "spring", duration: 0.8, bounce: 0.15 };
-
-const HEADLINE = "Sketch the way you think.";
-
-const FLOATING_TOOLS = [
-  { Icon: Square, x: "-12%", y: "8%", delay: 0.4, rotate: -8 },
-  { Icon: Circle, x: "108%", y: "12%", delay: 0.55, rotate: 12 },
-  { Icon: Diamond, x: "-8%", y: "72%", delay: 0.7, rotate: 6 },
-  { Icon: Pencil, x: "104%", y: "78%", delay: 0.85, rotate: -10 },
-  { Icon: Type, x: "50%", y: "-8%", delay: 1.0, rotate: 0 },
-  { Icon: MousePointer2, x: "92%", y: "48%", delay: 1.15, rotate: 8 },
-];
+const spring: Transition = { type: "spring", duration: 0.8, bounce: 0 };
 
 export function HomeHero() {
   const reduce = useReducedMotion();
   const sectionRef = useRef<HTMLElement>(null);
-  const previewWrapRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme, mounted } = useAppTheme();
 
   const isDark = mounted && resolvedTheme === "dark";
@@ -50,285 +27,223 @@ export function HomeHero() {
     target: sectionRef,
     offset: ["start start", "end start"],
   });
-  const previewY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -64]);
-  const previewScale = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [1, reduce ? 1 : 0.94],
-  );
-  const previewOpacity = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [1, reduce ? 1 : 0.7],
-  );
-
-  const mouseX = useMotionValue(0.5);
-  const mouseY = useMotionValue(0.5);
-  const smoothX = useSpring(mouseX, { stiffness: 90, damping: 18 });
-  const smoothY = useSpring(mouseY, { stiffness: 90, damping: 18 });
-  const tiltX = useTransform(smoothY, [0, 1], [4, -4]);
-  const tiltY = useTransform(smoothX, [0, 1], [-6, 6]);
-  const glowX = useTransform(smoothX, (v) => `${v * 100}%`);
-  const glowY = useTransform(smoothY, (v) => `${v * 100}%`);
-  const glowBg = useMotionTemplate`radial-gradient(60% 60% at ${glowX} ${glowY}, var(--color-accent) 0%, transparent 70%)`;
-
-  useEffect(() => {
-    if (reduce) return;
-    const el = previewWrapRef.current;
-    if (!el) return;
-    function onMove(e: PointerEvent) {
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      mouseX.set((e.clientX - r.left) / r.width);
-      mouseY.set((e.clientY - r.top) / r.height);
-    }
-    function onLeave() {
-      mouseX.set(0.5);
-      mouseY.set(0.5);
-    }
-    el.addEventListener("pointermove", onMove);
-    el.addEventListener("pointerleave", onLeave);
-    return () => {
-      el.removeEventListener("pointermove", onMove);
-      el.removeEventListener("pointerleave", onLeave);
-    };
-  }, [mouseX, mouseY, reduce]);
+  const figureY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -48]);
 
   return (
     <section
       ref={sectionRef}
-      className="relative isolate overflow-hidden px-6 pb-20 pt-20 md:pb-32 md:pt-28"
+      className="relative overflow-hidden border-b border-border-subtle"
     >
-      <AnimatedBackdrop />
-
-      <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
-        <motion.div
-          initial={reduce ? false : { opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={spring}
-          className="group mb-7 inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-raised/70 px-3 py-1 text-[12px] font-medium text-text-secondary backdrop-blur-xl"
-        >
-          <span className="relative flex h-1.5 w-1.5">
-            <motion.span
-              className="absolute inline-flex h-full w-full rounded-full bg-accent"
-              animate={
-                reduce
-                  ? undefined
-                  : { scale: [1, 1.9, 1], opacity: [0.55, 0, 0.55] }
-              }
-              transition={{
-                duration: 2.2,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-          </span>
-          v0.9 — public beta is live
-          <ArrowRight
-            size={12}
-            className="transition-transform duration-200 group-hover:translate-x-0.5"
-          />
-        </motion.div>
-
-        <h1 className="text-[clamp(2.6rem,6.5vw,5rem)] font-semibold leading-[1.02] tracking-[-0.045em] text-text-heading text-balance">
-          <AnimatedHeadline text={HEADLINE} reduce={!!reduce} />
-        </h1>
-
-        <motion.p
-          initial={reduce ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            ...spring,
-            delay: HEADLINE.split(" ").length * 0.07 + 0.1,
-          }}
-          className="mt-6 max-w-[46ch] text-[15px] leading-7 text-text-secondary md:text-[17px] md:leading-8"
-        >
-          An infinite canvas built for diagrams, handwritten notes, and the
-          rough work that comes{" "}
-          <em className="not-italic text-text-primary">before</em> the polish.
-        </motion.p>
-
-        <motion.div
-          initial={reduce ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            ...spring,
-            delay: HEADLINE.split(" ").length * 0.07 + 0.2,
-          }}
-          className="mt-9 flex flex-col items-center gap-3 sm:flex-row"
-        >
-          <Link
-            href="/canvas"
-            className="group inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 text-[13.5px] font-semibold text-accent-text transition-all duration-150 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
-          >
-            Start drawing
-            <motion.span
-              className="inline-flex"
-              animate={reduce ? undefined : { x: [0, 3, 0] }}
-              transition={{
-                duration: 1.8,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            >
-              <ArrowRight size={15} />
-            </motion.span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-border-default bg-surface-raised/60 px-4 text-[13.5px] font-semibold text-text-primary backdrop-blur transition-all duration-150 hover:-translate-y-0.5 hover:bg-surface-hover active:translate-y-0 active:scale-[0.98]"
-          >
-            View dashboard
-          </Link>
-        </motion.div>
-
-        <motion.div
-          initial={reduce ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6, duration: 0.6 }}
-          className="mt-5 font-mono text-[11px] text-text-muted"
-        >
-          ⌘K to open · ⌘S to save · No account needed to try
-        </motion.div>
-      </div>
-
-      <motion.div
-        ref={previewWrapRef}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-paper-grid"
         style={{
-          y: previewY,
-          scale: previewScale,
-          opacity: previewOpacity,
-          perspective: 1200,
+          maskImage:
+            "radial-gradient(120% 90% at 30% 0%, black 30%, transparent 78%)",
         }}
-        initial={reduce ? false : { opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ...spring, delay: 0.35 }}
-        className="relative mx-auto mt-20 max-w-6xl"
-      >
-        {FLOATING_TOOLS.map(({ Icon, x, y, delay, rotate }, i) => (
-          <motion.div
-            key={i}
-            initial={reduce ? false : { opacity: 0, scale: 0.4, rotate }}
-            animate={{ opacity: 1, scale: 1, rotate }}
-            transition={{ ...spring, delay: 0.4 + delay }}
-            className="pointer-events-none absolute z-20 hidden h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-xl border border-border-default bg-surface-raised/95 text-text-primary shadow-elev-3 backdrop-blur-xl md:flex"
-            style={{ left: x, top: y }}
+      />
+
+      <div className="relative mx-auto max-w-[1320px] px-5 pb-16 pt-16 md:pb-24 md:pt-24">
+        <div className="max-w-[980px]">
+          <motion.p
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={spring}
+            className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.22em] text-text-secondary"
           >
-            <motion.div
-              animate={reduce ? undefined : { y: [0, -5, 0] }}
-              transition={{
-                duration: 3 + i * 0.4,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: i * 0.3,
-              }}
-            >
-              <Icon size={17} strokeWidth={1.7} />
-            </motion.div>
-          </motion.div>
-        ))}
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            a canvas notebook for technical minds
+          </motion.p>
 
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute -inset-x-10 -inset-y-6 -z-10 rounded-[2.5rem] opacity-60 blur-3xl"
-          style={{ background: glowBg }}
-        />
+          <h1 className="font-display mt-7 text-[clamp(2.9rem,7.2vw,6rem)] font-semibold leading-[0.98] tracking-[-0.01em] text-text-heading">
+            <RiseLine delay={0.05}>
+              Notes for{" "}
+              <span className="relative inline-block">
+                engineers
+                <span
+                  aria-hidden
+                  className="font-handwriting absolute -top-7 right-0 hidden rotate-[-3deg] whitespace-nowrap text-[16px] font-normal normal-case tracking-normal text-accent lg:block"
+                >
+                  (that&apos;s you)
+                </span>
+              </span>
+            </RiseLine>
+            <RiseLine delay={0.18}>
+              who think in <CircledWord reduce={!!reduce}>diagrams</CircledWord>
+            </RiseLine>
+          </h1>
 
-        <motion.div
-          style={{
-            rotateX: tiltX,
-            rotateY: tiltY,
-            transformStyle: "preserve-3d",
-          }}
-          className="relative overflow-hidden rounded-xl border border-border-default bg-surface-raised shadow-elev-4"
-        >
-          <div className="flex h-9 items-center gap-2 border-b border-border-subtle bg-surface-overlay px-3.5">
-            <div className="flex gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-border-strong" />
-              <span className="h-2.5 w-2.5 rounded-full bg-border-strong" />
-              <span className="h-2.5 w-2.5 rounded-full bg-border-strong" />
-            </div>
-            <div className="mx-auto flex items-center gap-1.5 font-mono text-[11px] text-text-muted">
-              <span className="h-1 w-1 rounded-full bg-accent" />
-              sketch-forge / canvas
-            </div>
-            <div className="w-10" />
-          </div>
-          <Image
-            src={screenshotSrc}
-            alt="Sketch Forge canvas editor"
-            width={2560}
-            height={1368}
-            className="block h-auto w-full"
-            priority
-            unoptimized
-          />
+          <motion.p
+            initial={reduce ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...spring, delay: 0.4 }}
+            className="mt-7 max-w-[54ch] text-[16px] leading-8 text-text-body md:text-[17px]"
+          >
+            System designs, lecture notes, algorithm traces, whiteboard rounds
+            — on an infinite canvas that keeps up with your hand. Draw it
+            rough, beautify it when it matters, export it into the doc.
+          </motion.p>
+
           <motion.div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(115deg, transparent 30%, color-mix(in oklab, white 14%, transparent) 50%, transparent 70%)",
-              x: useTransform(smoothX, [0, 1], ["-30%", "30%"]),
-            }}
-          />
-        </motion.div>
-      </motion.div>
+            initial={reduce ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...spring, delay: 0.5 }}
+            className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4"
+          >
+            <Link
+              href="/canvas"
+              className="group inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-[14px] font-semibold text-accent-text transition-all duration-150 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
+            >
+              Start sketching
+              <ArrowRight
+                size={15}
+                className="transition-transform duration-200 group-hover:translate-x-0.5"
+              />
+            </Link>
+            <Link
+              href="/dashboard"
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-border-default bg-surface-raised/70 px-5 text-[14px] font-semibold text-text-primary transition-all duration-150 hover:-translate-y-0.5 hover:bg-surface-hover active:translate-y-0 active:scale-[0.98]"
+            >
+              View dashboard
+            </Link>
+            <Link
+              href="#flow"
+              className="link-underline-draw inline-flex items-center gap-1.5 text-[14px] font-semibold text-text-secondary"
+            >
+              See the flow
+              <ArrowDown size={14} />
+            </Link>
+          </motion.div>
+
+          <motion.p
+            initial={reduce ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8, duration: 0.5 }}
+            className="mt-5 font-mono text-[11px] text-text-muted"
+          >
+            free in beta · no account needed · offline-first
+          </motion.p>
+        </div>
+
+        <motion.figure
+          style={{ y: figureY }}
+          initial={reduce ? false : { opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...spring, delay: 0.45 }}
+          className="relative mx-auto mt-20 max-w-[1100px]"
+        >
+          <DimensionLine label="∞ — the canvas does not end" />
+
+          <div className="relative mt-4">
+            <RegMark className="-left-2.5 -top-2.5" />
+            <RegMark className="-right-2.5 -top-2.5" />
+            <RegMark className="-bottom-2.5 -left-2.5" />
+            <RegMark className="-bottom-2.5 -right-2.5" />
+
+            <div className="overflow-hidden rounded-sm border border-border-strong bg-surface-raised shadow-elev-3">
+              <Image
+                src={screenshotSrc}
+                alt="The Sketch Forge canvas with a hand-drawn system diagram, shape tools, and pages sidebar"
+                width={2560}
+                height={1368}
+                className="block h-auto w-full"
+                priority
+                unoptimized
+              />
+            </div>
+
+            <div
+              aria-hidden
+              className="font-handwriting absolute left-[54%] top-[16%] hidden w-44 rotate-2 text-[15px] leading-6 text-accent xl:block"
+            >
+              11:40pm — the rate limiter finally made sense here
+            </div>
+          </div>
+
+          <figcaption className="mt-3.5 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[11px] text-text-muted">
+            <span>
+              <span className="text-accent">fig. 01</span> — the canvas. light
+              &amp; dark, same notebook.
+            </span>
+            <span>sketch-forge / canvas</span>
+          </figcaption>
+        </motion.figure>
+      </div>
     </section>
   );
 }
 
-function AnimatedHeadline({ text, reduce }: { text: string; reduce: boolean }) {
-  const words = text.split(" ");
+function RiseLine({
+  children,
+  delay,
+}: {
+  children: ReactNode;
+  delay: number;
+}) {
+  const reduce = useReducedMotion();
   return (
-    <span className="inline-block">
-      {words.map((word, i) => (
-        <span
-          key={i}
-          className="inline-block overflow-hidden pr-[0.22em] align-bottom"
-        >
-          <motion.span
-            initial={reduce ? false : { y: "110%" }}
-            animate={{ y: "0%" }}
-            transition={{ ...spring, delay: 0.05 + i * 0.07 }}
-            className="inline-block"
-          >
-            {word === "think." ? (
-              <span className="relative inline-block bg-gradient-to-br from-text-heading via-text-heading to-accent bg-clip-text text-transparent">
-                {word}
-              </span>
-            ) : (
-              word
-            )}
-          </motion.span>
-        </span>
-      ))}
+    <motion.span
+      initial={reduce ? false : { opacity: 0, y: 28 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...spring, delay }}
+      className="block pb-[0.08em] pt-[0.04em]"
+    >
+      {children}
+    </motion.span>
+  );
+}
+
+function CircledWord({
+  children,
+  reduce,
+}: {
+  children: ReactNode;
+  reduce: boolean;
+}) {
+  return (
+    <span className="relative inline-block">
+      {children}
+      <svg
+        aria-hidden
+        viewBox="0 0 320 120"
+        fill="none"
+        preserveAspectRatio="none"
+        className="pointer-events-none absolute left-[-8%] top-[-14%] h-[130%] w-[118%]"
+      >
+        <motion.path
+          d="M18,64 C22,26 148,10 248,18 C304,24 312,52 296,76 C272,106 92,116 38,96 C12,86 10,76 18,64"
+          stroke="var(--color-accent)"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          initial={reduce ? false : { pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.9, delay: 1.05, ease: "easeInOut" }}
+        />
+      </svg>
     </span>
   );
 }
 
-function AnimatedBackdrop() {
-  const reduce = useReducedMotion();
+function DimensionLine({ label }: { label: string }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted"
     >
-      <div className="absolute inset-0 bg-paper-grid opacity-[0.18]" />
-      <motion.div
-        className="absolute left-1/2 top-[-12rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-accent/20 blur-[120px]"
-        animate={
-          reduce ? undefined : { scale: [1, 1.15, 1], opacity: [0.6, 0.9, 0.6] }
-        }
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="absolute right-[-10rem] top-[10rem] h-[22rem] w-[22rem] rounded-full bg-accent/10 blur-[100px]"
-        animate={reduce ? undefined : { x: [0, -30, 0], y: [0, 20, 0] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-surface-base" />
+      <span className="h-3 w-px bg-border-strong" />
+      <span className="h-px flex-1 bg-border-strong" />
+      <span className="shrink-0">{label}</span>
+      <span className="h-px flex-1 bg-border-strong" />
+      <span className="h-3 w-px bg-border-strong" />
     </div>
+  );
+}
+
+function RegMark({ className }: { className: string }) {
+  return (
+    <span aria-hidden className={`absolute z-10 h-5 w-5 ${className}`}>
+      <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-border-strong" />
+      <span className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-border-strong" />
+    </span>
   );
 }
