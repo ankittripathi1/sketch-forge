@@ -68,7 +68,7 @@ export function useFolders(options: { enabled?: boolean }) {
     queryKey: queryKeys.dashboard,
     queryFn: getDashboardData,
     staleTime: 5 * 60_000,
-    enable: options?.enabled ?? true,
+    enabled: options?.enabled ?? true,
     select: (data) => data.folders,
   });
 }

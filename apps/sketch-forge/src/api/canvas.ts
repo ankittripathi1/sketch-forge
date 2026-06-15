@@ -1,3 +1,5 @@
+import { PUBLIC_API_URL } from "./config";
+
 export type EntityType = "pages" | "canvases";
 
 export async function fetchEntity(type: EntityType, id: string) {
@@ -5,7 +7,7 @@ export async function fetchEntity(type: EntityType, id: string) {
     credentials: "include",
   });
   if (!res.ok) {
-    throw new ApiError(`Load failed ${res.status}`);
+    throw new Error(`Load failed: ${res.status}`);
   }
   return res.json();
 }

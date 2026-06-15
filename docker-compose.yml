@@ -1,0 +1,48 @@
+# Deploys the whole turborepo as one unit (two containers: api + web).
+# Works with `docker compose up -d` and with Coolify's "Docker Compose" build pack.
+#
+# Set the values below in Coolify's Environment Variables tab (or a .env file
+# next to this if running by hand). With no domain yet, use your server's IP:
+#   NEXT_PUBLIC_API_URL=http://<SERVER_IP>:4001
+#   FRONTEND_URL=http://<SERVER_IP>:3000
+#   CORS_ORIGINS=http://<SERVER_IP>:3000
+#   API_URL=http://<SERVER_IP>:4001
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      API_URL: ${API_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/sketch-forge/Dockerfile
+      args:
+        # Baked into the client bundle at build time.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      # Server-side Next fetches reach the api over the internal docker network.
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4001}
