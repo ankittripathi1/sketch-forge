@@ -1,0 +1,59 @@
+# Render Blueprint for the sketch-forge Turborepo
+# Two web services built from the monorepo root so workspace (@repo/*) deps resolve.
+# Render auto-provisions Bun because bun.lock is present at the repo root.
+#
+# DATABASE_URL points at your existing external Postgres (Neon/Supabase/etc.).
+# Set all `sync: false` values in the Render dashboard after the first deploy.
+
+services:
+  # ---- Hono / Bun API ----
+  - type: web
+    name: sketch-forge-api
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: bun install && bun run build --filter=api
+    startCommand: cd apps/api && bun run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Bun.sql reads the connection string from this var (external Postgres).
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: RESEND_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Public URL of this API service itself (used in verification emails).
+      - key: API_URL
+        sync: false
+      # Public URL of the frontend service (CORS + OAuth redirects).
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+  # ---- Next.js frontend ----
+  - type: web
+    name: sketch-forge-web
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: bun install && bun run build --filter=sketch-forge
+    startCommand: cd apps/sketch-forge && bun run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # NEXT_PUBLIC_* is baked at BUILD time — must be set BEFORE the build runs.
+      # Set to the API's full https URL, e.g. https://sketch-forge-api.onrender.com
+      # (fromService only exposes host:port without the scheme, so set this by hand.)
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      # Server-side fetches; same https URL is fine.
+      - key: API_INTERNAL_URL
+        sync: false

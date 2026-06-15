@@ -36,6 +36,6 @@ app.get("/health", (c) => c.json({ status: "Ok" }));
 app.notFound((c) => c.json({ message: "Not Found", ok: false }, 404));
 
 export default {
-  port: 4001,
+  port: Number(process.env.PORT) || 4001,
   fetch: app.fetch,
 };
