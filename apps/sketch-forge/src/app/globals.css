@@ -131,6 +131,17 @@
   color-scheme: dark;
 }
 
+/* App logo: show the light mark by default, swap to the dark mark in dark theme. */
+.logo-img--dark {
+  display: none;
+}
+[data-theme="dark"] .logo-img--dark {
+  display: block;
+}
+[data-theme="dark"] .logo-img--light {
+  display: none;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;

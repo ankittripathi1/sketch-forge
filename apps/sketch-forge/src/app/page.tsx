@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowUpRight } from "lucide-react";
 import { ThemeSelector } from "@/theme/ThemeSelector";
+import { Logo } from "@/components/Logo";
 import { HomeHero, HomeBody, ScrollProgress } from "@/features/home";
 
 export const metadata: Metadata = {
@@ -11,10 +12,10 @@ export const metadata: Metadata = {
 };
 
 const NAV = [
-  ["01", "Who it's for", "#who"],
-  ["02", "Flow", "#flow"],
-  ["03", "Tools", "#tools"],
-  ["04", "FAQ", "#faq"],
+  ["Who it's for", "#who"],
+  ["Flow", "#flow"],
+  ["Tools", "#tools"],
+  ["FAQ", "#faq"],
 ] as const;
 
 export default function Home() {
@@ -37,78 +38,58 @@ export default function Home() {
 
 function Masthead() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border-default bg-surface-base/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-14 max-w-330 items-center justify-between gap-5 px-5">
+    <header className="sticky top-0 z-40 border-b border-border-strong bg-surface-base/80 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-330 items-center justify-between gap-6 px-5">
+        {/* Brand */}
         <Link
           href="/"
-          className="group inline-flex items-center gap-3 rounded-lg outline-none"
+          className="group inline-flex items-center gap-2.5 rounded-lg outline-none"
         >
-          <Logomark />
+          <Logo size={32} />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-text-heading">
             Sketch Forge
           </span>
-          <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted lg:inline">
-            nb-001
-          </span>
         </Link>
 
+        {/* Center nav — blueprint title-block labels */}
         <nav
           aria-label="Primary"
-          className="flex items-center gap-0.5 text-[13px] text-text-secondary"
+          className="hidden items-center gap-8 md:flex"
         >
-          {NAV.map(([no, label, href]) => (
+          {NAV.map(([label, href]) => (
             <Link
               key={href}
               href={href}
-              className="hidden items-baseline gap-1.5 rounded-lg px-3 py-2 transition-colors hover:text-text-primary md:inline-flex"
+              className="link-underline-draw font-mono text-[11px] uppercase tracking-[0.18em] text-text-muted transition-colors hover:text-text-primary"
             >
-              <span className="font-mono text-[10px] text-text-muted">
-                {no}
-              </span>
               {label}
             </Link>
           ))}
+        </nav>
+
+        {/* Actions */}
+        <div className="flex items-center gap-4">
           <Link
             href="/dashboard"
-            className="hidden rounded-lg px-3 py-2 transition-colors hover:text-text-primary lg:inline-flex"
+            className="link-underline-draw hidden font-mono text-[11px] uppercase tracking-[0.18em] text-text-muted transition-colors hover:text-text-primary sm:inline-flex"
           >
             Dashboard
           </Link>
+          <span className="hidden h-4 w-px bg-border-strong sm:block" />
           <ThemeSelector isCollapsed />
           <Link
             href="/canvas"
-            className="ml-2 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-semibold text-accent-text transition-all duration-150 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
+            className="group inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[13px] font-semibold text-accent-text transition-all duration-150 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
           >
             Open canvas
-            <ArrowUpRight size={14} />
+            <ArrowUpRight
+              size={14}
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+            />
           </Link>
-        </nav>
+        </div>
       </div>
     </header>
-  );
-}
-
-function Logomark() {
-  return (
-    <span
-      aria-hidden
-      className="relative inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-surface-raised shadow-elev-1"
-    >
-      <span className="absolute inset-0 bg-gradient-mesh opacity-80" />
-      <svg
-        viewBox="0 0 24 24"
-        className="relative h-4.5 w-4.5 text-text-heading"
-        fill="none"
-      >
-        <path
-          d="M4 17.5C7.2 13.6 10.4 20.4 13.8 15.5C16.2 12 18.3 17 20 13.2"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeWidth="1.9"
-        />
-        <circle cx="19.8" cy="13.2" r="1.45" fill="var(--color-accent)" />
-      </svg>
-    </span>
   );
 }
 
@@ -120,7 +101,7 @@ function TitleBlockFooter() {
           <div className="grid grid-cols-2 gap-px bg-border-strong md:grid-cols-[1.6fr_1fr_1fr_1fr]">
             <Cell label="project" className="col-span-2 md:col-span-1">
               <span className="inline-flex items-center gap-2.5">
-                <Logomark />
+                <Logo size={28} />
                 <span className="text-[14px] font-semibold tracking-[-0.01em] text-text-heading">
                   Sketch Forge — canvas notebook
                 </span>

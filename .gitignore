@@ -46,3 +46,11 @@ ruvector.db
 .gemini/
 .aider*
 .impeccable.md
+
+# Internal planning / docs (kept local, not committed)
+AGENTS.md
+ARCHITECTURE.md
+ROADMAP.md
+TASKS.md
+DEPLOYMENT.md
+Issues.md

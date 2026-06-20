@@ -8,9 +8,9 @@
   "theme_color": "#0a0a0a",
   "icons": [
     {
-      "src": "/window.svg",
+      "src": "/app-logo-dark.png",
       "sizes": "any",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     }
   ],
@@ -20,7 +20,7 @@
       "short_name": "Capture",
       "description": "Start a new quick sketch",
       "url": "/capture",
-      "icons": [{ "src": "/file-text.svg", "sizes": "any" }]
+      "icons": [{ "src": "/app-logo-dark.png", "sizes": "any" }]
     }
   ]
 }

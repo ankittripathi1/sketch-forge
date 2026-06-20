@@ -6,12 +6,12 @@ import {
   Zap,
   ChevronLeft,
   ChevronRight,
-  Book,
   Settings,
   FolderPlus,
   LayoutDashboard,
   FileText,
 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { FolderTreeItem } from "./FolderTreeItem";
 import { NewFolderDialog } from "./NewFolderDialog";
 import { SearchBar } from "./SearchBar";
@@ -213,12 +213,12 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
       <div className="flex h-14 items-center border-b border-border-default px-3">
         {isCollapsed ? (
           <div className="flex w-full justify-center">
-            <Book size={18} className="text-accent" />
+            <Logo size={22} rounded="rounded-md" />
           </div>
         ) : (
           <div className="flex w-full items-center gap-2.5 overflow-hidden">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Book size={18} className="text-accent" />
+              <Logo size={22} rounded="rounded-md" />
               <span className="font-bold tracking-tight text-text-primary text-sm">
                 Sketch Forge
               </span>
