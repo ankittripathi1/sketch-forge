@@ -6,15 +6,18 @@ import {
   ChevronRight,
   Clock,
   FileText,
+  GripVertical,
   MoreVertical,
   Pencil,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import type { Page, UpdatePageInput } from "@/api/types";
 import { useDeletePage, useUpdatePage } from "@/api/hooks";
 import { useAppTheme } from "@/theme/ThemeProvider";
+import { useDashboardUiStore } from "@/stores/dashboardUiStore";
 
 interface Folder {
   id: string;
@@ -45,6 +48,7 @@ export function PageCard({
   const { resolvedTheme, mounted } = useAppTheme();
   const updatePageMutation = useUpdatePage();
   const deletePageMutation = useDeletePage();
+  const setDraggingPage = useDashboardUiStore((state) => state.setDraggingPage);
 
   const thumbnail = useMemo(() => {
     if (mounted && resolvedTheme === "dark") {
@@ -89,7 +93,16 @@ export function PageCard({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    e.stopPropagation();
+    const menuWidth = 208;
+    const menuHeight = 320;
+    setContextMenuPos({
+      x: Math.max(12, Math.min(e.clientX, window.innerWidth - menuWidth - 12)),
+      y: Math.max(
+        12,
+        Math.min(e.clientY, window.innerHeight - menuHeight - 12),
+      ),
+    });
     setShowContextMenu(true);
   };
 
@@ -115,17 +128,25 @@ export function PageCard({
   return (
     <article
       draggable
-      onDragStart={(e) => onDragStart(e, page.id)}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("pageId", page.id);
+        e.dataTransfer.effectAllowed = "move";
+        setDraggingPage({ id: page.id, folderId: page.folderId });
+        onDragStart(e, page.id);
+      }}
+      onDragEnd={() => setDraggingPage(null)}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => onDrop(e, page.id)}
       onContextMenu={handleContextMenu}
       onClick={openPage}
-      className={`group relative cursor-pointer overflow-hidden rounded-lg border border-border-default bg-surface-raised shadow-elev-1 transition-all duration-200 hover:-translate-y-1 hover:border-border-accent-strong hover:shadow-elev-3 ${
-        viewMode === "list" ? "grid grid-cols-[12rem_1fr] gap-4 p-3" : "p-3"
+      className={`dashboard-page-card group relative cursor-grab overflow-hidden rounded-[20px] border border-border-subtle bg-surface-raised transition-[border-color,box-shadow] duration-200 hover:border-border-accent-strong hover:shadow-elev-3 active:cursor-grabbing ${
+        viewMode === "list"
+          ? "grid grid-cols-[10rem_1fr] gap-4 p-2.5 sm:grid-cols-[13rem_1fr]"
+          : "p-2.5"
       }`}
     >
       <div
-        className={`relative overflow-hidden rounded-md border border-border-faint bg-surface-sunken ${
+        className={`relative overflow-hidden rounded-[14px] bg-surface-sunken ${
           viewMode === "list" ? "aspect-[4/3]" : "mb-3 aspect-[4/3]"
         }`}
       >
@@ -143,10 +164,10 @@ export function PageCard({
         )}
       </div>
 
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-col px-1 pb-1">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold tracking-[-0.01em] text-text-primary transition-colors group-hover:text-accent">
+            <h3 className="font-display truncate text-[15px] font-semibold tracking-[-0.025em] text-text-heading transition-colors group-hover:text-accent">
               {page.title || "Untitled"}
             </h3>
             <div className="mt-2 flex items-center gap-1.5 text-[11px] text-text-muted">
@@ -155,88 +176,101 @@ export function PageCard({
             </div>
           </div>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleContextMenu(e);
-            }}
-            className="rounded-lg p-1.5 text-text-muted opacity-0 transition-all hover:bg-surface-hover hover:text-text-heading group-hover:opacity-100"
-            title="Page actions"
-          >
-            <MoreVertical size={15} />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <span
+              className="rounded-lg p-1.5 text-text-muted"
+              title="Drag this page onto a folder"
+              aria-hidden="true"
+            >
+              <GripVertical size={15} />
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleContextMenu(e);
+              }}
+              className="rounded-lg p-1.5 text-text-muted opacity-0 transition-all hover:bg-surface-hover hover:text-text-heading group-hover:opacity-100"
+              title="Page actions"
+            >
+              <MoreVertical size={15} />
+            </button>
+          </div>
         </div>
 
         <div className="mt-auto pt-4">
-          <span className="inline-flex rounded-md border border-border-default px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">
-            Page
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            Canvas page
           </span>
         </div>
       </div>
 
-      {showContextMenu && (
-        <div
-          className="fixed z-50 w-48 rounded-xl border border-border-default bg-surface-overlay p-1 shadow-2xl backdrop-blur-xl"
-          style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={handleRename}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+      {showContextMenu &&
+        createPortal(
+          <div
+            className="fixed z-50 max-h-[calc(100vh-1.5rem)] w-52 overflow-y-auto rounded-[14px] border border-border-default bg-surface-overlay p-1.5 shadow-elev-4"
+            style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <Pencil size={14} /> Rename
-          </button>
-
-          <div className="relative">
             <button
-              onMouseEnter={() => setShowMoveSubmenu(true)}
-              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+              onClick={handleRename}
+              className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-surface-hover"
             >
-              <div className="flex items-center gap-2">
-                <ArrowRightLeft size={14} /> Move to folder
-              </div>
-              <ChevronRight size={12} />
+              <Pencil size={14} /> Rename
             </button>
 
-            {showMoveSubmenu && (
-              <div
-                className="absolute left-full top-0 ml-1 w-48 rounded-xl border border-border-default bg-surface-overlay p-1 shadow-2xl"
-                onMouseLeave={() => setShowMoveSubmenu(false)}
-              >
-                <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-text-muted">
-                  Select folder
-                </div>
-                <button
-                  onClick={() => handleUpdate({ folderId: null })}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
-                >
-                  Root dashboard
-                </button>
+            <button
+              onClick={() => setShowMoveSubmenu((value) => !value)}
+              className="flex w-full items-center justify-between rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-surface-hover"
+              aria-expanded={showMoveSubmenu}
+            >
+              <span className="flex items-center gap-2">
+                <ArrowRightLeft size={14} /> Move to…
+              </span>
+              <ChevronRight
+                size={12}
+                className={`transition-transform ${showMoveSubmenu ? "rotate-90" : ""}`}
+              />
+            </button>
+
+            {showMoveSubmenu ? (
+              <div className="mt-1 space-y-0.5 border-t border-border-subtle pt-1">
+                <p className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+                  Destination
+                </p>
+                {page.folderId ? (
+                  <button
+                    onClick={() => handleUpdate({ folderId: null })}
+                    className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-accent-subtle hover:text-accent"
+                  >
+                    All pages · root
+                  </button>
+                ) : null}
                 {allFolders
                   .filter((folder) => folder.id !== page.folderId)
                   .map((folder) => (
                     <button
                       key={folder.id}
                       onClick={() => handleUpdate({ folderId: folder.id })}
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+                      className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-accent-subtle hover:text-accent"
                     >
                       {folder.name}
                     </button>
                   ))}
               </div>
-            )}
-          </div>
+            ) : null}
 
-          <div className="my-1 h-px bg-surface-hover" />
+            <div className="my-1 h-px bg-border-subtle" />
 
-          <button
-            onClick={handleDelete}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-status-danger hover:bg-status-danger-subtle"
-          >
-            <Trash2 size={14} /> Delete
-          </button>
-        </div>
-      )}
+            <button
+              onClick={handleDelete}
+              className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-status-danger transition-colors hover:bg-status-danger-subtle"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>,
+          document.body,
+        )}
     </article>
   );
 }

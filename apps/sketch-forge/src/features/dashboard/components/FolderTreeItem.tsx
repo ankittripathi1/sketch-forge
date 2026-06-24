@@ -22,6 +22,7 @@ import {
   useUpdatePage,
 } from "@/api/hooks";
 import type { Folder, Page, UpdateFolderInput } from "@/api/types";
+import { useDashboardUiStore } from "@/stores/dashboardUiStore";
 
 type FolderWithPageCount = Folder & {
   pageCount?: number;
@@ -54,6 +55,7 @@ export function FolderTreeItem({
 }: FolderTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isDropActive, setIsDropActive] = useState(false);
   const [editedName, setEditedName] = useState(folder.name);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
@@ -66,6 +68,7 @@ export function FolderTreeItem({
   const deleteFolderMutation = useDeleteFolder();
   const updatePageMutation = useUpdatePage();
   const deletePageMutation = useDeletePage();
+  const setDraggingPage = useDashboardUiStore((state) => state.setDraggingPage);
 
   const childFolders = allFolders
     .filter((f) => f.parentId === folder.id)
@@ -132,8 +135,8 @@ export function FolderTreeItem({
 
   const handleChangeColor = () => {
     const newColor = prompt(
-      "Enter new hex color (e.g. #5a8ae8):",
-      folder.color || "#5a8ae8",
+      "Enter new hex color (e.g. #b94a2b):",
+      folder.color || "#b94a2b",
     );
     if (newColor && /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(newColor)) {
       handleUpdate({ color: newColor });
@@ -214,9 +217,21 @@ export function FolderTreeItem({
   if (isCollapsed) {
     return (
       <div
-        className="group relative flex h-10 w-full items-center justify-center rounded-lg hover:bg-surface-hover transition-colors cursor-pointer"
+        className={`group relative flex h-10 w-full cursor-pointer items-center justify-center rounded-[11px] transition-colors ${
+          isDropActive ? "bg-accent text-accent-text" : "hover:bg-surface-hover"
+        }`}
         title={folder.name}
         onClick={() => router.push(`/dashboard/folder/${folder.id}`)}
+        onDragEnter={() => setIsDropActive(true)}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDragLeave={() => setIsDropActive(false)}
+        onDrop={(event) => {
+          setIsDropActive(false);
+          onDrop(event, folder.id);
+        }}
       >
         <span className="text-base">{folder.icon || "📁"}</span>
       </div>
@@ -228,15 +243,25 @@ export function FolderTreeItem({
       <div
         draggable
         onDragStart={(e) => onDragStart(e, folder.id)}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => onDrop(e, folder.id)}
+        onDragEnter={() => setIsDropActive(true)}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDragLeave={() => setIsDropActive(false)}
+        onDrop={(event) => {
+          setIsDropActive(false);
+          onDrop(event, folder.id);
+        }}
         onContextMenu={handleContextMenu}
         onClick={handleSelect}
         onDoubleClick={() => setIsEditing(true)}
-        className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-all cursor-pointer ${
-          isActive
-            ? "bg-accent-subtle text-accent"
-            : "text-text-secondary hover:bg-surface-hover hover:text-text-heading"
+        className={`group flex cursor-pointer items-center gap-1 rounded-[10px] px-2 py-2 text-xs transition-all ${
+          isDropActive
+            ? "bg-accent text-accent-text shadow-glow-accent"
+            : isActive
+              ? "bg-accent-subtle text-accent"
+              : "text-text-secondary hover:bg-surface-hover hover:text-text-heading"
         }`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
@@ -334,9 +359,17 @@ export function FolderTreeItem({
           {folderPages.map((page) => (
             <div
               key={page.id}
-              className="group flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs cursor-pointer text-text-secondary hover:bg-surface-hover hover:text-text-heading transition-all"
+              draggable
+              className="group flex cursor-grab items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-text-secondary transition-all hover:bg-surface-hover hover:text-text-heading active:cursor-grabbing"
               style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
               onClick={() => router.push(`/canvas?pageId=${page.id}`)}
+              onDragStart={(event) => {
+                event.stopPropagation();
+                event.dataTransfer.setData("pageId", page.id);
+                event.dataTransfer.effectAllowed = "move";
+                setDraggingPage({ id: page.id, folderId: page.folderId });
+              }}
+              onDragEnd={() => setDraggingPage(null)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setPageContextMenu({

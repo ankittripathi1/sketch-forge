@@ -48,6 +48,8 @@ import {
   replaceCanvasElements,
   type CanvasCommandsContext,
   undoCanvas,
+  getSelectedCanvasElements,
+  pasteCanvasElements,
 } from "./lib/canvasCommands";
 import { getSelectedElements } from "@repo/element/selection";
 import {
@@ -87,6 +89,7 @@ import {
 } from "./tools/drawingController";
 import { createScene } from "./scene";
 import { createEditorController } from "./editor/editorController";
+import type { CanvasViewportBounds } from "./lib/pastePlacement";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
@@ -152,6 +155,7 @@ export function useSketchEngine(
   const isPanning = useRef(false);
   const zoom = useRef(1);
   const panOffset = useRef<Point>({ x: 0, y: 0 });
+  const pointerScreenPosition = useRef<Point | null>(null);
   const rafId = useRef<number>(0);
   const viewportRafId = useRef<number>(0);
   const history = useRef(createHistory());
@@ -173,6 +177,32 @@ export function useSketchEngine(
 
   function canvasToScreen(point: Point): Point {
     return canvasToScreenMath(point, zoom.current, panOffset.current);
+  }
+
+  function getViewportBounds(): CanvasViewportBounds | null {
+    const canvas = interactionCavasRef.current;
+    if (!canvas) return null;
+
+    const { width, height } = canvas.getBoundingClientRect();
+    const topLeft = screenToCanvas({ x: 0, y: 0 });
+    const bottomRight = screenToCanvas({ x: width, y: height });
+
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
+    };
+  }
+
+  function getPointerPosition(): Point | null {
+    return pointerScreenPosition.current
+      ? screenToCanvas(pointerScreenPosition.current)
+      : null;
+  }
+
+  function clearPointerPosition() {
+    pointerScreenPosition.current = null;
   }
 
   const renderers = createRenderers({
@@ -507,6 +537,7 @@ export function useSketchEngine(
   }
 
   function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
+    pointerScreenPosition.current = screenPoint;
     if (tool === "select" && e.button === 2) return;
     if (isPanning.current) {
       return beginPanning(viewportControllerContext(), screenPoint);
@@ -536,6 +567,7 @@ export function useSketchEngine(
   }
 
   function onPointerMove(screenPoint: Point) {
+    pointerScreenPosition.current = screenPoint;
     if (handlePanningMove(viewportControllerContext(), screenPoint)) return;
     if (
       tool === "select" &&
@@ -606,6 +638,17 @@ export function useSketchEngine(
     duplicateSelectedElements(canvasCommandsContext(), DUPLICATE_OFFSET);
   }
 
+  function getClipboardElements(): SketchElement[] {
+    return getSelectedCanvasElements(canvasCommandsContext());
+  }
+
+  function pasteClipboardElements(
+    sourceElements: SketchElement[],
+    offset: Point,
+  ): boolean {
+    return pasteCanvasElements(canvasCommandsContext(), sourceElements, offset);
+  }
+
   function deselect() {
     deselectCanvas(canvasCommandsContext());
   }
@@ -673,6 +716,11 @@ export function useSketchEngine(
     redo,
     canUndo: historyStatus.canUndo,
     canRedo: historyStatus.canRedo,
+    getClipboardElements,
+    getPointerPosition,
+    clearPointerPosition,
+    getViewportBounds,
+    pasteClipboardElements,
     deleteSelected,
     duplicateSelected,
     deselect,

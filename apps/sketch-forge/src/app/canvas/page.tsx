@@ -11,7 +11,11 @@ import {
   NotebookSidebar,
   useCanvasSync,
   useCanvasPreferences,
-  useCanvasShortcuts,
+  useCanvasEditorRuntime,
+  useCanvasShortcutRegistry,
+  commandRedo,
+  commandSetTool,
+  commandUndo,
   CANVAS_THEME_DEFAULTS,
   getCanvasPrefsKey,
   getBackgroundStyle,
@@ -130,6 +134,11 @@ function CanvasContent() {
     redo,
     canUndo,
     canRedo,
+    getClipboardElements,
+    getPointerPosition,
+    clearPointerPosition,
+    getViewportBounds,
+    pasteClipboardElements,
     deleteSelected,
     duplicateSelected,
     deselect,
@@ -323,19 +332,29 @@ function CanvasContent() {
     }
   }
 
-  useCanvasShortcuts({
-    tool,
-    setTool,
-    deleteSelected,
-    deselect,
-    duplicateSelected,
-    editSelected,
-    isPanningRef,
-    redo,
-    setIsPanningMode,
-    stopPanning,
-    undo,
-  });
+  const shortcutSettings = useCanvasShortcutRegistry();
+  const editorCommands = useCanvasEditorRuntime(
+    {
+      tool,
+      canUndo,
+      canRedo,
+      getSelectedElements: getClipboardElements,
+      getPointerPosition,
+      getViewportBounds,
+      pasteElements: pasteClipboardElements,
+      deleteSelected,
+      duplicateSelected,
+      deselect,
+      editSelected,
+      undo,
+      redo,
+      setTool,
+      isPanningRef,
+      setIsPanningMode,
+      stopPanning,
+    },
+    shortcutSettings.registry,
+  );
 
   return (
     <div
@@ -351,11 +370,14 @@ function CanvasContent() {
     >
       <Toolbar
         tool={tool}
-        onToolChange={setTool}
-        onUndo={undo}
-        onRedo={redo}
+        onToolChange={(nextTool) =>
+          editorCommands.execute(commandSetTool, { tool: nextTool })
+        }
+        onUndo={() => editorCommands.execute(commandUndo, undefined)}
+        onRedo={() => editorCommands.execute(commandRedo, undefined)}
         canUndo={canUndo}
         canRedo={canRedo}
+        shortcuts={shortcutSettings.registry}
       />
 
       <CanvasActions
@@ -400,6 +422,7 @@ function CanvasContent() {
           finalizeElement();
           triggerSave();
         }}
+        onPointerLeave={clearPointerPosition}
         onZoom={handleZoom}
         onPan={onPan}
         getCursorForPoint={getCursorForPoint}

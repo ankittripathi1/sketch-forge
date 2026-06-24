@@ -62,6 +62,12 @@ export type SketchElement = {
   fontFamily?: string;
   fontSize?: number;
   fontWeight?: "normal" | "bold";
+  /**
+   * Text sizing mode for tool="text". true/undefined = auto-width (grows
+   * horizontally, only newlines break lines). false = fixed-width (wraps to
+   * the box width, grows vertically). Set false when the user resizes width.
+   */
+  autoWidth?: boolean;
   /** Horizontal text alignment for inline shape labels. Default: center. */
   textAlign?: TextAlign;
   /** Vertical text alignment for inline shape labels. Default: middle. */

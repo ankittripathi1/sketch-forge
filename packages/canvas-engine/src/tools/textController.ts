@@ -63,16 +63,12 @@ export function editSelectedText(ctx: TextControllerContext) {
     element.tool === "text"
       ? ctx.canvasToScreen({ x: element.x1, y: element.y1 })
       : ctx.canvasToScreen({
-          x: Math.min(element.x1, element.x2),
-          y: Math.min(element.y1, element.y2),
-        });
+        x: Math.min(element.x1, element.x2),
+        y: Math.min(element.y1, element.y2),
+      });
 
-  if (element.tool === "text") {
-    ctx.clearSelection();
-  } else {
-    ctx.setSelectedElements([getTextEditPreviewElement(element)]);
-  }
-  ctx.renderSceneAndSelection();
+  ctx.setSelectedElements([getTextEditPreviewElement(element)])
+  ctx.renderSceneAndSelection()
 
   openTextEditEditor({
     element,

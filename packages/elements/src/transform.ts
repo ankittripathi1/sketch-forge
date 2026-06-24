@@ -256,19 +256,58 @@ export function applyResizeWithTextMeasurement({
   const resized = applyResize(element, handle, to, allElements, zoom);
   if (resized.tool !== "text" || !resized.text) return resized;
 
+  const family = resized.fontFamily ?? fontFamily;
+  const weight = resized.fontWeight ?? fontWeight;
+  const isHorizontalSide = handle === 3 || handle === 4;
+
+  // Corner or vertical-side drag (Excalidraw-style): scale the font size by how
+  // much the box grew vertically and let the text re-fit. Wrapping mode is
+  // preserved — auto-width text stays single-line, fixed-width text re-wraps at
+  // the scaled width.
+  if (!isHorizontalSide) {
+    const before = getBoundingBox(element);
+    const after = getBoundingBox(resized);
+    // Uniform scale derived from the vertical growth. Scale font AND width by
+    // the same factor so the wrap stays identical — that keeps height growth
+    // proportional instead of runaway re-wrapping (Excalidraw behavior).
+    const scale = before.h > 0 ? after.h / before.h : 1;
+    const nextFontSize = Math.max(4, (element.fontSize ?? fontSize) * scale);
+    const autoWidth = element.autoWidth !== false;
+    const nextWidth = Math.max(before.w * scale, 20);
+    const measured = measureTextBox(resized.text, {
+      fontFamily: family,
+      fontSize: nextFontSize,
+      fontWeight: weight,
+      width: autoWidth ? 20 : nextWidth,
+      fixedWidth: !autoWidth,
+    });
+    return {
+      ...resized,
+      fontSize: nextFontSize,
+      x1: after.x,
+      y1: after.y,
+      x2: after.x + (autoWidth ? measured.width : nextWidth),
+      y2: after.y + measured.height,
+    };
+  }
+
+  // Horizontal side drag: lock the new width, switch to fixed-width mode, and
+  // wrap the text — height grows to fit.
   const { x, y, w } = getBoundingBox(resized);
+  const boxWidth = Math.max(w, 20);
   const measured = measureTextBox(resized.text, {
-    fontFamily: resized.fontFamily ?? fontFamily,
+    fontFamily: family,
     fontSize: resized.fontSize ?? fontSize,
-    fontWeight: resized.fontWeight ?? fontWeight,
-    width: Math.max(w, 20),
+    fontWeight: weight,
+    width: boxWidth,
     fixedWidth: true,
   });
 
   return {
     ...resized,
+    autoWidth: false,
     x1: x,
-    x2: x + Math.max(w, 20),
+    x2: x + boxWidth,
     y1: y,
     y2: y + measured.height,
   };

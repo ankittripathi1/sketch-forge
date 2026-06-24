@@ -71,3 +71,31 @@ export const actionReplaceScene: Action<ReplaceScenePayload> = {
     captureUpdate: payload.captureUpdate ?? "history",
   }),
 };
+
+export type InsertElementsPayload = {
+  elements: SketchElement[];
+};
+
+export const actionInsertElements: Action<InsertElementsPayload> = {
+  name: "insertElements",
+
+  perform: ({ elements }, payload) => {
+    if (payload.elements.length === 0) {
+      return false;
+    }
+
+    return {
+      elements: [...elements, ...payload.elements],
+
+      appState: {
+        selectedElementIds: new Set(
+          payload.elements.map((element) => element.id),
+        ),
+        selectedTool: null,
+        activeTool: "select",
+      },
+
+      captureUpdate: "history",
+    };
+  },
+};

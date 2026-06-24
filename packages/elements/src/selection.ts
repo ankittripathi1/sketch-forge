@@ -1,4 +1,4 @@
-import type { SketchElement } from "./types";
+import type { Point, SketchElement } from "./types";
 import { randomId } from "@repo/common";
 
 export function getSelectedElements(
@@ -47,19 +47,7 @@ export function duplicateElements(
   elements: SketchElement[],
   offset: number,
 ): SketchElement[] {
-  return elements.map((element) => ({
-    ...element,
-    id: randomId(),
-    x1: element.x1 + offset,
-    y1: element.y1 + offset,
-    x2: element.x2 + offset,
-    y2: element.y2 + offset,
-    seed: Math.floor(Math.random() * 100_000),
-    points: element.points?.map((point) => ({
-      x: point.x + offset,
-      y: point.y + offset,
-    })),
-  }));
+  return cloneElementsForPaste(elements, offset);
 }
 
 export function setSelection(ids: Iterable<string>): Set<string> {
@@ -92,4 +80,48 @@ export function toggleSelection(
   if (next.has(id)) next.delete(id);
   else next.add(id);
   return next;
+}
+
+function remapBinding(
+  binding: SketchElement["startBinding"],
+  idMap: Map<string, string>,
+): SketchElement["startBinding"] {
+  if (!binding) return undefined;
+
+  const nextElementId = idMap.get(binding.elementId);
+
+  if (!nextElementId) return undefined;
+
+  return {
+    ...binding,
+    elementId: nextElementId,
+  };
+}
+
+export function cloneElementsForPaste(
+  elements: SketchElement[],
+  offset: number | Point,
+): SketchElement[] {
+  const offsetX = typeof offset === "number" ? offset : offset.x;
+  const offsetY = typeof offset === "number" ? offset : offset.y;
+  const idMap = new Map(elements.map((element) => [element.id, randomId()]));
+
+  return elements.map((element) => ({
+    ...element,
+    id: idMap.get(element.id)!,
+    x1: element.x1 + offsetX,
+    y1: element.y1 + offsetY,
+    x2: element.x2 + offsetX,
+    y2: element.y2 + offsetY,
+    seed: Math.floor(Math.random() * 100_000),
+
+    points: element.points?.map((point) => ({
+      x: point.x + offsetX,
+      y: point.y + offsetY,
+    })),
+
+    startBinding: remapBinding(element.startBinding, idMap),
+
+    endBinding: remapBinding(element.endBinding, idMap),
+  }));
 }

@@ -9,6 +9,7 @@ interface SketchCanvasProps {
   onPointerDown: (p: Point, e: React.PointerEvent) => void;
   onPointerMove: (p: Point) => void;
   onPointerUp: () => void;
+  onPointerLeave?: () => void;
   onZoom: (delta: number, p: Point) => void;
   onPan: (dx: number, dy: number) => void;
   getCursorForPoint: (p: Point) => string;
@@ -24,6 +25,7 @@ export function SketchCanvas({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerLeave,
   onZoom,
   onPan,
   getCursorForPoint,
@@ -66,7 +68,10 @@ export function SketchCanvas({
         e.currentTarget.style.cursor = getCursorForPoint(p);
       }}
       onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
+      onPointerLeave={() => {
+        onPointerUp();
+        onPointerLeave?.();
+      }}
       onWheel={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };

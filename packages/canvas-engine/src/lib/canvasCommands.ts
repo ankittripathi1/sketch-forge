@@ -9,7 +9,12 @@ import {
   actionDuplicateSelected,
 } from "../actions/selection";
 import { dispatchAction } from "../actions/manager";
-import { actionAddElement, actionReplaceScene } from "../actions/elements";
+import {
+  actionAddElement,
+  actionInsertElements,
+  actionReplaceScene,
+} from "../actions/elements";
+import { cloneElementsForPaste, getSelectedElements } from "@repo/element";
 
 type Ref<T> = { current: T };
 
@@ -110,4 +115,30 @@ export function handleImageDrop(
     ctx.renderScene();
   };
   reader.readAsDataURL(file);
+}
+
+export function getSelectedCanvasElements(
+  ctx: CanvasCommandsContext,
+): SketchElement[] {
+  return getSelectedElements(ctx.elements.current, ctx.selectedIds.current);
+}
+
+export function pasteCanvasElements(
+  ctx: CanvasCommandsContext,
+  sourceElements: SketchElement[],
+  offset: Point,
+): boolean {
+  if (sourceElements.length === 0) {
+    return false;
+  }
+  const pastedElements = cloneElementsForPaste(sourceElements, offset);
+
+  const result = dispatchAction(ctx, actionInsertElements, {
+    elements: pastedElements,
+  });
+
+  if (!result) return false;
+
+  ctx.renderSceneAndSelection();
+  return true;
 }

@@ -36,10 +36,13 @@ export function Breadcrumbs({ currentFolderId, allFolders }: BreadcrumbsProps) {
   }, [buildCrumbs]);
 
   return (
-    <nav className="flex items-center gap-1 text-xs font-medium">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex items-center gap-1.5 text-xs font-medium"
+    >
       <Link
         href="/dashboard"
-        className="flex items-center gap-1.5 text-text-muted hover:text-text-body transition-colors"
+        className="flex items-center gap-1.5 text-text-muted transition-colors hover:text-accent"
       >
         <Home size={14} />
         <span>Home</span>

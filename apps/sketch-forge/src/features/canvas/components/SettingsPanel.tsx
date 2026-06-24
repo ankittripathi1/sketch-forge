@@ -1,7 +1,8 @@
 "use client";
 
-import { Brain, Eye, EyeOff, Pencil, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Brain, ExternalLink, Pencil, X } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 const STORAGE_BACKEND = "sketch-forge:recognition-backend";
 const STORAGE_KEY = "sketch-forge:recognition-api-key";
@@ -28,9 +29,6 @@ export function SettingsPanel({
   onRecognitionApiKey,
 }: SettingsPanelProps) {
   const [visible, setVisible] = useState(false);
-  const [showKey, setShowKey] = useState(false);
-  const [keyDraft, setKeyDraft] = useState(recognitionApiKey);
-  const keyRef = useRef<HTMLInputElement>(null);
 
   // Animate in/out
   useEffect(() => {
@@ -46,31 +44,19 @@ export function SettingsPanel({
   useEffect(() => {
     const b = localStorage.getItem(STORAGE_BACKEND);
     if (b === "gemini" || b === "tesseract") onRecognitionBackend(b);
-    const k = localStorage.getItem(STORAGE_KEY) ?? "";
-    onRecognitionApiKey(k);
-    setKeyDraft(k);
+    onRecognitionApiKey(localStorage.getItem(STORAGE_KEY) ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Sync draft when the value changes externally
-  useEffect(() => {
-    setKeyDraft(recognitionApiKey);
-  }, [recognitionApiKey]);
 
   function handleBackend(v: "tesseract" | "gemini") {
     onRecognitionBackend(v);
     localStorage.setItem(STORAGE_BACKEND, v);
   }
 
-  function handleKeySave() {
-    const trimmed = keyDraft.trim();
-    onRecognitionApiKey(trimmed);
-    localStorage.setItem(STORAGE_KEY, trimmed);
-  }
-
   if (!visible) return null;
 
   const usingAI = recognitionBackend === "gemini";
+  const hasApiKey = recognitionApiKey.trim().length > 0;
 
   return (
     <>
@@ -87,7 +73,7 @@ export function SettingsPanel({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3.5">
           <span className="text-[13px] font-semibold tracking-tight text-text-body">
-            Settings
+            Canvas settings
           </span>
           <button
             onClick={onClose}
@@ -165,52 +151,21 @@ export function SettingsPanel({
                   : "Local OCR runs entirely in-browser with no API key, but works best with clear, printed letters."}
               </p>
 
-              {/* Gemini API key input */}
               {usingAI && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-medium text-text-secondary">
-                    Gemini API Key
-                  </label>
-                  <div className="flex gap-1.5">
-                    <input
-                      ref={keyRef}
-                      type={showKey ? "text" : "password"}
-                      value={keyDraft}
-                      onChange={(e) => setKeyDraft(e.target.value)}
-                      onBlur={handleKeySave}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleKeySave();
-                          keyRef.current?.blur();
-                        }
-                      }}
-                      placeholder="AIza…"
-                      className="min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface-raised px-2.5 py-2 text-xs font-mono text-text-body placeholder:text-text-dim outline-none transition-colors focus:border-border-accent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey((v) => !v)}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle bg-surface-raised text-text-muted hover:text-text-body transition-colors"
-                      title={showKey ? "Hide key" : "Show key"}
-                    >
-                      {showKey ? (
-                        <EyeOff size={13} strokeWidth={1.8} />
-                      ) : (
-                        <Eye size={13} strokeWidth={1.8} />
-                      )}
-                    </button>
-                  </div>
-                  {recognitionApiKey && recognitionApiKey === keyDraft && (
-                    <p className="text-xs text-status-success">✓ Key saved</p>
-                  )}
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-text-secondary underline underline-offset-2 hover:text-text-body"
+                <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface-raised p-3">
+                  <p className="text-xs font-medium text-text-body">
+                    {hasApiKey ? "Gemini API key is configured" : "API key required"}
+                  </p>
+                  <p className="text-[10px] leading-relaxed text-text-muted">
+                    API keys and shortcut customization live in the main
+                    Settings page so they stay consistent across the app.
+                  </p>
+                  <Link
+                    href="/dashboard/settings"
+                    className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-accent hover:underline"
                   >
-                    Get a free API key at Google AI Studio →
-                  </a>
+                    Open main settings <ExternalLink size={11} />
+                  </Link>
                 </div>
               )}
             </section>
@@ -219,7 +174,9 @@ export function SettingsPanel({
 
         {/* Footer */}
         <div className="mt-auto border-t border-border-subtle px-4 py-3">
-          <p className="text-xs text-text-dim">More settings coming soon…</p>
+          <p className="text-xs text-text-dim">
+            Use main Settings for account, theme, API keys, and shortcuts.
+          </p>
         </div>
       </div>
     </>

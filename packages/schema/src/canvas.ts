@@ -49,6 +49,7 @@ export const SketchElementSchema = z.object({
   fontFamily: z.string().optional(),
   fontSize: z.number().optional(),
   fontWeight: z.enum(["normal", "bold"]).optional(),
+  autoWidth: z.boolean().optional(),
   textAlign: TextAlignSchema.optional(),
   textVerticalAlign: TextVerticalAlignSchema.optional(),
   startBinding: ArrowBindingSchema.optional(),
@@ -80,3 +81,11 @@ const _sketchElementDriftCheck: AssertEqual<
   z.infer<typeof SketchElementSchema>,
   CanonicalSketchElement
 > = true;
+
+export const SketchForgeClipboardSchema = z.object({
+  type: z.literal("sketch-forge/elements"),
+  version: z.literal(1),
+  elements: z.array(SketchElementSchema),
+});
+
+export type SketchForgeClipboard = z.infer<typeof SketchForgeClipboardSchema>;

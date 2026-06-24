@@ -10,11 +10,11 @@ export function SearchBar({ onClick }: SearchBarProps) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-1 min-w-0 items-center gap-2 rounded-lg bg-surface-base border border-border-subtle px-2.5 py-1.5 text-xs text-text-muted hover:text-text-body hover:border-border-default transition-all"
+      className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[11px] border border-border-subtle bg-surface-base/70 px-3 text-xs text-text-muted transition-all hover:border-border-default hover:bg-surface-raised hover:text-text-body"
     >
-      <Search size={12} className="shrink-0" />
-      <span className="truncate">Search...</span>
-      <kbd className="ml-auto shrink-0 text-[9px] px-1 py-0.5 rounded bg-surface-raised border border-border-default text-text-dim">
+      <Search size={13} className="shrink-0" />
+      <span className="truncate">Search your library</span>
+      <kbd className="ml-auto shrink-0 rounded-md border border-border-default bg-surface-raised px-1.5 py-0.5 text-[9px] text-text-dim">
         ⌘K
       </kbd>
     </button>

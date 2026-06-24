@@ -32,9 +32,22 @@ export {
   actionAddElement,
   actionReplaceScene,
   actionUpdateElements,
+  actionInsertElements,
   type AddElementPayload,
+  type InsertElementsPayload,
   type ReplaceScenePayload,
   type UpdateElementsPayload,
 } from "./actions/elements";
 export { actionSetActiveTool, type SetActiveToolPayload } from "./actions/tool";
 export { performAction, type DispatchActionContext } from "./actions/manager";
+export {
+  defineEditorCommand,
+  EditorCommandManager,
+  type EditorCommand,
+  type EditorCommandResult,
+} from "./editor/commandManager";
+export {
+  getContextualPasteTranslation,
+  type CanvasViewportBounds,
+  type PastePlacementContext,
+} from "./lib/pastePlacement";

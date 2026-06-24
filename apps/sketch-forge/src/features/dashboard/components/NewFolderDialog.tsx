@@ -15,7 +15,7 @@ interface NewFolderDialogProps {
 const COMMON_EMOJIS = [
   "📁",
   "📓",
-  "📓",
+  "🗂️",
   "🎨",
   "🚀",
   "💡",
@@ -24,14 +24,7 @@ const COMMON_EMOJIS = [
   "🌟",
   "🔥",
 ];
-const COMMON_COLORS = [
-  "#5a8ae8",
-  "#e85a5a",
-  "#5ae88a",
-  "#e8e85a",
-  "#e85ae8",
-  "#5ae8e8",
-];
+const COMMON_COLORS = ["#b94a2b", "#d48832", "#899267", "#a65b55"];
 
 export function NewFolderDialog({
   isOpen,
@@ -42,7 +35,7 @@ export function NewFolderDialog({
 }: NewFolderDialogProps) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("📁");
-  const [color, setColor] = useState("#5a8ae8");
+  const [color, setColor] = useState("#b94a2b");
   const [parentId, setParentId] = useState<string | null>(defaultParentId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const createFolderMutation = useCreateFolder();
@@ -64,7 +57,7 @@ export function NewFolderDialog({
       onClose();
       setName("");
       setIcon("📁");
-      setColor("#5a8ae8");
+      setColor("#b94a2b");
       setParentId(null);
     } catch (error) {
       console.error("Failed to create folder:", error);
@@ -74,13 +67,21 @@ export function NewFolderDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-      <div className="w-full max-w-md rounded-2xl border border-border-default bg-surface-base p-6 shadow-2xl transition-all duration-300 transform scale-100">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-text-heading">New Folder</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm transition-opacity duration-300">
+      <div className="w-full max-w-md rounded-[24px] border border-border-default bg-surface-base p-6 shadow-elev-4 transition-all duration-300">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+              Organize your library
+            </p>
+            <h2 className="font-display mt-1.5 text-2xl font-semibold tracking-[-0.035em] text-text-heading">
+              New folder
+            </h2>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-surface-hover transition-colors text-text-muted"
+            className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-hover"
+            aria-label="Close"
           >
             <X size={20} />
           </button>
@@ -88,8 +89,8 @@ export function NewFolderDialog({
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">
-              Folder Name
+            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+              Folder name
             </label>
             <input
               autoFocus
@@ -97,19 +98,19 @@ export function NewFolderDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Personal Sketches"
-              className="w-full rounded-xl border border-border-default bg-surface-overlay px-4 py-3 text-sm text-text-heading placeholder:text-text-dim outline-none focus:border-border-accent transition-colors"
+              className="w-full rounded-[13px] border border-border-default bg-surface-overlay px-4 py-3 text-sm text-text-heading outline-none transition-colors placeholder:text-text-dim focus:border-border-accent-strong"
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">
-              Parent Folder (Optional)
+            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+              Parent folder · optional
             </label>
             <div className="relative">
               <select
                 value={parentId || ""}
                 onChange={(e) => setParentId(e.target.value || null)}
-                className="w-full rounded-xl border border-border-default bg-surface-overlay px-4 py-3 text-sm text-text-heading outline-none focus:border-border-accent appearance-none cursor-pointer transition-colors"
+                className="w-full cursor-pointer appearance-none rounded-[13px] border border-border-default bg-surface-overlay px-4 py-3 text-sm text-text-heading outline-none transition-colors focus:border-border-accent-strong"
               >
                 <option value="">None (Top Level)</option>
                 {folders.map((f) => (
@@ -128,7 +129,7 @@ export function NewFolderDialog({
 
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">
+              <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 Icon
               </label>
               <div className="grid grid-cols-5 gap-2">
@@ -139,7 +140,7 @@ export function NewFolderDialog({
                     onClick={() => setIcon(emoji)}
                     className={`flex h-8 w-8 items-center justify-center rounded-lg text-lg transition-all ${
                       icon === emoji
-                        ? "bg-accent scale-110"
+                        ? "scale-105 bg-accent-subtle ring-1 ring-border-accent-strong"
                         : "bg-surface-hover hover:bg-surface-hover"
                     }`}
                   >
@@ -150,10 +151,10 @@ export function NewFolderDialog({
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">
+              <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 Color
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {COMMON_COLORS.map((c) => (
                   <button
                     key={c}
@@ -175,16 +176,16 @@ export function NewFolderDialog({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-text-muted hover:bg-surface-hover hover:text-text-body transition-colors"
+              className="flex-1 rounded-full px-4 py-3 text-sm font-semibold text-text-muted transition-colors hover:bg-surface-hover hover:text-text-body"
             >
               Cancel
             </button>
             <button
               disabled={isSubmitting || !name.trim()}
               type="submit"
-              className="flex-1 rounded-xl bg-accent px-4 py-3 text-sm font-bold text-accent-text transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100"
+              className="flex-1 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-accent-text transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:translate-y-0 disabled:opacity-50"
             >
-              {isSubmitting ? "Creating..." : "Create Folder"}
+              {isSubmitting ? "Creating…" : "Create folder"}
             </button>
           </div>
         </form>

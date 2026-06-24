@@ -1,30 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
-  Plus,
   Zap,
   ChevronLeft,
   ChevronRight,
   Settings,
   FolderPlus,
   LayoutDashboard,
-  FileText,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { FolderTreeItem } from "./FolderTreeItem";
 import { NewFolderDialog } from "./NewFolderDialog";
 import { SearchBar } from "./SearchBar";
 import { useRouter, usePathname } from "next/navigation";
-import { ThemeSelector } from "@/theme/ThemeSelector";
 import {
   useCreatePage,
   useDashboardData,
-  useDeletePage,
   useUpdateFolder,
   useUpdatePage,
 } from "@/api/hooks";
-import type { Folder, Page } from "@/api/types";
+import type { Folder } from "@/api/types";
+import { useDashboardUiStore } from "@/stores/dashboardUiStore";
 
 type FolderWithPageCount = Folder & {
   pageCount?: number;
@@ -36,108 +33,19 @@ interface SidebarProps {
   onSearchOpen: () => void;
 }
 
-interface RootPageItemProps {
-  page: Page;
-  onNavigate: (id: string) => void;
-  onRefresh: () => void;
-}
-
-function RootPageItem({ page, onNavigate, onRefresh }: RootPageItemProps) {
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const updatePageMutation = useUpdatePage();
-  const deletePageMutation = useDeletePage();
-
-  useEffect(() => {
-    const close = () => setContextMenu(null);
-    if (contextMenu) window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, [contextMenu]);
-
-  const handleRename = async () => {
-    const newTitle = prompt("Rename page:", page.title);
-    if (!newTitle || newTitle === page.title) return;
-    try {
-      await updatePageMutation.mutateAsync({
-        id: page.id,
-        data: { title: newTitle },
-      });
-      onRefresh();
-    } catch (error) {
-      console.error("Failed to rename page:", error);
-    }
-    setContextMenu(null);
-  };
-
-  const handleDelete = async () => {
-    if (!confirm(`Delete "${page.title}"?`)) return;
-    try {
-      await deletePageMutation.mutateAsync(page.id);
-      onRefresh();
-    } catch (error) {
-      console.error("Failed to delete page:", error);
-    }
-    setContextMenu(null);
-  };
-
-  return (
-    <div className="relative">
-      <div
-        className="group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs cursor-pointer text-text-secondary hover:bg-surface-hover hover:text-text-heading transition-all"
-        onClick={() => onNavigate(page.id)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          setContextMenu({ x: e.clientX, y: e.clientY });
-        }}
-      >
-        <FileText size={13} className="flex-shrink-0" />
-        <span className="flex-1 truncate font-medium">{page.title}</span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setContextMenu({ x: e.clientX, y: e.clientY });
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-surface-hover transition-opacity"
-        >
-          <Settings size={11} />
-        </button>
-      </div>
-      {contextMenu && (
-        <div
-          className="fixed z-50 w-40 rounded-xl border border-border-default bg-surface-overlay p-1 shadow-2xl backdrop-blur-xl"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={handleRename}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
-          >
-            Rename
-          </button>
-          <div className="my-1 h-px bg-border-default" />
-          <button
-            onClick={handleDelete}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-red-400 hover:bg-red-400/10"
-          >
-            Delete
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [isRootDropActive, setIsRootDropActive] = useState(false);
   const [newFolderParentId, setNewFolderParentId] = useState<string | null>(
     null,
   );
   const router = useRouter();
   const pathname = usePathname();
+  const draggingPage = useDashboardUiStore((state) => state.draggingPage);
+  const setDraggingPage = useDashboardUiStore((state) => state.setDraggingPage);
   const { data, refetch } = useDashboardData();
   const createPageMutation = useCreatePage();
+  const movePageMutation = useUpdatePage();
   const updateFolderMutation = useUpdateFolder();
 
   const pages = useMemo(() => data?.pages ?? [], [data?.pages]);
@@ -183,6 +91,23 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
 
   const handleDrop = async (e: React.DragEvent, targetId: string | null) => {
     e.preventDefault();
+    setIsRootDropActive(false);
+
+    const pageId = e.dataTransfer.getData("pageId");
+    if (pageId) {
+      try {
+        await movePageMutation.mutateAsync({
+          id: pageId,
+          data: { folderId: targetId },
+        });
+        refreshAll();
+        setDraggingPage(null);
+      } catch (error) {
+        console.error("Failed to move page:", error);
+      }
+      return;
+    }
+
     const folderId = e.dataTransfer.getData("folderId");
     if (!folderId || folderId === targetId) return;
     try {
@@ -202,24 +127,25 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
       .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const isDashboard = pathname === "/dashboard";
+  const isSettings = pathname === "/dashboard/settings";
+  const showRootDropHint = Boolean(draggingPage?.folderId);
 
   return (
     <aside
-      className={`relative flex h-full flex-col border-r border-border-default bg-surface-raised transition-all duration-300 ease-in-out ${
-        isCollapsed ? "w-12" : "w-[280px]"
+      className={`relative flex h-full shrink-0 flex-col border-r border-border-subtle bg-surface-paper/75 transition-all duration-300 ease-in-out ${
+        isCollapsed ? "w-16" : "w-[292px]"
       }`}
     >
-      {/* Top: Logo & Search */}
-      <div className="flex h-14 items-center border-b border-border-default px-3">
+      <div className="border-b border-border-subtle p-3.5">
         {isCollapsed ? (
-          <div className="flex w-full justify-center">
-            <Logo size={22} rounded="rounded-md" />
+          <div className="flex h-9 w-full items-center justify-center">
+            <Logo size={30} rounded="rounded-[9px]" />
           </div>
         ) : (
-          <div className="flex w-full items-center gap-2.5 overflow-hidden">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Logo size={22} rounded="rounded-md" />
-              <span className="font-bold tracking-tight text-text-primary text-sm">
+          <div className="space-y-3.5 overflow-hidden">
+            <div className="flex items-center gap-2.5">
+              <Logo size={30} rounded="rounded-[9px]" />
+              <span className="font-display text-[16px] font-semibold tracking-[-0.035em] text-text-heading">
                 Sketch Forge
               </span>
             </div>
@@ -228,32 +154,64 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
         )}
       </div>
 
-      {/* Nav: Dashboard link */}
-      <div className={`px-2 pt-3 pb-1 ${isCollapsed ? "px-1" : ""}`}>
+      <nav className={`px-3 pb-1 pt-4 ${isCollapsed ? "px-2" : ""}`}>
         <button
           onClick={() => router.push("/dashboard")}
           title="Dashboard"
-          className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-all ${
-            isDashboard
-              ? "bg-accent-subtle text-accent"
-              : "text-text-secondary hover:bg-surface-hover hover:text-text-body"
+          onDragEnter={() => setIsRootDropActive(true)}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            setIsRootDropActive(true);
+          }}
+          onDragLeave={() => setIsRootDropActive(false)}
+          onDrop={(event) => handleDrop(event, null)}
+          className={`flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-xs font-semibold transition-all ${
+            isRootDropActive
+              ? "bg-accent text-accent-text shadow-glow-accent"
+              : showRootDropHint
+                ? "bg-accent-subtle text-accent ring-1 ring-inset ring-border-accent-strong"
+                : isDashboard
+                  ? "bg-accent-subtle text-accent"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-text-body"
           } ${isCollapsed ? "justify-center" : ""}`}
         >
           <LayoutDashboard size={14} />
-          {!isCollapsed && <span>Dashboard</span>}
+          {!isCollapsed && (
+            <span>
+              {isRootDropActive
+                ? "Release to move"
+                : showRootDropHint
+                  ? "Drop here for root"
+                  : "All pages"}
+            </span>
+          )}
         </button>
-      </div>
 
-      {/* Middle: Folder Tree */}
+        <button
+          onClick={() => router.push("/capture")}
+          className={`mt-1 flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-xs font-medium transition-all ${
+            pathname === "/capture"
+              ? "bg-accent-subtle text-accent"
+              : "text-text-secondary hover:bg-surface-hover hover:text-text-body"
+          } ${isCollapsed ? "justify-center" : ""}`}
+          title="Quick capture"
+        >
+          <Zap size={14} />
+          {!isCollapsed && <span>Quick capture</span>}
+        </button>
+      </nav>
+
       <div
-        className={`flex-1 overflow-y-auto py-2 ${isCollapsed ? "px-1" : "px-2"}`}
+        className={`flex-1 overflow-y-auto py-3 ${isCollapsed ? "px-2" : "px-3"}`}
       >
         {!isCollapsed && (
-          <div className="mb-1.5 flex items-center justify-between px-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            <span>Library</span>
+          <div className="mb-2 flex items-center justify-between px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+            <span>Notebooks</span>
             <button
               onClick={() => setIsNewFolderOpen(true)}
-              className="hover:text-accent transition-colors"
+              className="rounded-md p-1 transition-colors hover:bg-accent-subtle hover:text-accent"
+              aria-label="New folder"
             >
               <FolderPlus size={13} />
             </button>
@@ -281,82 +239,42 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
             />
           ))}
         </div>
-
-        {!isCollapsed &&
-          pages.filter((p) => p.folderId === null).length > 0 && (
-            <div className="mt-1 space-y-0.5">
-              {pages
-                .filter((p) => p.folderId === null)
-                .map((p) => (
-                  <RootPageItem
-                    key={p.id}
-                    page={p}
-                    onNavigate={(id) => router.push(`/canvas?pageId=${id}`)}
-                    onRefresh={refreshAll}
-                  />
-                ))}
-            </div>
-          )}
       </div>
 
-      {/* Bottom: Actions & User */}
-      <div className="mt-auto border-t border-border-default p-2.5">
-        <div className="space-y-1 mb-3">
-          <button
-            onClick={() => router.push("/canvas")}
-            className={`flex w-full items-center gap-2.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-text transition-all hover:bg-accent-hover active:scale-[0.98] ${
-              isCollapsed ? "justify-center" : ""
-            }`}
-          >
-            <Plus size={15} strokeWidth={2.5} />
-            {!isCollapsed && <span>New Notebook</span>}
-          </button>
-
-          <button
-            onClick={() => router.push("/capture")}
-            className={`flex w-full items-center gap-2.5 rounded-lg border border-border-default px-3 py-2 text-xs font-medium text-text-body transition-all hover:bg-surface-hover ${
-              isCollapsed ? "justify-center" : ""
-            }`}
-          >
-            <Zap size={15} className="text-accent" />
-            {!isCollapsed && <span>Quick Capture</span>}
-          </button>
-        </div>
-
-        {/* User profile row — theme toggle lives here */}
-        <div
-          className={`flex items-center gap-2.5 border-t border-border-default pt-2.5 ${
-            isCollapsed ? "justify-center" : ""
-          }`}
+      <div className="mt-auto border-t border-border-subtle p-3">
+        <button
+          onClick={() => router.push("/dashboard/settings")}
+          className={`flex w-full items-center gap-2.5 rounded-[12px] p-2 text-left transition-colors ${
+            isSettings ? "bg-accent-subtle" : "hover:bg-surface-hover"
+          } ${isCollapsed ? "justify-center" : ""}`}
+          title="Settings"
         >
-          <div className="h-7 w-7 rounded-full bg-gradient-brand flex-shrink-0 text-[10px] font-bold text-accent-text flex items-center justify-center">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-accent text-[11px] font-bold text-accent-text">
             A
           </div>
           {!isCollapsed && (
             <>
               <div className="flex flex-1 flex-col overflow-hidden">
-                <span className="truncate text-xs font-semibold text-text-primary">
+                <span className="truncate text-xs font-semibold text-text-heading">
                   Ankit Tripathi
                 </span>
                 <span className="truncate text-[10px] text-text-muted">
                   Pro Plan
                 </span>
               </div>
-              <div className="flex items-center gap-1">
-                <ThemeSelector />
-                <button className="p-1.5 rounded-lg text-text-muted hover:text-text-body hover:bg-surface-hover transition-all">
-                  <Settings size={13} />
-                </button>
-              </div>
+              <Settings
+                size={15}
+                className={isSettings ? "text-accent" : "text-text-muted"}
+              />
             </>
           )}
-        </div>
+        </button>
       </div>
 
-      {/* Collapse Toggle */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-border-default bg-surface-raised text-text-muted shadow-md hover:text-text-body z-10 transition-colors"
+        className="absolute -right-3 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-border-default bg-surface-raised text-text-muted shadow-elev-1 transition-all hover:border-border-accent hover:text-accent"
+        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {isCollapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
       </button>

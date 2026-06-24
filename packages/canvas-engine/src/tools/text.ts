@@ -82,9 +82,7 @@ export function applyShapeTextEdit(
 }
 
 export function getTextEditPreviewElement(el: SketchElement): SketchElement {
-  return canEditTextForElement(el) && el.tool !== "text"
-    ? { ...el, text: undefined }
-    : el;
+  return canEditTextForElement(el) ? { ...el, text: undefined } : el;
 }
 
 export async function openTextCreationEditor({
@@ -135,7 +133,7 @@ export async function openTextEditEditor({
     fontWeight: element.fontWeight ?? style.fontWeight,
     color: element.strokeColor,
     zoom: style.zoom,
-    fixedWidth: true,
+    fixedWidth: isTextElement ? element.autoWidth === false : true,
     align: isTextElement ? undefined : "center",
   });
 

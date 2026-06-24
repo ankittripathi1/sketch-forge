@@ -33,13 +33,15 @@ export default function DashboardLayout({
   }, [togglePalette]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-surface-raised text-text-body">
+    <div className="dashboard-shell grain flex h-dvh w-screen overflow-hidden bg-surface-base text-text-body">
       <Sidebar
         isCollapsed={isCollapsed}
         onToggle={toggleCollapse}
         onSearchOpen={() => setPaletteOpen(true)}
       />
-      <main className="flex-1 overflow-auto relative">{children}</main>
+      <main className="dashboard-main relative flex-1 overflow-auto">
+        {children}
+      </main>
       <CommandPalette
         isOpen={isPaletteOpen}
         onClose={() => setPaletteOpen(false)}
