@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import {
   ChevronRight,
   ChevronDown,
@@ -23,6 +25,8 @@ import {
 } from "@/api/hooks";
 import type { Folder, Page, UpdateFolderInput } from "@/api/types";
 import { useDashboardUiStore } from "@/stores/dashboardUiStore";
+
+gsap.registerPlugin(useGSAP);
 
 type FolderWithPageCount = Folder & {
   pageCount?: number;
@@ -63,12 +67,33 @@ export function FolderTreeItem({
   const router = useRouter();
   const pathname = usePathname();
   const editInputRef = useRef<HTMLInputElement>(null);
+  const childrenRef = useRef<HTMLDivElement>(null);
   const isActive = pathname === `/dashboard/folder/${folder.id}`;
   const updateFolderMutation = useUpdateFolder();
   const deleteFolderMutation = useDeleteFolder();
   const updatePageMutation = useUpdatePage();
   const deletePageMutation = useDeletePage();
   const setDraggingPage = useDashboardUiStore((state) => state.setDraggingPage);
+
+  useGSAP(
+    () => {
+      if (!isExpanded || !childrenRef.current) return;
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          childrenRef.current,
+          { autoAlpha: 0, y: -6 },
+          { autoAlpha: 1, y: 0, duration: 0.24, ease: "power2.out" },
+        );
+      });
+      return () => media.revert();
+    },
+    {
+      scope: childrenRef,
+      dependencies: [isExpanded],
+      revertOnUpdate: true,
+    },
+  );
 
   const childFolders = allFolders
     .filter((f) => f.parentId === folder.id)
@@ -256,7 +281,7 @@ export function FolderTreeItem({
         onContextMenu={handleContextMenu}
         onClick={handleSelect}
         onDoubleClick={() => setIsEditing(true)}
-        className={`group flex cursor-pointer items-center gap-1 rounded-[10px] px-2 py-2 text-xs transition-all ${
+        className={`dashboard-tree-row group ${
           isDropActive
             ? "bg-accent text-accent-text shadow-glow-accent"
             : isActive
@@ -340,7 +365,7 @@ export function FolderTreeItem({
       </div>
 
       {isExpanded && (childFolders.length > 0 || folderPages.length > 0) && (
-        <div className="mt-0.5 space-y-0.5">
+        <div ref={childrenRef} className="mt-0.5 space-y-0.5">
           {childFolders.map((child) => (
             <FolderTreeItem
               key={child.id}
@@ -407,20 +432,20 @@ export function FolderTreeItem({
           if (!page) return null;
           return (
             <div
-              className="fixed z-50 w-40 rounded-xl border border-border-default bg-surface-overlay p-1 shadow-2xl backdrop-blur-xl"
+              className="dashboard-context-menu w-40"
               style={{ top: pageContextMenu.y, left: pageContextMenu.x }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={() => handlePageRename(page)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+                className="dashboard-menu-item"
               >
                 <Pencil size={14} /> Rename
               </button>
               <div className="my-1 h-px bg-border-default" />
               <button
                 onClick={() => handlePageDelete(page)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-red-400 hover:bg-red-400/10"
+                className="dashboard-menu-item text-status-danger hover:bg-status-danger-subtle"
               >
                 <Trash2 size={14} /> Delete
               </button>
@@ -430,7 +455,7 @@ export function FolderTreeItem({
 
       {showContextMenu && (
         <div
-          className="fixed z-50 w-48 rounded-xl border border-border-default bg-surface-overlay p-1 shadow-2xl backdrop-blur-xl"
+          className="dashboard-context-menu w-48"
           style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -439,7 +464,7 @@ export function FolderTreeItem({
               onNewPage(folder.id);
               setShowContextMenu(false);
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+            className="dashboard-menu-item"
           >
             <FilePlus size={14} /> New Page
           </button>
@@ -448,7 +473,7 @@ export function FolderTreeItem({
               onNewSubfolder(folder.id);
               setShowContextMenu(false);
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+            className="dashboard-menu-item"
           >
             <FolderPlus size={14} /> New Subfolder
           </button>
@@ -458,33 +483,24 @@ export function FolderTreeItem({
               setIsEditing(true);
               setShowContextMenu(false);
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
+            className="dashboard-menu-item"
           >
             <Pencil size={14} /> Rename
           </button>
-          <button
-            onClick={handleChangeIcon}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
-          >
+          <button onClick={handleChangeIcon} className="dashboard-menu-item">
             <Smile size={14} /> Change Icon
           </button>
-          <button
-            onClick={handleChangeColor}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
-          >
+          <button onClick={handleChangeColor} className="dashboard-menu-item">
             <Palette size={14} /> Change Color
           </button>
-          <button
-            onClick={handleMove}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-text-body hover:bg-surface-hover"
-          >
+          <button onClick={handleMove} className="dashboard-menu-item">
             <ArrowRightLeft size={14} /> Move
           </button>
 
           <div className="my-1 h-px bg-border-default" />
           <button
             onClick={handleDelete}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-red-400 hover:bg-red-400/10"
+            className="dashboard-menu-item text-status-danger hover:bg-status-danger-subtle"
           >
             <Trash2 size={14} /> Delete
           </button>

@@ -12,12 +12,16 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import {
   KeyboardShortcutSettings,
   useCanvasShortcutRegistry,
 } from "@/features/canvas";
 import { useAppTheme } from "@/theme/ThemeProvider";
 import type { AppTheme } from "@/theme/themeConfig";
+
+gsap.registerPlugin(useGSAP);
 
 const STORAGE_BACKEND = "sketch-forge:recognition-backend";
 const STORAGE_KEY = "sketch-forge:recognition-api-key";
@@ -31,18 +35,19 @@ const themes: Array<{
   {
     id: "light",
     title: "Light",
-    description: "Warm paper surfaces for bright rooms and daytime work.",
+    description: "Cool paper surfaces for bright rooms and daytime work.",
     icon: Sun,
   },
   {
     id: "dark",
     title: "Dark",
-    description: "Layered charcoal surfaces for focused, low-light sessions.",
+    description: "Layered graphite surfaces for focused, low-light sessions.",
     icon: Moon,
   },
 ];
 
 export default function SettingsPage() {
+  const pageRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme, mounted } = useAppTheme();
   const shortcuts = useCanvasShortcutRegistry();
   const [recognitionBackend, setRecognitionBackend] = useState<
@@ -51,6 +56,27 @@ export default function SettingsPage() {
   const [keyDraft, setKeyDraft] = useState("");
   const [showKey, setShowKey] = useState(false);
   const keyRef = useRef<HTMLInputElement>(null);
+
+  useGSAP(
+    () => {
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".dashboard-enter",
+          { autoAlpha: 0, y: 22 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.62,
+            stagger: 0.075,
+            ease: "power3.out",
+          },
+        );
+      });
+      return () => media.revert();
+    },
+    { scope: pageRef },
+  );
 
   useEffect(() => {
     const savedBackend = localStorage.getItem(STORAGE_BACKEND);
@@ -71,22 +97,20 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-5 pb-16 md:p-8 md:pb-20 lg:p-10">
-      <header className="border-b border-border-subtle pb-7">
+    <div ref={pageRef} className="dashboard-workspace dashboard-settings">
+      <header className="dashboard-library-header dashboard-enter block">
         <p className="text-xs font-medium text-text-secondary">Workspace</p>
-        <h1 className="font-display mt-2 text-4xl font-semibold tracking-[-0.05em] text-text-heading md:text-5xl">
-          Settings
-        </h1>
+        <h1 className="dashboard-title mt-2">Settings</h1>
         <p className="mt-3 max-w-[58ch] text-sm leading-7 text-text-secondary">
           Manage how Sketch Forge looks and review the profile connected to this
           workspace.
         </p>
       </header>
 
-      <div className="mt-9 grid gap-10">
+      <div className="grid gap-12">
         <section
           aria-labelledby="appearance-heading"
-          className="grid gap-6 md:grid-cols-[220px_1fr]"
+          className="settings-section dashboard-enter"
         >
           <div>
             <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent-subtle text-accent">
@@ -114,7 +138,7 @@ export default function SettingsPage() {
                   type="button"
                   onClick={() => setTheme(option.id)}
                   aria-pressed={isSelected}
-                  className={`relative min-h-40 rounded-[18px] border p-5 text-left transition-[background-color,border-color,box-shadow] ${
+                  className={`dashboard-setting-option ${
                     isSelected
                       ? "border-border-accent-strong bg-accent-subtle shadow-elev-2"
                       : "border-border-subtle bg-surface-raised hover:border-border-default"
@@ -148,7 +172,7 @@ export default function SettingsPage() {
 
         <section
           aria-labelledby="recognition-heading"
-          className="grid gap-6 border-t border-border-subtle pt-9 md:grid-cols-[220px_1fr]"
+          className="settings-section dashboard-enter"
         >
           <div>
             <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent-subtle text-accent">
@@ -166,7 +190,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="rounded-[18px] border border-border-subtle bg-surface-raised p-5 sm:p-6">
+          <div className="dashboard-settings-panel">
             <div className="grid gap-3 sm:grid-cols-2">
               {(["tesseract", "gemini"] as const).map((backend) => {
                 const selected = recognitionBackend === backend;
@@ -177,7 +201,7 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => handleBackend(backend)}
                     aria-pressed={selected}
-                    className={`relative rounded-[16px] border p-4 text-left transition-[background-color,border-color,box-shadow] ${
+                    className={`dashboard-setting-option min-h-0 p-4 ${
                       selected
                         ? "border-border-accent-strong bg-accent-subtle shadow-elev-2"
                         : "border-border-subtle bg-surface-sunken hover:border-border-default"
@@ -226,7 +250,7 @@ export default function SettingsPage() {
                     }
                   }}
                   placeholder="AIza…"
-                  className="min-w-0 flex-1 rounded-[12px] border border-border-subtle bg-surface-sunken px-3 py-2.5 font-mono text-sm text-text-body placeholder:text-text-dim outline-none transition-colors focus:border-border-accent"
+                  className="dashboard-field min-w-0 flex-1 font-mono"
                 />
                 <button
                   type="button"
@@ -262,7 +286,7 @@ export default function SettingsPage() {
 
         <section
           aria-labelledby="shortcuts-heading"
-          className="grid gap-6 border-t border-border-subtle pt-9 md:grid-cols-[220px_1fr]"
+          className="settings-section dashboard-enter"
         >
           <div>
             <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent-subtle text-accent">
@@ -284,7 +308,7 @@ export default function SettingsPage() {
 
         <section
           aria-labelledby="profile-heading"
-          className="grid gap-6 border-t border-border-subtle pt-9 md:grid-cols-[220px_1fr]"
+          className="settings-section dashboard-enter"
         >
           <div>
             <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent-subtle text-accent">
@@ -301,7 +325,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="rounded-[18px] border border-border-subtle bg-surface-raised p-5 sm:p-6">
+          <div className="dashboard-settings-panel">
             <div className="flex items-center gap-4">
               <span className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-accent text-sm font-bold text-accent-text">
                 A

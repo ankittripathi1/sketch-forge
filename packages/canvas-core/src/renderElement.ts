@@ -3,6 +3,7 @@ import type { SketchElement } from "./types";
 import { getBoundingBox, getElementsBoundingBox } from "@repo/element/bounds";
 import { isColorDark } from "@repo/common";
 import { highlightCodeLine } from "./codeHighlight";
+import { drawSmoothStrokePath } from "./inkPath";
 
 const imageCache = new Map<string, HTMLImageElement>();
 
@@ -113,29 +114,29 @@ type RichTextSegment = {
 };
 type RichTextLine =
   | {
-      kind: "heading";
-      level: 1 | 2 | 3;
-      text: string;
-    }
+    kind: "heading";
+    level: 1 | 2 | 3;
+    text: string;
+  }
   | {
-      kind: "check";
-      checked: boolean;
-      text: string;
-    }
+    kind: "check";
+    checked: boolean;
+    text: string;
+  }
   | {
-      kind: "bullet" | "ordered" | "paragraph";
-      text: string;
-      marker?: string;
-    }
+    kind: "bullet" | "ordered" | "paragraph";
+    text: string;
+    marker?: string;
+  }
   | {
-      kind: "codeblock";
-      language: string;
-      lines: string[];
-    }
+    kind: "codeblock";
+    language: string;
+    lines: string[];
+  }
   | {
-      kind: "equation";
-      text: string;
-    };
+    kind: "equation";
+    text: string;
+  };
 type CalloutKind = "note" | "warning" | "definition" | "assumption" | "key";
 
 const CALLOUT_META: Record<
@@ -927,17 +928,23 @@ export function drawElement(
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
-    ctx.moveTo(el.points[0]!.x, el.points[0]!.y);
-    for (const point of el.points.slice(1)) {
-      ctx.lineTo(point.x, point.y);
-    }
+    drawSmoothStrokePath(ctx, el.points);
     ctx.stroke();
     ctx.restore();
   } else if (el.tool === "freehand" && el.points && el.points.length > 1) {
-    const path = el.points
-      .map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`)
-      .join(" ");
-    drawWithOpacity(() => rc.path(path, opts));
+    const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
+    const points = el.points;
+    drawWithOpacity(() => {
+      ctx.save();
+      ctx.strokeStyle = el.strokeColor;
+      ctx.lineWidth = el.strokeWidth;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      drawSmoothStrokePath(ctx, points);
+      ctx.stroke();
+      ctx.restore();
+    });
   } else if (el.tool === "text" && el.text) {
     const ctx = (rc as any).canvas.getContext("2d") as CanvasRenderingContext2D;
     const { x, y, w, h } = getBoundingBox(el);
@@ -1035,6 +1042,76 @@ export function drawAnchorHints(
   ctx.restore();
 }
 
+const SELECTION_ACCENT = "rgba(45, 212, 191, 0.92)";
+const SELECTION_ACCENT_STRONG = "rgba(45, 212, 191, 1)";
+const SELECTION_FILL = "rgba(45, 212, 191, 0.055)";
+const SELECTION_HANDLE_FILL = "rgba(45, 212, 191, 0.18)";
+const SELECTION_HANDLE_CORE = "rgba(45, 212, 191, 0.78)";
+
+function drawSelectionBounds(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  zoom: number,
+  dashed = false,
+) {
+  ctx.fillStyle = SELECTION_FILL;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = SELECTION_ACCENT;
+  ctx.lineWidth = 1.35 / zoom;
+  if (dashed) ctx.setLineDash([6 / zoom, 4 / zoom]);
+  ctx.strokeRect(x, y, w, h);
+  if (dashed) ctx.setLineDash([]);
+}
+
+function drawSelectionHandle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  zoom: number,
+  prominent: boolean,
+) {
+  const outer = (prominent ? 4.2 : 3.2) / zoom;
+  const inner = (prominent ? 1.7 : 1.25) / zoom;
+
+  ctx.beginPath();
+  ctx.arc(x, y, outer, 0, Math.PI * 2);
+  ctx.fillStyle = SELECTION_HANDLE_FILL;
+  ctx.strokeStyle = SELECTION_ACCENT_STRONG;
+  ctx.lineWidth = 1.25 / zoom;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x, y, inner, 0, Math.PI * 2);
+  ctx.fillStyle = SELECTION_HANDLE_CORE;
+  ctx.fill();
+}
+
+export function drawSelectionMarquee(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  zoom = 1,
+) {
+  ctx.save();
+  drawSelectionBounds(
+    ctx,
+    Math.min(x1, x2),
+    Math.min(y1, y2),
+    Math.abs(x2 - x1),
+    Math.abs(y2 - y1),
+    zoom,
+    true,
+  );
+  ctx.restore();
+}
+
 export function drawSelectionBox(
   ctx: CanvasRenderingContext2D,
   el: SketchElement,
@@ -1042,8 +1119,6 @@ export function drawSelectionBox(
   allElements: SketchElement[] = [],
 ) {
   if (el.tool === "arrow") {
-    const r = 4 / zoom;
-    const lw = 1.5 / zoom;
     const ends = resolveArrowEndpoints(el, allElements);
     const bend = el.bend ?? 0;
     const mid =
@@ -1051,34 +1126,23 @@ export function drawSelectionBox(
         ? getArrowControlPoint(ends.x1, ends.y1, ends.x2, ends.y2, bend)
         : { x: (ends.x1 + ends.x2) / 2, y: (ends.y1 + ends.y2) / 2 };
     ctx.save();
-    ctx.strokeStyle = "#6366f1";
-    ctx.fillStyle = "#ffffff";
-    ctx.lineWidth = lw;
-    for (const p of [
+    const points = [
       { x: ends.x1, y: ends.y1 },
       mid,
       { x: ends.x2, y: ends.y2 },
-    ]) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
+    ];
+    points.forEach((p, index) =>
+      drawSelectionHandle(ctx, p.x, p.y, zoom, index !== 1),
+    );
     ctx.restore();
     return;
   }
 
   const { x, y, w, h } = getBoundingBox(el);
-  const pad = 6 / zoom;
-  const r = 4 / zoom;
-  const lw = 1.5 / zoom;
+  const pad = 7 / zoom;
 
   ctx.save();
-  ctx.strokeStyle = "#6366f1";
-  ctx.lineWidth = lw;
-  ctx.setLineDash([5 / zoom, 3 / zoom]);
-  ctx.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
-  ctx.setLineDash([]);
+  drawSelectionBounds(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, zoom);
 
   const handles: [number, number][] = [
     [x - pad, y - pad],
@@ -1091,14 +1155,9 @@ export function drawSelectionBox(
     [x + w + pad, y + h + pad],
   ];
 
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#6366f1";
-  ctx.lineWidth = lw;
-  for (const [hx, hy] of handles) {
-    ctx.beginPath();
-    ctx.arc(hx, hy, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+  for (let i = 0; i < handles.length; i++) {
+    const [hx, hy] = handles[i]!;
+    drawSelectionHandle(ctx, hx, hy, zoom, [0, 2, 5, 7].includes(i));
   }
   ctx.restore();
 }
@@ -1112,16 +1171,8 @@ export function drawGroupSelectionBox(
 
   const { x, y, w, h } = getElementsBoundingBox(elements);
   const pad = 8 / zoom;
-  const lw = 1.5 / zoom;
 
   ctx.save();
-  ctx.strokeStyle = "#6366f1";
-  ctx.lineWidth = lw;
-  ctx.setLineDash([7 / zoom, 4 / zoom]);
-  ctx.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
-  ctx.setLineDash([]);
-
-  ctx.fillStyle = "rgba(99, 102, 241, 0.08)";
-  ctx.fillRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
+  drawSelectionBounds(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, zoom);
   ctx.restore();
 }

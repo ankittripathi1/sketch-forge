@@ -139,23 +139,19 @@ export function PageCard({
       onDrop={(e) => onDrop(e, page.id)}
       onContextMenu={handleContextMenu}
       onClick={openPage}
-      className={`dashboard-page-card group relative cursor-grab overflow-hidden rounded-[20px] border border-border-subtle bg-surface-raised transition-[border-color,box-shadow] duration-200 hover:border-border-accent-strong hover:shadow-elev-3 active:cursor-grabbing ${
+      className={`dashboard-page-card group ${
         viewMode === "list"
-          ? "grid grid-cols-[10rem_1fr] gap-4 p-2.5 sm:grid-cols-[13rem_1fr]"
-          : "p-2.5"
+          ? "dashboard-page-card-list"
+          : "dashboard-page-card-grid"
       }`}
     >
-      <div
-        className={`relative overflow-hidden rounded-[14px] bg-surface-sunken ${
-          viewMode === "list" ? "aspect-[4/3]" : "mb-3 aspect-[4/3]"
-        }`}
-      >
+      <div className="dashboard-page-thumbnail">
         {thumbnail ? (
           <Image
             src={thumbnail}
-            alt={page.title}
+            alt={`${page.title || "Untitled"} canvas preview`}
             fill
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.025]"
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-paper-grid text-text-dim">
@@ -164,7 +160,7 @@ export function PageCard({
         )}
       </div>
 
-      <div className="flex min-w-0 flex-col px-1 pb-1">
+      <div className="dashboard-page-copy">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="font-display truncate text-[15px] font-semibold tracking-[-0.025em] text-text-heading transition-colors group-hover:text-accent">
@@ -189,7 +185,7 @@ export function PageCard({
                 e.stopPropagation();
                 handleContextMenu(e);
               }}
-              className="rounded-lg p-1.5 text-text-muted opacity-0 transition-all hover:bg-surface-hover hover:text-text-heading group-hover:opacity-100"
+              className="dashboard-page-menu-button"
               title="Page actions"
             >
               <MoreVertical size={15} />
@@ -198,34 +194,28 @@ export function PageCard({
         </div>
 
         <div className="mt-auto pt-4">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            Canvas page
-          </span>
+          <span className="dashboard-page-kind">Canvas page</span>
         </div>
       </div>
 
       {showContextMenu &&
         createPortal(
           <div
-            className="fixed z-50 max-h-[calc(100vh-1.5rem)] w-52 overflow-y-auto rounded-[14px] border border-border-default bg-surface-overlay p-1.5 shadow-elev-4"
+            className="dashboard-context-menu"
             style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={handleRename}
-              className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-surface-hover"
-            >
+            <button onClick={handleRename} className="dashboard-menu-item">
               <Pencil size={14} /> Rename
             </button>
 
             <button
               onClick={() => setShowMoveSubmenu((value) => !value)}
-              className="flex w-full items-center justify-between rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-surface-hover"
+              className="dashboard-menu-item justify-between"
               aria-expanded={showMoveSubmenu}
             >
               <span className="flex items-center gap-2">
-                <ArrowRightLeft size={14} /> Move to…
+                <ArrowRightLeft size={14} /> Move to
               </span>
               <ChevronRight
                 size={12}
@@ -241,9 +231,9 @@ export function PageCard({
                 {page.folderId ? (
                   <button
                     onClick={() => handleUpdate({ folderId: null })}
-                    className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-accent-subtle hover:text-accent"
+                    className="dashboard-menu-item hover:text-accent"
                   >
-                    All pages · root
+                    All pages (root)
                   </button>
                 ) : null}
                 {allFolders
@@ -252,7 +242,7 @@ export function PageCard({
                     <button
                       key={folder.id}
                       onClick={() => handleUpdate({ folderId: folder.id })}
-                      className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-text-body transition-colors hover:bg-accent-subtle hover:text-accent"
+                      className="dashboard-menu-item hover:text-accent"
                     >
                       {folder.name}
                     </button>
@@ -260,11 +250,11 @@ export function PageCard({
               </div>
             ) : null}
 
-            <div className="my-1 h-px bg-border-subtle" />
+            <div className="dashboard-menu-divider" />
 
             <button
               onClick={handleDelete}
-              className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-xs text-status-danger transition-colors hover:bg-status-danger-subtle"
+              className="dashboard-menu-item text-status-danger hover:bg-status-danger-subtle"
             >
               <Trash2 size={14} /> Delete
             </button>

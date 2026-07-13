@@ -36,16 +36,13 @@ export function Breadcrumbs({ currentFolderId, allFolders }: BreadcrumbsProps) {
   }, [buildCrumbs]);
 
   return (
-    <nav
-      aria-label="Breadcrumb"
-      className="flex items-center gap-1.5 text-xs font-medium"
-    >
+    <nav aria-label="Breadcrumb" className="dashboard-breadcrumbs">
       <Link
         href="/dashboard"
         className="flex items-center gap-1.5 text-text-muted transition-colors hover:text-accent"
       >
-        <Home size={14} />
-        <span>Home</span>
+        <Home size={14} strokeWidth={1.7} />
+        <span>Library</span>
       </Link>
 
       {crumbs.length > 0 && (
@@ -56,6 +53,7 @@ export function Breadcrumbs({ currentFolderId, allFolders }: BreadcrumbsProps) {
         <div key={folder.id} className="flex items-center gap-1">
           <Link
             href={`/dashboard/folder/${folder.id}`}
+            aria-current={index === crumbs.length - 1 ? "page" : undefined}
             className={`transition-colors ${
               index === crumbs.length - 1
                 ? "text-text-heading pointer-events-none"

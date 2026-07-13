@@ -16,6 +16,7 @@ export type {
 export {
   drawElement,
   drawGroupSelectionBox,
+  drawSelectionMarquee,
   drawSelectionBox,
   resolveArrowEndpoints,
 } from "./renderElement";

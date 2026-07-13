@@ -1,28 +1,28 @@
-import Link from "next/link";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ThemeSelector } from "@/theme/ThemeSelector";
-import { Logo } from "@/components/Logo";
-import { HomeHero, HomeBody, ScrollProgress } from "@/features/home";
+import { HomeBody, HomeHero, ScrollProgress } from "@/features/home";
 
 export const metadata: Metadata = {
-  title: "Sketch Forge - The canvas notebook for engineers",
+  title: "Sketch Forge - Make technical ideas visible",
   description:
-    "An infinite canvas for system diagrams, lecture notes, algorithm traces, and the rough engineering thinking that never fits in a text file.",
+    "A visual-first technical notebook for diagrams, code, rough notes, and the ideas that need more room than a document.",
 };
 
 const NAV = [
-  ["Inside", "#inside"],
-  ["Tools", "#tools"],
+  ["Who it's for", "#who"],
   ["Flow", "#flow"],
+  ["Tools", "#tools"],
+  ["FAQ", "#faq"],
 ] as const;
 
 export default function Home() {
   return (
-    <div className="home-shell relative min-h-dvh overflow-x-clip bg-surface-base text-text-primary grain">
+    <div className="home-shell relative min-h-dvh overflow-x-clip">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-80 focus:rounded-lg focus:bg-surface-raised focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-text-primary focus:shadow-elev-2"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-80 focus:rounded-full focus:bg-surface-raised focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-text-primary focus:shadow-elev-2"
       >
         Skip to content
       </a>
@@ -30,38 +30,45 @@ export default function Home() {
       <Masthead />
       <HomeHero />
       <HomeBody />
-      <TitleBlockFooter />
+      <Footer />
     </div>
+  );
+}
+
+function Brand() {
+  return (
+    <span className="inline-flex items-center gap-2.5">
+      <span aria-hidden className="home-brand-mark">
+        <span />
+      </span>
+      <span className="whitespace-nowrap font-display text-[17px] font-semibold tracking-[-0.035em] text-text-heading">
+        Sketch Forge
+      </span>
+    </span>
   );
 }
 
 function Masthead() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface-base/88 backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] max-w-[1380px] items-center justify-between gap-6 px-5 md:px-8">
-        <Link
-          href="/"
-          className="group inline-flex items-center gap-2.5 rounded-lg outline-none"
-        >
-          <Logo size={35} rounded="rounded-[10px]" />
-          <span className="font-display text-[18px] font-semibold tracking-[-0.035em] text-text-heading">
-            Sketch Forge
-          </span>
+    <header className="home-masthead sticky top-0 z-40">
+      <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-6 px-5 md:px-8">
+        <Link href="/" className="rounded-full outline-none">
+          <Brand />
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-7 md:flex">
           {NAV.map(([label, href]) => (
             <Link
               key={href}
+              className="home-nav-link whitespace-nowrap text-[13px] font-medium text-text-secondary"
               href={href}
-              className="text-[13px] font-medium text-text-secondary transition-colors hover:text-text-primary"
             >
               {label}
             </Link>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="home-nav-actions flex items-center gap-2 sm:gap-3">
           <Link
             href="/dashboard"
             className="hidden px-2 text-[13px] font-medium text-text-secondary transition-colors hover:text-text-primary sm:inline-flex"
@@ -69,14 +76,13 @@ function Masthead() {
             Dashboard
           </Link>
           <ThemeSelector isCollapsed />
-          <Link
-            href="/canvas"
-            className="group inline-flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 text-[13px] font-semibold text-accent-text transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
-          >
+          <Link href="/canvas" className="home-button home-button-small group">
             Open canvas
             <ArrowRight
               size={14}
-              className="transition-transform duration-200 group-hover:translate-x-0.5"
+              strokeWidth={1.8}
+              aria-hidden
+              className="transition-transform duration-300 group-hover:translate-x-0.5"
             />
           </Link>
         </div>
@@ -85,27 +91,29 @@ function Masthead() {
   );
 }
 
-function TitleBlockFooter() {
+function Footer() {
   return (
-    <footer className="px-5 pb-10 pt-12 md:px-8">
-      <div className="mx-auto flex max-w-[1380px] flex-col gap-8 border-t border-border-subtle pt-8 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex items-center gap-2.5">
-          <Logo size={30} rounded="rounded-[9px]" />
-          <span className="font-display text-[16px] font-semibold tracking-[-0.03em] text-text-heading">
-            Sketch Forge
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-text-secondary">
-          <Link href="/canvas" className="hover:text-text-primary">
-            Canvas
-          </Link>
-          <Link href="/dashboard" className="hover:text-text-primary">
-            Dashboard
-          </Link>
-          <Link href="/login" className="hover:text-text-primary">
-            Sign in
-          </Link>
-          <span>© 2026</span>
+    <footer className="px-5 pb-8 pt-20 md:px-8 md:pb-10 md:pt-28">
+      <div className="home-footer mx-auto max-w-[1380px]">
+        <div className="grid gap-14 px-6 py-10 sm:px-9 md:grid-cols-[1.4fr_0.6fr] md:items-end md:px-12 md:py-12">
+          <div>
+            <Brand />
+            <p className="mt-5 max-w-[36ch] text-[14px] leading-7 text-text-secondary">
+              A visual notebook for technical ideas that deserve space to move.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-3 text-[13px] text-text-secondary md:justify-end">
+            <Link href="/canvas" className="hover:text-text-primary">
+              Canvas
+            </Link>
+            <Link href="/dashboard" className="hover:text-text-primary">
+              Dashboard
+            </Link>
+            <Link href="/login" className="hover:text-text-primary">
+              Sign in
+            </Link>
+            <span>© 2026</span>
+          </div>
         </div>
       </div>
     </footer>

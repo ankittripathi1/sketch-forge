@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-page-custom-font */
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -17,11 +18,11 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: { default: "Sketch Forge", template: "%s · Sketch Forge" },
   description:
-    "The canvas notebook for engineers — system diagrams, lecture notes, and rough thinking on an infinite canvas.",
+    "The canvas notebook for engineers: system diagrams, lecture notes, and rough thinking on an infinite canvas.",
   openGraph: {
     title: "Sketch Forge",
     description:
-      "The canvas notebook for engineers — system diagrams, lecture notes, and rough thinking on an infinite canvas.",
+      "The canvas notebook for engineers: system diagrams, lecture notes, and rough thinking on an infinite canvas.",
     type: "website",
   },
   twitter: { card: "summary_large_image", title: "Sketch Forge" },
@@ -41,9 +42,12 @@ export default function RootLayout({
           href="https://fonts.gstatic.com"
           crossOrigin=""
         />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        {/*
+          These families are referenced by literal name inside the canvas text
+          tool (StylePanel / renderElement), so they must load globally.
+        */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Kalam:wght@400;700&family=Indie+Flower&family=Patrick+Hand&family=Inter:wght@400;700&family=Poppins:wght@400;700&family=Nunito:wght@400;700&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Courier+Prime:wght@400;700&family=Spectral:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Indie+Flower&family=Patrick+Hand&family=Inter:wght@400;700&family=Poppins:wght@400;700&family=Nunito:wght@400;700&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Courier+Prime:wght@400;700&display=swap"
           rel="stylesheet"
         />
         <link rel="manifest" href="/manifest.json" />

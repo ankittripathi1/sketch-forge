@@ -4,6 +4,7 @@ import type { AnchorSide, Point, SketchElement } from "@repo/element/types";
 import {
   drawElement,
   drawGroupSelectionBox,
+  drawSelectionMarquee,
   drawSelectionBox,
   drawAnchorHints,
 } from "@repo/canvas-core/renderElement";
@@ -83,23 +84,7 @@ export function createRenderers(ctx: RenderContext) {
 
     if (ctx.selectionMarquee.current) {
       const { x1, y1, x2, y2 } = ctx.selectionMarquee.current;
-      const z = ctx.zoom.current!;
-      c2d.strokeStyle = "#6366f1";
-      c2d.setLineDash([5 / z, 3 / z]);
-      c2d.lineWidth = 1 / z;
-      c2d.strokeRect(
-        Math.min(x1, x2),
-        Math.min(y1, y2),
-        Math.abs(x2 - x1),
-        Math.abs(y2 - y1),
-      );
-      c2d.fillStyle = "rgba(99, 102, 241, 0.05)";
-      c2d.fillRect(
-        Math.min(x1, x2),
-        Math.min(y1, y2),
-        Math.abs(x2 - x1),
-        Math.abs(y2 - y1),
-      );
+      drawSelectionMarquee(c2d, x1, y1, x2, y2, ctx.zoom.current!);
     }
 
     const all = [...(ctx.elements.current ?? [])];

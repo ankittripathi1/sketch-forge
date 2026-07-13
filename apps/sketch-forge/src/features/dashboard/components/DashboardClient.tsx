@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import {
   ChevronRight,
   FileText,
@@ -17,11 +19,14 @@ import { useDashboardUiStore } from "@/stores/dashboardUiStore";
 import { NewFolderDialog } from "./NewFolderDialog";
 import { PageCard } from "./PageCard";
 
+gsap.registerPlugin(useGSAP);
+
 interface DashboardClientProps {
   initialData: DashboardData;
 }
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const dashboardQuery = useDashboardData(initialData);
   const updatePageMutation = useUpdatePage();
   const viewMode = useDashboardUiStore((state) => state.rootViewMode);
@@ -67,6 +72,56 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const folderCount = folders.length;
   const hasLibraryItems = pageCount > 0 || folderCount > 0;
   const showLoadError = dashboardQuery.isError && !hasLibraryItems;
+
+  useGSAP(
+    () => {
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".dashboard-enter",
+          { autoAlpha: 0, y: 24 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.65,
+            stagger: 0.08,
+            ease: "power3.out",
+          },
+        );
+      });
+
+      return () => media.revert();
+    },
+    { scope: rootRef },
+  );
+
+  useGSAP(
+    () => {
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".dashboard-page-card",
+          { autoAlpha: 0, y: 18, scale: 0.985 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.5,
+            stagger: 0.045,
+            ease: "power3.out",
+            clearProps: "transform,opacity,visibility",
+          },
+        );
+      });
+
+      return () => media.revert();
+    },
+    {
+      scope: rootRef,
+      dependencies: [rootPages.length, viewMode],
+      revertOnUpdate: true,
+    },
+  );
 
   const refreshDashboardData = useCallback(() => {
     void dashboardQuery.refetch();
@@ -137,38 +192,43 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   );
 
   return (
-    <div className="mx-auto flex max-w-[1480px] flex-col gap-10 p-5 pb-16 md:p-8 md:pb-20 lg:p-10 lg:pb-24">
-      <header className="flex flex-col gap-6 border-b border-border-subtle pb-7 md:flex-row md:items-end md:justify-between">
+    <div ref={rootRef} className="dashboard-workspace">
+      <header className="dashboard-library-header dashboard-enter">
         <div>
-          <div className="flex items-center gap-3 text-xs text-text-secondary">
-            <span>{pageCount} pages</span>
-            <span className="h-1 w-1 rounded-full bg-border-strong" />
-            <span>{folderCount} folders</span>
-          </div>
-          <h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.05em] text-text-heading md:text-5xl">
-            Library
-          </h1>
+          <h1 className="dashboard-title">Library</h1>
           <p className="mt-3 max-w-[55ch] text-sm leading-7 text-text-secondary">
             Open a page to keep working, or drag it onto a folder to organize
             it.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setIsNewFolderOpen(true)}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border-default bg-surface-raised px-4 text-sm font-semibold text-text-body transition-all hover:-translate-y-0.5 hover:border-border-accent hover:text-text-heading active:translate-y-0"
-          >
-            <FolderPlus size={16} />
-            New folder
-          </button>
-          <button
-            onClick={() => router.push("/canvas")}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-accent-text transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
-          >
-            <Plus size={17} strokeWidth={2.4} />
-            New page
-          </button>
+        <div className="dashboard-header-side">
+          <dl className="dashboard-metrics" aria-label="Library totals">
+            <div>
+              <dt>Pages</dt>
+              <dd>{pageCount}</dd>
+            </div>
+            <div>
+              <dt>Folders</dt>
+              <dd>{folderCount}</dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setIsNewFolderOpen(true)}
+              className="dashboard-action dashboard-action-secondary"
+            >
+              <FolderPlus size={16} strokeWidth={1.7} />
+              New folder
+            </button>
+            <button
+              onClick={() => router.push("/canvas")}
+              className="dashboard-action dashboard-action-primary"
+            >
+              <Plus size={17} strokeWidth={2} />
+              New page
+            </button>
+          </div>
         </div>
       </header>
 
@@ -176,12 +236,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         <DashboardLoadError onRetry={refreshDashboardData} />
       ) : null}
 
-      <section className="space-y-4">
-        <div className="flex items-end justify-between gap-4">
+      <section className="dashboard-section dashboard-enter">
+        <div className="dashboard-section-header">
           <div>
-            <h2 className="font-display text-xl font-semibold tracking-[-0.03em] text-text-heading">
-              Folders
-            </h2>
+            <h2>Folders</h2>
             <p className="mt-1 text-xs leading-5 text-text-secondary">
               Drop a page here to move it. Open a folder to see what is inside.
             </p>
@@ -192,7 +250,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         </div>
 
         {rootFolders.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="dashboard-folder-grid">
             {rootFolders.map((folder) => (
               <FolderCard
                 key={folder.id}
@@ -207,27 +265,25 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             ))}
           </div>
         ) : (
-          <div className="rounded-[18px] border border-dashed border-border-default bg-surface-paper/50 px-5 py-9 text-sm text-text-secondary">
+          <div className="dashboard-empty-inline">
             No folders yet. Create one to group related pages.
           </div>
         )}
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
+      <section className="dashboard-section dashboard-enter">
+        <div className="dashboard-section-header">
           <div>
-            <h2 className="font-display text-xl font-semibold tracking-[-0.03em] text-text-heading">
-              All pages
-            </h2>
+            <h2>All pages</h2>
             <p className="mt-1.5 text-xs text-text-secondary">
               Drag to reorder. Use the grip on a page to move it into a folder.
             </p>
           </div>
 
-          <div className="flex items-center rounded-full border border-border-default bg-surface-raised p-1">
+          <div className="dashboard-view-toggle">
             <button
               onClick={() => setViewMode("grid")}
-              className={`rounded-full p-1.5 transition-colors ${
+              className={`transition-colors ${
                 viewMode === "grid"
                   ? "bg-accent-subtle text-accent"
                   : "text-text-muted hover:text-text-heading"
@@ -239,7 +295,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`rounded-full p-1.5 transition-colors ${
+              className={`transition-colors ${
                 viewMode === "list"
                   ? "bg-accent-subtle text-accent"
                   : "text-text-muted hover:text-text-heading"
@@ -256,11 +312,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           <PageGridSkeleton />
         ) : rootPages.length > 0 ? (
           <div
-            className={
+            className={`dashboard-page-grid ${
               viewMode === "grid"
-                ? "grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3"
-                : "grid grid-cols-1 gap-3"
-            }
+                ? "dashboard-page-grid-grid"
+                : "dashboard-page-grid-list"
+            }`}
           >
             {rootPages.map((page) => (
               <PageCard
@@ -280,11 +336,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       </section>
 
       {moveNotice ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-6 right-6 z-40 rounded-full border border-border-default bg-text-heading px-4 py-2.5 text-xs font-semibold text-surface-base shadow-elev-3"
-        >
+        <div role="status" aria-live="polite" className="dashboard-toast">
           {moveNotice}
         </div>
       ) : null}
@@ -331,14 +383,12 @@ function FolderCard({
         const pageId = event.dataTransfer.getData("pageId");
         if (pageId) onPageDrop(pageId);
       }}
-      className={`group flex min-h-24 items-center gap-4 rounded-[18px] border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 ${
-        isDragOver
-          ? "border-border-accent-strong bg-accent-subtle shadow-glow-accent"
-          : "border-border-subtle bg-surface-raised/80 hover:border-border-accent-strong hover:bg-surface-raised"
+      className={`dashboard-folder-card group ${
+        isDragOver ? "dashboard-folder-card-active" : ""
       }`}
     >
       <span
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-accent-subtle text-lg text-accent"
+        className="dashboard-folder-glyph"
         style={folder.color ? { color: folder.color } : undefined}
         aria-hidden="true"
       >
@@ -349,7 +399,7 @@ function FolderCard({
         <span className="block truncate text-sm font-semibold text-text-heading">
           {folder.name}
         </span>
-        <span className="mt-2 block text-xs text-text-secondary">
+        <span className="mt-1.5 block text-xs text-text-secondary">
           {pageCount} {pageCount === 1 ? "page" : "pages"}
           {childCount > 0
             ? ` · ${childCount} ${childCount === 1 ? "folder" : "folders"}`
@@ -373,7 +423,7 @@ function FolderCard({
 
 function DashboardLoadError({ onRetry }: { onRetry: () => void }) {
   return (
-    <section className="rounded-lg border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-text-body">
+    <section className="dashboard-error dashboard-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-semibold text-text-heading">
@@ -386,7 +436,7 @@ function DashboardLoadError({ onRetry }: { onRetry: () => void }) {
         </div>
         <button
           onClick={onRetry}
-          className="inline-flex h-9 items-center justify-center rounded-lg border border-border-default bg-surface-raised px-3 text-xs font-semibold text-text-heading transition-colors hover:bg-surface-hover"
+          className="dashboard-action dashboard-action-secondary h-9 text-xs"
         >
           Retry
         </button>
@@ -397,12 +447,13 @@ function DashboardLoadError({ onRetry }: { onRetry: () => void }) {
 
 function PageGridSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="dashboard-page-grid dashboard-page-grid-grid">
       {[0, 1, 2].map((item) => (
-        <div
-          key={item}
-          className="h-72 animate-pulse rounded-[20px] bg-surface-raised"
-        />
+        <div key={item} className="dashboard-page-skeleton">
+          <div />
+          <span />
+          <span />
+        </div>
       ))}
     </div>
   );
@@ -410,8 +461,8 @@ function PageGridSkeleton() {
 
 function EmptyNotesState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="flex min-h-[22rem] flex-col items-center justify-center rounded-[24px] border border-dashed border-border-default bg-surface-paper/50 px-6 py-16 text-center">
-      <div className="mb-5 rounded-[16px] bg-accent-subtle p-5 text-accent">
+    <div className="dashboard-empty-state">
+      <div className="dashboard-empty-icon">
         <FileText size={38} strokeWidth={1.3} />
       </div>
       <h2 className="font-display text-2xl font-semibold tracking-[-0.035em] text-text-heading">
@@ -423,9 +474,9 @@ function EmptyNotesState({ onCreate }: { onCreate: () => void }) {
       </p>
       <button
         onClick={onCreate}
-        className="mt-7 inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-accent-text transition-all hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
+        className="dashboard-action dashboard-action-primary mt-7"
       >
-        <Plus size={16} strokeWidth={2.4} />
+        <Plus size={16} strokeWidth={2} />
         Create page
       </button>
     </div>

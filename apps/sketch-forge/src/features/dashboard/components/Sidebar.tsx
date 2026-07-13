@@ -9,7 +9,6 @@ import {
   FolderPlus,
   LayoutDashboard,
 } from "lucide-react";
-import { Logo } from "@/components/Logo";
 import { FolderTreeItem } from "./FolderTreeItem";
 import { NewFolderDialog } from "./NewFolderDialog";
 import { SearchBar } from "./SearchBar";
@@ -132,19 +131,23 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
 
   return (
     <aside
-      className={`relative flex h-full shrink-0 flex-col border-r border-border-subtle bg-surface-paper/75 transition-all duration-300 ease-in-out ${
-        isCollapsed ? "w-16" : "w-[292px]"
+      className={`dashboard-sidebar relative flex h-full shrink-0 flex-col ${
+        isCollapsed ? "w-[68px]" : "w-[280px]"
       }`}
     >
-      <div className="border-b border-border-subtle p-3.5">
+      <div className="dashboard-sidebar-head">
         {isCollapsed ? (
           <div className="flex h-9 w-full items-center justify-center">
-            <Logo size={30} rounded="rounded-[9px]" />
+            <span aria-hidden className="dashboard-brand-mark">
+              <span />
+            </span>
           </div>
         ) : (
           <div className="space-y-3.5 overflow-hidden">
             <div className="flex items-center gap-2.5">
-              <Logo size={30} rounded="rounded-[9px]" />
+              <span aria-hidden className="dashboard-brand-mark">
+                <span />
+              </span>
               <span className="font-display text-[16px] font-semibold tracking-[-0.035em] text-text-heading">
                 Sketch Forge
               </span>
@@ -166,7 +169,7 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
           }}
           onDragLeave={() => setIsRootDropActive(false)}
           onDrop={(event) => handleDrop(event, null)}
-          className={`flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-xs font-semibold transition-all ${
+          className={`dashboard-sidebar-link ${
             isRootDropActive
               ? "bg-accent text-accent-text shadow-glow-accent"
               : showRootDropHint
@@ -190,7 +193,7 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
 
         <button
           onClick={() => router.push("/capture")}
-          className={`mt-1 flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-xs font-medium transition-all ${
+          className={`dashboard-sidebar-link mt-1 ${
             pathname === "/capture"
               ? "bg-accent-subtle text-accent"
               : "text-text-secondary hover:bg-surface-hover hover:text-text-body"
@@ -206,7 +209,7 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
         className={`flex-1 overflow-y-auto py-3 ${isCollapsed ? "px-2" : "px-3"}`}
       >
         {!isCollapsed && (
-          <div className="mb-2 flex items-center justify-between px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+          <div className="mb-2 flex items-center justify-between px-2 text-[11px] font-medium text-text-muted">
             <span>Notebooks</span>
             <button
               onClick={() => setIsNewFolderOpen(true)}
@@ -241,15 +244,15 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
         </div>
       </div>
 
-      <div className="mt-auto border-t border-border-subtle p-3">
+      <div className="dashboard-sidebar-profile mt-auto p-3">
         <button
           onClick={() => router.push("/dashboard/settings")}
-          className={`flex w-full items-center gap-2.5 rounded-[12px] p-2 text-left transition-colors ${
+          className={`flex w-full items-center gap-2.5 rounded-[14px] p-2 text-left transition-colors ${
             isSettings ? "bg-accent-subtle" : "hover:bg-surface-hover"
           } ${isCollapsed ? "justify-center" : ""}`}
           title="Settings"
         >
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-accent text-[11px] font-bold text-accent-text">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[11px] bg-accent text-[11px] font-bold text-accent-text">
             A
           </div>
           {!isCollapsed && (
@@ -259,7 +262,7 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
                   Ankit Tripathi
                 </span>
                 <span className="truncate text-[10px] text-text-muted">
-                  Pro Plan
+                  Workspace settings
                 </span>
               </div>
               <Settings
@@ -273,7 +276,7 @@ export function Sidebar({ isCollapsed, onToggle, onSearchOpen }: SidebarProps) {
 
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-border-default bg-surface-raised text-text-muted shadow-elev-1 transition-all hover:border-border-accent hover:text-accent"
+        className="dashboard-sidebar-toggle"
         aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {isCollapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}

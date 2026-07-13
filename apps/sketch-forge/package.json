@@ -11,9 +11,10 @@
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@repo/common": "*",
+    "@gsap/react": "^2.1.2",
     "@repo/canvas-core": "*",
     "@repo/canvas-engine": "*",
+    "@repo/common": "*",
     "@repo/element": "*",
     "@repo/schema": "*",
     "@repo/ui": "*",
@@ -21,6 +22,7 @@
     "@tanstack/react-query": "^5.100.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "gsap": "^3.15.0",
     "lucide-react": "^1.14.0",
     "motion": "^12.38.0",
     "next": "16.2.0",

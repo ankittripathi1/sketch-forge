@@ -1,243 +1,159 @@
-"use client";
-
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  Braces,
-  FileDown,
-  FolderTree,
-  Infinity as InfinityIcon,
-  PenTool,
+  Blocks,
+  FileOutput,
+  Search,
   Sparkles,
+  WifiOff,
 } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
-import { useAppTheme } from "@/theme/ThemeProvider";
+import { AudienceSpotlight } from "./AudienceSpotlight";
+import { CanvasShowcase } from "./CanvasShowcase";
+import { FaqIndex } from "./FaqIndex";
+import { GsapReveal } from "./GsapReveal";
+import { ImageSpotlight } from "./ImageSpotlight";
 
-const features = [
+const capabilities = [
   {
-    icon: InfinityIcon,
-    title: "Space that keeps up",
-    body: "Move from the architecture to the awkward edge case without opening a new file.",
-  },
-  {
-    icon: PenTool,
-    title: "Ink that feels direct",
-    body: "Use a pen, mouse, or trackpad. Your rough lines stay expressive and editable.",
-  },
-  {
+    title: "AI beautify",
+    body: "Straighten structure while the sketch keeps its hand-drawn voice.",
     icon: Sparkles,
-    title: "AI only when invited",
-    body: "Straighten a diagram or convert handwriting when you ask—not while you think.",
   },
   {
-    icon: FolderTree,
-    title: "A home for every sketch",
-    body: "Folders, pages, and thumbnails make last month’s good idea easy to find.",
+    title: "Canvas-aware search",
+    body: "Find the diagram, phrase, or code fragment you remember.",
+    icon: Search,
   },
   {
-    icon: Braces,
-    title: "Made for technical work",
-    body: "System diagrams, algorithm traces, lecture notes, and whiteboard practice belong here.",
+    title: "Pages and folders",
+    body: "Keep a semester, interview loop, or codebase easy to revisit.",
+    icon: Blocks,
   },
   {
-    icon: FileDown,
-    title: "Your work leaves with you",
-    body: "Export clean PNG, SVG, or JSON for the README, RFC, slide deck, or archive.",
+    title: "Open export",
+    body: "Move work into docs and READMEs as PNG, SVG, or JSON.",
+    icon: FileOutput,
+  },
+  {
+    title: "Offline-first",
+    body: "Keep drawing through bad Wi-Fi, then sync when it returns.",
+    icon: WifiOff,
   },
 ] as const;
-
-function Reveal({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const reduceMotion = useReducedMotion();
-  return (
-    <motion.div
-      initial={reduceMotion ? false : { opacity: 0, y: 28 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 export function HomeBody() {
   return (
     <main id="main-content">
-      <IntroBand />
-      <ProductStory />
-      <FeatureField />
-      <Workflow />
+      <Audience />
+      <ProductFlow />
+      <ToolField />
+      <Faq />
       <Closing />
     </main>
   );
 }
 
-function IntroBand() {
+function Audience() {
   return (
-    <section className="border-y border-border-subtle bg-surface-raised">
-      <div className="mx-auto grid max-w-[1380px] gap-8 px-5 py-10 md:grid-cols-[0.7fr_1.3fr] md:items-center md:px-8 md:py-14">
-        <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent">
-          Built for minds that sketch
-        </p>
-        <p className="font-display max-w-[28ch] text-[clamp(1.8rem,3.2vw,3.2rem)] font-medium leading-[1.13] tracking-[-0.035em] text-text-heading">
-          Some ideas start as sentences. The useful ones usually become boxes,
-          arrows, and a note in the margin.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function ProductStory() {
-  const { resolvedTheme, mounted } = useAppTheme();
-  const isDark = mounted && resolvedTheme === "dark";
-
-  return (
-    <section id="inside" className="overflow-hidden py-24 md:py-36">
-      <div className="mx-auto max-w-[1380px] px-5 md:px-8">
-        <Reveal className="grid gap-12 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
-          <div className="max-w-lg">
-            <p className="home-kicker">One notebook, every stage</p>
-            <h2 className="home-heading mt-5">
-              From first scribble to the diagram worth sharing.
-            </h2>
-          </div>
-          <p className="max-w-[58ch] text-[16px] leading-8 text-text-body lg:justify-self-end">
-            Sketch Forge stays out of the way while an idea is fragile. When it
-            is ready, tidy the structure, convert the ink, and send it wherever
-            the real work lives.
-          </p>
-        </Reveal>
-
-        <Reveal className="relative mt-16 md:mt-24">
-          <div className="home-product-stage">
-            <div className="home-product-copy">
-              <span className="text-[12px] font-semibold text-accent">
-                01 / DRAW
-              </span>
-              <h3 className="mt-4 font-display text-[clamp(2rem,4vw,4.6rem)] font-semibold leading-[0.98] tracking-[-0.05em] text-text-heading">
-                Capture the thought before it disappears.
-              </h3>
-              <p className="mt-6 max-w-[42ch] text-[15px] leading-7 text-text-body">
-                Freehand ink, shapes, arrows, text, and code blocks share the
-                same endless surface.
-              </p>
-            </div>
-            <div className="home-screen-wrap">
-              <Image
-                src={isDark ? "/canvas-dark.png" : "/canvas-light.png"}
-                alt="Sketch Forge canvas interface"
-                width={2560}
-                height={1368}
-                unoptimized
-                className="h-full w-full object-cover object-left-top"
-              />
-            </div>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function FeatureField() {
-  return (
-    <section id="tools" className="home-feature-field py-24 md:py-36">
-      <div className="mx-auto max-w-[1380px] px-5 md:px-8">
-        <Reveal className="max-w-3xl">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent">
-            The useful six
-          </p>
-          <h2 className="font-display mt-5 text-[clamp(2.8rem,6vw,6.4rem)] font-semibold leading-[0.94] tracking-[-0.055em]">
-            Less interface.
-            <br />
-            More thinking.
+    <section id="who" className="home-section px-5 md:px-8">
+      <div className="mx-auto max-w-[1240px]">
+        <GsapReveal>
+          <h2 className="home-section-heading max-w-[14ch]">
+            Built for minds that think sideways.
           </h2>
-        </Reveal>
+          <p className="mt-5 max-w-[55ch] text-[16px] leading-8 text-text-body">
+            Documents make ideas march in a line. Sketch Forge lets technical
+            thinking branch, loop, and reconnect.
+          </p>
+        </GsapReveal>
 
-        <div className="home-feature-line mt-16 grid border-t md:grid-cols-2 lg:mt-24 lg:grid-cols-3">
-          {features.map((feature, index) => {
-            const Icon = feature.icon;
-            return (
-              <Reveal
-                key={feature.title}
-                className="home-feature-line group border-b py-9 md:min-h-[260px] md:px-7 lg:px-9"
-              >
-                <div className="flex items-center justify-between">
-                  <Icon size={24} className="text-accent" strokeWidth={1.7} />
-                  <span className="home-feature-faint text-[11px] tabular-nums">
-                    0{index + 1}
-                  </span>
-                </div>
-                <h3 className="mt-10 font-display text-[25px] font-semibold tracking-[-0.025em]">
-                  {feature.title}
-                </h3>
-                <p className="home-feature-muted mt-3 max-w-[36ch] text-[14px] leading-7">
-                  {feature.body}
-                </p>
-              </Reveal>
-            );
-          })}
+        <GsapReveal className="mt-12 md:mt-18">
+          <AudienceSpotlight />
+        </GsapReveal>
+      </div>
+    </section>
+  );
+}
+
+function ProductFlow() {
+  return (
+    <section id="flow" className="home-section px-5 md:px-8">
+      <div className="mx-auto max-w-[1380px]">
+        <GsapReveal className="mx-auto max-w-[900px] text-center">
+          <h2 className="home-section-heading mx-auto max-w-[13ch]">
+            Rough when you need speed. Precise when you need proof.
+          </h2>
+          <p className="mx-auto mt-5 max-w-[53ch] text-[16px] leading-8 text-text-body">
+            Start with a mark, shape the system, then share a result that still
+            feels like yours.
+          </p>
+        </GsapReveal>
+
+        <CanvasShowcase />
+      </div>
+    </section>
+  );
+}
+
+function ToolField() {
+  return (
+    <section id="tools" className="home-section px-5 md:px-8">
+      <div className="tool-story mx-auto max-w-[1320px]">
+        <GsapReveal className="tool-story-media">
+          <ImageSpotlight
+            src="/brand/redline-ribbon.webp"
+            alt="A red translucent ribbon looping across a graphite drafting surface"
+          />
+          <p className="tool-story-caption">
+            The redline is the signal: the idea is ready to be shaped.
+          </p>
+        </GsapReveal>
+
+        <div className="tool-story-copy">
+          <GsapReveal>
+            <h2 className="home-section-heading max-w-[10ch]">
+              Power that waits its turn.
+            </h2>
+            <p className="mt-5 max-w-[46ch] text-[16px] leading-8 text-text-body">
+              The canvas stays quiet until you ask it to organize, find, or
+              export something.
+            </p>
+          </GsapReveal>
+
+          <div className="capability-list mt-10">
+            {capabilities.map(({ title, body, icon: Icon }, index) => (
+              <GsapReveal key={title} delay={index * 0.045}>
+                <article className="capability-row">
+                  <Icon size={20} strokeWidth={1.55} aria-hidden />
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{body}</p>
+                  </div>
+                </article>
+              </GsapReveal>
+            ))}
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function Workflow() {
-  const steps = [
-    [
-      "Scribble",
-      "Put the architecture, lecture, or half-formed answer down fast.",
-    ],
-    [
-      "Shape",
-      "Align the structure and convert handwriting only when it helps.",
-    ],
-    [
-      "Share",
-      "Export an open file and drop it into the rest of your workflow.",
-    ],
-  ] as const;
-
+function Faq() {
   return (
-    <section id="flow" className="relative overflow-hidden py-24 md:py-36">
-      <div aria-hidden className="home-orbit home-orbit-three" />
-      <div className="relative mx-auto max-w-[1380px] px-5 md:px-8">
-        <Reveal className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-          <div>
-            <p className="home-kicker">A very short learning curve</p>
-            <h2 className="home-heading mt-5 max-w-[11ch]">
-              Your hand already knows how.
-            </h2>
-          </div>
-          <div className="border-t border-border-default">
-            {steps.map(([title, body], index) => (
-              <div
-                key={title}
-                className="grid gap-4 border-b border-border-default py-8 sm:grid-cols-[52px_160px_1fr] sm:items-baseline"
-              >
-                <span className="text-[12px] font-semibold text-accent">
-                  0{index + 1}
-                </span>
-                <h3 className="font-display text-[27px] font-semibold tracking-[-0.03em] text-text-heading">
-                  {title}
-                </h3>
-                <p className="max-w-[48ch] text-[14px] leading-7 text-text-secondary">
-                  {body}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Reveal>
+    <section id="faq" className="home-section px-5 md:px-8">
+      <div className="mx-auto max-w-[1160px]">
+        <GsapReveal>
+          <h2 className="home-section-heading max-w-[12ch]">
+            The practical details.
+          </h2>
+          <p className="mt-5 max-w-[48ch] text-[15px] leading-7 text-text-body">
+            Start without ceremony. Keep control of what you make.
+          </p>
+        </GsapReveal>
+        <GsapReveal className="mt-12 md:mt-16">
+          <FaqIndex />
+        </GsapReveal>
       </div>
     </section>
   );
@@ -245,28 +161,26 @@ function Workflow() {
 
 function Closing() {
   return (
-    <section className="px-5 pb-8 md:px-8">
-      <Reveal className="home-closing mx-auto max-w-[1380px] overflow-hidden rounded-[28px] px-6 py-16 text-center md:px-12 md:py-24">
-        <p className="text-[13px] font-semibold text-accent">
-          Free during beta
-        </p>
-        <h2 className="font-display mx-auto mt-5 max-w-[12ch] text-[clamp(3rem,7vw,7rem)] font-semibold leading-[0.92] tracking-[-0.06em] text-text-heading">
-          Give the idea room to become clear.
-        </h2>
-        <p className="mx-auto mt-7 max-w-[50ch] text-[16px] leading-8 text-text-body">
-          Open a blank canvas. No setup, no account, no ceremony.
-        </p>
-        <Link
-          href="/canvas"
-          className="group mt-9 inline-flex h-13 items-center gap-2 rounded-full bg-accent px-6 text-[15px] font-semibold text-accent-text transition-transform duration-200 hover:-translate-y-1 active:translate-y-0"
-        >
+    <section className="px-5 py-24 md:px-8 md:py-36">
+      <GsapReveal className="home-closing mx-auto max-w-[1260px]">
+        <div>
+          <h2 className="home-closing-heading">
+            Your next idea needs more room than a document.
+          </h2>
+          <p className="mt-6 max-w-[42ch] text-[16px] leading-8 text-text-body">
+            Open a blank canvas and make the first mark. No account required.
+          </p>
+        </div>
+        <Link href="/canvas" className="home-button home-button-large group">
           Open Sketch Forge
           <ArrowRight
-            size={17}
-            className="transition-transform group-hover:translate-x-1"
+            size={18}
+            strokeWidth={1.8}
+            aria-hidden
+            className="transition-transform duration-300 group-hover:translate-x-1"
           />
         </Link>
-      </Reveal>
+      </GsapReveal>
     </section>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, use, useState } from "react";
+import { useCallback, use, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import { FileText, FolderPlus, LayoutGrid, List, Plus } from "lucide-react";
 
 import { Breadcrumbs, PageCard, NewFolderDialog } from "@/features/dashboard";
@@ -15,11 +17,14 @@ import {
 import type { Folder } from "@/api/types";
 import { useDashboardUiStore } from "@/stores/dashboardUiStore";
 
+gsap.registerPlugin(useGSAP);
+
 export default function FolderPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const { id } = use(params);
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
   const [moveNotice, setMoveNotice] = useState<string | null>(null);
@@ -37,6 +42,46 @@ export default function FolderPage({
   const setViewMode = useDashboardUiStore((state) => state.setFolderViewMode);
 
   const allFolders = dashboardData?.folders ?? [];
+
+  useGSAP(
+    () => {
+      if (!rootRef.current) return;
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".dashboard-enter",
+          { autoAlpha: 0, y: 22 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.6,
+            stagger: 0.07,
+            ease: "power3.out",
+          },
+        );
+        gsap.fromTo(
+          ".dashboard-page-card",
+          { autoAlpha: 0, y: 16, scale: 0.985 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.5,
+            stagger: 0.045,
+            ease: "power3.out",
+            clearProps: "transform,opacity,visibility",
+          },
+        );
+      });
+
+      return () => media.revert();
+    },
+    {
+      scope: rootRef,
+      dependencies: [folder?.id, folder?.pages.length, isLoading, viewMode],
+      revertOnUpdate: true,
+    },
+  );
 
   const refreshFolderData = useCallback(() => {
     void refetchFolder();
@@ -111,12 +156,12 @@ export default function FolderPage({
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-[1380px] animate-pulse p-6 md:p-10">
+      <div ref={rootRef} className="dashboard-workspace animate-pulse">
         <div className="mb-8 h-4 w-48 rounded bg-surface-raised" />
         <div className="mb-12 h-10 w-64 rounded bg-surface-raised" />
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="dashboard-page-grid dashboard-page-grid-grid">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-48 rounded-[20px] bg-surface-raised" />
+            <div key={i} className="dashboard-page-skeleton h-64" />
           ))}
         </div>
       </div>
@@ -125,30 +170,33 @@ export default function FolderPage({
 
   if (!folder) {
     return (
-      <div className="p-8 font-medium text-text-secondary">
+      <div
+        ref={rootRef}
+        className="dashboard-workspace font-medium text-text-secondary"
+      >
         Folder not found.
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex max-w-[1480px] flex-col gap-10 p-5 pb-16 md:p-8 md:pb-20 lg:p-10 lg:pb-24">
-      <header className="border-b border-border-subtle pb-7">
+    <div ref={rootRef} className="dashboard-workspace">
+      <header className="dashboard-library-header dashboard-enter block">
         <Breadcrumbs currentFolderId={id} allFolders={allFolders} />
         <div className="mt-6 flex flex-col justify-between gap-7 md:flex-row md:items-end">
           <div className="flex items-center gap-3">
             <span
-              className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-accent-subtle text-lg text-accent"
+              className="dashboard-folder-glyph h-12 w-12 text-lg"
               aria-hidden="true"
             >
               {folder.icon || "F"}
             </span>
             <div>
-              <h1 className="font-display text-3xl font-semibold tracking-[-0.045em] text-text-heading md:text-4xl">
+              <h1 className="font-display text-4xl font-semibold tracking-[-0.055em] text-text-heading md:text-5xl">
                 {folder.name}
               </h1>
               <p className="mt-1 text-xs text-text-secondary">
-                {folder.pages.length} pages · {folder.children.length} folders
+                {folder.pages.length} pages, {folder.children.length} folders
               </p>
             </div>
           </div>
@@ -156,14 +204,14 @@ export default function FolderPage({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsNewFolderOpen(true)}
-              className="inline-flex h-11 items-center gap-2 rounded-full border border-border-default bg-surface-raised px-4 text-sm font-semibold text-text-secondary transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-heading active:translate-y-0 active:scale-[0.98]"
+              className="dashboard-action dashboard-action-secondary"
             >
               <FolderPlus size={16} />
               <span>Sub-folder</span>
             </button>
             <button
               onClick={handleCreatePage}
-              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent px-4 text-sm font-semibold text-accent-text transition-all hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
+              className="dashboard-action dashboard-action-primary"
             >
               <Plus size={16} strokeWidth={2.4} />
               <span>New page</span>
@@ -173,14 +221,16 @@ export default function FolderPage({
       </header>
 
       {folder.children.length > 0 && (
-        <section>
-          <h2 className="font-display text-xl font-semibold tracking-[-0.03em] text-text-heading">
-            Sub-folders
-          </h2>
-          <p className="mb-4 mt-1 text-xs leading-5 text-text-secondary">
-            Drop a page onto a sub-folder to move it there.
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="dashboard-section dashboard-enter">
+          <div className="dashboard-section-header">
+            <div>
+              <h2>Sub-folders</h2>
+              <p className="mt-1 text-xs leading-5 text-text-secondary">
+                Drop a page onto a sub-folder to move it there.
+              </p>
+            </div>
+          </div>
+          <div className="dashboard-folder-grid">
             {folder.children.map((child) => (
               <SubfolderDropCard
                 key={child.id}
@@ -193,21 +243,19 @@ export default function FolderPage({
         </section>
       )}
 
-      <section className="space-y-5">
-        <div className="flex items-center justify-between gap-4">
+      <section className="dashboard-section dashboard-enter">
+        <div className="dashboard-section-header">
           <div>
-            <h2 className="font-display text-xl font-semibold tracking-[-0.03em] text-text-heading">
-              Pages
-            </h2>
+            <h2>Pages</h2>
             <p className="mt-1 text-xs text-text-secondary">
               Drag to reorder, move into a sub-folder, or drop on All pages in
               the sidebar to return to root.
             </p>
           </div>
-          <div className="flex items-center rounded-full border border-border-default bg-surface-raised p-1">
+          <div className="dashboard-view-toggle">
             <button
               onClick={() => setViewMode("grid")}
-              className={`rounded-full p-1.5 transition-colors ${
+              className={`transition-colors ${
                 viewMode === "grid"
                   ? "bg-accent-subtle text-accent"
                   : "text-text-muted hover:text-text-heading"
@@ -219,7 +267,7 @@ export default function FolderPage({
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`rounded-full p-1.5 transition-colors ${
+              className={`transition-colors ${
                 viewMode === "list"
                   ? "bg-accent-subtle text-accent"
                   : "text-text-muted hover:text-text-heading"
@@ -234,11 +282,11 @@ export default function FolderPage({
 
         {folder.pages.length > 0 ? (
           <div
-            className={
+            className={`dashboard-page-grid ${
               viewMode === "grid"
-                ? "grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3"
-                : "grid grid-cols-1 gap-3"
-            }
+                ? "dashboard-page-grid-grid"
+                : "dashboard-page-grid-list"
+            }`}
           >
             {folder.pages
               .sort((a, b) => a.pageOrder - b.pageOrder)
@@ -255,8 +303,8 @@ export default function FolderPage({
               ))}
           </div>
         ) : (
-          <div className="flex min-h-[22rem] flex-col items-center justify-center rounded-[24px] border border-dashed border-border-default bg-surface-paper/50 px-6 py-16 text-center">
-            <div className="mb-5 rounded-[16px] bg-accent-subtle p-5 text-accent">
+          <div className="dashboard-empty-state">
+            <div className="dashboard-empty-icon">
               <FileText size={38} strokeWidth={1.3} />
             </div>
             <h3 className="font-display text-2xl font-semibold tracking-[-0.035em] text-text-heading">
@@ -267,7 +315,7 @@ export default function FolderPage({
             </p>
             <button
               onClick={handleCreatePage}
-              className="mt-7 inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-accent-text transition-all hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:scale-[0.98]"
+              className="dashboard-action dashboard-action-primary mt-7"
             >
               <Plus size={16} strokeWidth={2.4} />
               <span>Create page</span>
@@ -285,11 +333,7 @@ export default function FolderPage({
       />
 
       {moveNotice ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-6 right-6 z-40 rounded-full border border-border-default bg-text-heading px-4 py-2.5 text-xs font-semibold text-surface-base shadow-elev-3"
-        >
+        <div role="status" aria-live="polite" className="dashboard-toast">
           {moveNotice}
         </div>
       ) : null}
@@ -325,16 +369,11 @@ function SubfolderDropCard({
         const pageId = event.dataTransfer.getData("pageId");
         if (pageId) onPageDrop(pageId);
       }}
-      className={`flex min-h-24 items-center gap-3 rounded-[18px] border p-4 text-left transition-all hover:-translate-y-0.5 ${
-        isDragOver
-          ? "border-border-accent-strong bg-accent-subtle shadow-glow-accent"
-          : "border-border-subtle bg-surface-raised/80 hover:border-border-accent-strong hover:bg-surface-raised"
+      className={`dashboard-folder-card ${
+        isDragOver ? "dashboard-folder-card-active" : ""
       }`}
     >
-      <span
-        className="flex h-11 w-11 items-center justify-center rounded-[13px] bg-accent-subtle text-sm text-accent"
-        aria-hidden="true"
-      >
+      <span className="dashboard-folder-glyph" aria-hidden="true">
         {folder.icon || "F"}
       </span>
       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-heading">

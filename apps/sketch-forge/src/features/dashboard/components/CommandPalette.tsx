@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, Loader2, FileText, X } from "lucide-react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { Search, FileText, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSearchPages } from "@/api/hooks";
+
+gsap.registerPlugin(useGSAP);
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -15,8 +19,28 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { data: results = [], isFetching } = useSearchPages(debouncedQuery);
+
+  useGSAP(
+    () => {
+      if (!isOpen || !modalRef.current) return;
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap
+          .timeline({ defaults: { ease: "power3.out" } })
+          .from(".command-overlay", { autoAlpha: 0, duration: 0.22 })
+          .from(
+            ".command-panel",
+            { autoAlpha: 0, y: -18, scale: 0.97, duration: 0.38 },
+            "<0.04",
+          );
+      });
+      return () => media.revert();
+    },
+    { scope: modalRef, dependencies: [isOpen], revertOnUpdate: true },
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -58,19 +82,16 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[14vh]">
-      <div
-        className="absolute inset-0 bg-black/45 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <div ref={modalRef} className="dashboard-command-root">
+      <div className="command-overlay" onClick={onClose} />
 
-      <div className="relative mx-4 w-full max-w-lg animate-in overflow-hidden rounded-[22px] border border-border-default bg-surface-overlay shadow-elev-4 duration-150 fade-in zoom-in-95">
+      <div className="command-panel">
         <div className="flex items-center gap-3 border-b border-border-subtle px-5 py-4">
-          {isFetching ? (
-            <Loader2 size={15} className="text-accent shrink-0 animate-spin" />
-          ) : (
-            <Search size={15} className="text-text-muted shrink-0" />
-          )}
+          <Search
+            size={15}
+            strokeWidth={1.7}
+            className={`shrink-0 ${isFetching ? "animate-pulse text-accent" : "text-text-muted"}`}
+          />
           <input
             ref={inputRef}
             value={query}
@@ -79,7 +100,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
               setSelectedIndex(-1);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search notebooks and pages…"
+            placeholder="Search notebooks and pages"
             className="flex-1 bg-transparent text-sm text-text-heading outline-none placeholder:text-text-muted"
           />
           {query && (
@@ -88,7 +109,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 setQuery("");
                 setDebouncedQuery("");
               }}
-              className="text-text-muted hover:text-text-body transition-colors"
+              className="rounded-lg p-1 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-body"
             >
               <X size={13} />
             </button>
@@ -105,7 +126,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                     key={result.id}
                     onClick={() => navigateToPage(result.id)}
                     onMouseEnter={() => setSelectedIndex(index)}
-                    className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left transition-all ${
+                    className={`dashboard-command-result ${
                       index === selectedIndex
                         ? "bg-accent-subtle"
                         : "hover:bg-surface-hover"
@@ -134,7 +155,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 ))}
               </div>
             ) : !isFetching ? (
-              <div className="py-10 text-center text-text-muted text-sm">
+              <div className="py-10 text-center text-sm text-text-muted">
                 No results for &ldquo;{query}&rdquo;
               </div>
             ) : null}
@@ -143,21 +164,15 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
 
         <div className="flex items-center gap-4 border-t border-border-subtle px-5 py-2.5 text-[10px] text-text-dim">
           <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-surface-raised border border-border-default">
-              ↑↓
-            </kbd>
+            <kbd className="dashboard-key">↑↓</kbd>
             navigate
           </span>
           <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-surface-raised border border-border-default">
-              ↵
-            </kbd>
+            <kbd className="dashboard-key">↵</kbd>
             open
           </span>
           <span className="flex items-center gap-1.5">
-            <kbd className="px-1 py-0.5 rounded bg-surface-raised border border-border-default">
-              esc
-            </kbd>
+            <kbd className="dashboard-key">esc</kbd>
             close
           </span>
         </div>
