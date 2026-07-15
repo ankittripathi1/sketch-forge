@@ -23,7 +23,7 @@ const faqs = [
   {
     question: "What powers the AI features?",
     answer:
-      "You bring your own Gemini API key. Requests go directly from your browser to Google.",
+      "The beta uses your own Gemini API key, with requests sent from your browser. The planned Pro tier would route Claude securely through Sketch Forge, so no provider key is needed.",
   },
   {
     question: "What can I export?",
@@ -32,7 +32,8 @@ const faqs = [
   },
   {
     question: "Is it free?",
-    answer: "The beta is free, and everything you make remains portable.",
+    answer:
+      "Yes. The beta is free and your work remains portable. A $9 hosted AI plan is planned for after beta.",
   },
 ] as const;
 

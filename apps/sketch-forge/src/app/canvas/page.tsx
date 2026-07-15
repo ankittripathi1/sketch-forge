@@ -5,9 +5,8 @@ import {
   SketchCanvas,
   Toolbar,
   CanvasActions,
-  BackgroundPicker,
-  StylePanel,
-  SettingsPanel,
+  CanvasInspector,
+  type CanvasInspectorPanel,
   NotebookSidebar,
   useCanvasSync,
   useCanvasPreferences,
@@ -91,7 +90,8 @@ function CanvasContent() {
   // setIsPanningMode is intentionally not read — it exists solely to trigger
   // a re-render that updates the cursor when the user holds Space.
   const [, setIsPanningMode] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [inspectorPanel, setInspectorPanel] =
+    useState<CanvasInspectorPanel | null>(null);
 
   // Two canvas refs passed into useSketchEngine.  The hook attaches renderers
   // to both but never reads their DOM position — that’s handled here in
@@ -236,6 +236,14 @@ function CanvasContent() {
       document.removeEventListener("visibilitychange", flushPendingSave);
   }, [isDirty, saveNow]);
 
+  useEffect(() => {
+    function closeInspector(event: KeyboardEvent) {
+      if (event.key === "Escape") setInspectorPanel(null);
+    }
+    window.addEventListener("keydown", closeInspector);
+    return () => window.removeEventListener("keydown", closeInspector);
+  }, []);
+
   async function handleBack() {
     const dest = folderId ? `/dashboard/folder/${folderId}` : "/dashboard";
     if (isDirty) {
@@ -358,7 +366,7 @@ function CanvasContent() {
 
   return (
     <div
-      className="relative w-screen h-screen overflow-hidden"
+      className="canvas-shell relative h-[100dvh] w-screen overflow-hidden"
       style={getBackgroundStyle(
         background,
         zoomLevel / 100,
@@ -380,39 +388,6 @@ function CanvasContent() {
         shortcuts={shortcutSettings.registry}
       />
 
-      <CanvasActions
-        onBeautify={handleBeautify}
-        isBeautifying={isBeautifying}
-        hasElements={hasElements}
-        hasApiKey={hasApiKey}
-        onSettingsClick={() => setIsSettingsOpen(true)}
-      />
-
-      <SettingsPanel
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        scribbleEnabled={scribbleEnabled}
-        onScribbleChange={setScribbleEnabled}
-        recognitionBackend={recognitionBackend}
-        onRecognitionBackend={setRecognitionBackend}
-        recognitionApiKey={recognitionApiKey}
-        onRecognitionApiKey={setRecognitionApiKey}
-      />
-
-      <StylePanel
-        tool={tool}
-        selectedTool={selectedTool}
-        onStrokeColor={setStrokeColor}
-        onFillColor={setFillColor}
-        onFillStyle={handleFillStyle}
-        onStrokeWidth={setStrokeWidth}
-        onFontFamily={setFontFamily}
-        onFontSize={setFontSize}
-        onFontWeight={setFontWeight}
-        onTextAlign={setTextAlign}
-        onTextVerticalAlign={setTextVerticalAlign}
-        canvasMode={canvasMode}
-      />
       <SketchCanvas
         sceneCanvasRef={sceneCanvasRef}
         interactionCanvasRef={interactiveCanvasRef}
@@ -431,17 +406,62 @@ function CanvasContent() {
         renderScene={renderScene}
         renderSelection={renderSelection}
       />
-      <BackgroundPicker
-        background={background}
-        backgroundColor={backgroundColor}
-        gridColor={gridColor}
-        dotColor={dotColor}
-        canvasMode={canvasMode}
-        onChange={setBackground}
-        onBackgroundColor={handleBackgroundColor}
-        onGridColor={setGridColor}
-        onDotColor={setDotColor}
-        onThemeApplied={handleThemeApplied}
+      {!hasElements && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-6">
+          <div className="canvas-empty-state max-w-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+              Blank canvas
+            </p>
+            <h1 className="mt-3 text-[clamp(1.65rem,4vw,2.5rem)] font-semibold tracking-[-0.04em] text-text-heading">
+              Make the first mark.
+            </h1>
+            <p className="mx-auto mt-3 max-w-[34ch] text-[13px] leading-6 text-text-secondary">
+              Pick a shape or pencil below. Hold space to move, pinch or scroll
+              to zoom, and use the inspector when you need precision.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <CanvasInspector
+        activePanel={inspectorPanel}
+        onPanelChange={setInspectorPanel}
+        style={{
+          tool,
+          selectedTool,
+          onStrokeColor: setStrokeColor,
+          onFillColor: setFillColor,
+          onFillStyle: handleFillStyle,
+          onStrokeWidth: setStrokeWidth,
+          onFontFamily: setFontFamily,
+          onFontSize: setFontSize,
+          onFontWeight: setFontWeight,
+          onTextAlign: setTextAlign,
+          onTextVerticalAlign: setTextVerticalAlign,
+          canvasMode,
+        }}
+        canvas={{
+          background,
+          backgroundColor,
+          gridColor,
+          dotColor,
+          canvasMode,
+          onChange: setBackground,
+          onBackgroundColor: handleBackgroundColor,
+          onGridColor: setGridColor,
+          onDotColor: setDotColor,
+          onThemeApplied: handleThemeApplied,
+        }}
+        ai={{
+          isOpen: inspectorPanel === "ai",
+          onClose: () => setInspectorPanel(null),
+          scribbleEnabled,
+          onScribbleChange: setScribbleEnabled,
+          recognitionBackend,
+          onRecognitionBackend: setRecognitionBackend,
+          recognitionApiKey,
+          onRecognitionApiKey: setRecognitionApiKey,
+        }}
       />
 
       <NotebookSidebar
@@ -449,54 +469,81 @@ function CanvasContent() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="pointer-events-auto absolute left-4 top-4 z-20 hidden max-w-[min(34rem,42vw)] select-none items-center gap-1.5 overflow-hidden rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl sm:flex">
-        {isPage && (
-          <button
-            onClick={handleBack}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-text-secondary transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-primary active:translate-y-0"
-            title={folderId ? "Back to folder" : "Back to dashboard"}
-          >
-            <ChevronLeft size={14} />
-            <span className="hidden 2xl:inline">
-              {folderId ? "Folder" : "Dashboard"}
-            </span>
-          </button>
-        )}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:-translate-y-0.5 active:translate-y-0 ${
-            isSidebarOpen
-              ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
-              : "text-text-secondary hover:bg-surface-hover hover:text-accent"
-          }`}
-          title="Toggle notebook sidebar"
-        >
-          <PanelLeftOpen size={17} strokeWidth={2} />
-        </button>
-        <div className="hidden h-5 w-px shrink-0 bg-border-subtle xl:block" />
-        <Book size={15} className="hidden shrink-0 text-text-muted xl:block" />
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => triggerSave()}
-          className="min-w-0 flex-1 truncate rounded-md bg-transparent px-1.5 py-1 text-[13px] font-semibold text-text-body outline-none transition-colors placeholder:text-text-dim focus:bg-surface-hover focus:text-text-primary"
-          placeholder="Untitled"
+      <div className="pointer-events-auto absolute left-3 top-3 z-20 rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl sm:hidden">
+        <CanvasActions
+          embedded
+          onBeautify={handleBeautify}
+          isBeautifying={isBeautifying}
+          hasElements={hasElements}
+          hasApiKey={hasApiKey}
+          onSettingsClick={() => setInspectorPanel("ai")}
         />
-        <span className="flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-text-secondary">
-          {isSaving ? (
-            <>
-              <Loader2 size={12} className="animate-spin text-accent" />
-              <span className="hidden xl:inline">Saving</span>
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={12} className="text-accent" />
-              <span className="hidden xl:inline">
-                {lastSavedAt ? "Saved" : "Autosave"}
+      </div>
+
+      <div className="pointer-events-none absolute left-3 right-3 top-3 z-20 hidden items-start justify-between gap-4 sm:flex sm:left-4 sm:right-4 sm:top-4">
+        <div className="pointer-events-auto flex max-w-[min(34rem,52vw)] select-none items-center gap-1.5 overflow-hidden rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
+          {isPage && (
+            <button
+              onClick={handleBack}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-text-secondary transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-primary active:translate-y-0"
+              title={folderId ? "Back to folder" : "Back to dashboard"}
+            >
+              <ChevronLeft size={14} />
+              <span className="hidden 2xl:inline">
+                {folderId ? "Folder" : "Dashboard"}
               </span>
-            </>
+            </button>
           )}
-        </span>
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:-translate-y-0.5 active:translate-y-0 ${
+              isSidebarOpen
+                ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
+                : "text-text-secondary hover:bg-surface-hover hover:text-accent"
+            }`}
+            title="Toggle notebook sidebar"
+            aria-label="Toggle notebook sidebar"
+          >
+            <PanelLeftOpen size={17} strokeWidth={2} />
+          </button>
+          <div className="hidden h-5 w-px shrink-0 bg-border-subtle xl:block" />
+          <Book
+            size={15}
+            className="hidden shrink-0 text-text-muted xl:block"
+          />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => triggerSave()}
+            className="min-w-0 flex-1 truncate rounded-md bg-transparent px-1.5 py-1 text-[13px] font-semibold text-text-body outline-none transition-colors placeholder:text-text-dim focus:bg-surface-hover focus:text-text-primary"
+            placeholder="Untitled"
+          />
+          <span className="flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-text-secondary">
+            {isSaving ? (
+              <>
+                <Loader2 size={12} className="animate-spin text-accent" />
+                <span className="hidden xl:inline">Saving</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={12} className="text-accent" />
+                <span className="hidden xl:inline">
+                  {lastSavedAt ? "Saved" : "Autosave"}
+                </span>
+              </>
+            )}
+          </span>
+        </div>
+        <div className="pointer-events-auto rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
+          <CanvasActions
+            embedded
+            onBeautify={handleBeautify}
+            isBeautifying={isBeautifying}
+            hasElements={hasElements}
+            hasApiKey={hasApiKey}
+            onSettingsClick={() => setInspectorPanel("ai")}
+          />
+        </div>
       </div>
 
       <div className="absolute right-4 top-[76px] z-10 flex items-center gap-2 sm:bottom-4 sm:top-auto">

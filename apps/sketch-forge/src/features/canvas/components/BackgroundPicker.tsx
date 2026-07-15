@@ -15,6 +15,7 @@ import { useRef, useState } from "react";
 type Background = "plain" | "dots" | "grid";
 
 interface BackgroundPickerProps {
+  embedded?: boolean;
   background: Background;
   backgroundColor: string;
   gridColor: string;
@@ -105,6 +106,7 @@ function isDarkColor(hex: string): boolean {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function BackgroundPicker({
+  embedded = false,
   background,
   backgroundColor,
   gridColor,
@@ -146,7 +148,7 @@ export function BackgroundPicker({
   return (
     <>
       {/* Collapsed trigger */}
-      {!isOpen && (
+      {!embedded && !isOpen && (
         <button
           type="button"
           title="Canvas appearance"
@@ -159,25 +161,28 @@ export function BackgroundPicker({
 
       <div
         className={[
-          "absolute left-3 right-3 top-16 z-30 flex-col overflow-hidden rounded-2xl border border-border-default bg-surface-raised/92 shadow-elev-4 backdrop-blur-xl",
-          isOpen ? "flex" : "hidden",
-          "sm:bottom-4 sm:left-4 sm:right-auto sm:top-auto sm:w-64",
+          embedded
+            ? "flex min-h-0 flex-col overflow-y-auto"
+            : "absolute left-3 right-3 top-16 z-30 flex-col overflow-hidden rounded-2xl border border-border-default bg-surface-raised/92 shadow-elev-4 backdrop-blur-xl sm:bottom-4 sm:left-4 sm:right-auto sm:top-auto sm:w-64",
+          embedded || isOpen ? "flex" : "hidden",
         ].join(" ")}
       >
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-4 pb-3 pt-4">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-            Canvas
-          </span>
-          <button
-            type="button"
-            title="Close"
-            onClick={() => setIsOpen(false)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-body"
-          >
-            <X size={14} strokeWidth={2} />
-          </button>
-        </div>
+        {!embedded && (
+          <div className="flex items-center justify-between px-4 pb-3 pt-4">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+              Canvas
+            </span>
+            <button
+              type="button"
+              title="Close"
+              onClick={() => setIsOpen(false)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-body"
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+        )}
 
         {/* ── Background type segmented control ── */}
         <div className="px-3 pb-3">

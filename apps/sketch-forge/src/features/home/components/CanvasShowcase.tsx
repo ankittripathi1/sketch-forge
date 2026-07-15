@@ -32,41 +32,44 @@ export function CanvasShowcase() {
   useGSAP(
     () => {
       const media = gsap.matchMedia();
-      media.add("(prefers-reduced-motion: no-preference)", () => {
-        const steps = gsap.utils.toArray<HTMLElement>(".canvas-story-step");
-        const image = root.current?.querySelector<HTMLElement>(
-          ".canvas-showcase-media",
-        );
+      media.add(
+        "(min-width: 768px) and (prefers-reduced-motion: no-preference)",
+        () => {
+          const steps = gsap.utils.toArray<HTMLElement>(".canvas-story-step");
+          const image = root.current?.querySelector<HTMLElement>(
+            ".canvas-showcase-media",
+          );
 
-        const activate = (activeIndex: number) => {
+          const activate = (activeIndex: number) => {
+            steps.forEach((step, index) => {
+              step.classList.toggle("is-active", index === activeIndex);
+            });
+
+            if (!image) return;
+            const transforms = [
+              { xPercent: 0, scale: 1.01 },
+              { xPercent: -15.5, scale: 1.025 },
+              { xPercent: -31, scale: 1.01 },
+            ];
+            gsap.to(image, {
+              ...transforms[activeIndex],
+              duration: 0.8,
+              ease: "power3.out",
+              overwrite: true,
+            });
+          };
+
+          activate(0);
           steps.forEach((step, index) => {
-            step.classList.toggle("is-active", index === activeIndex);
+            ScrollTrigger.create({
+              trigger: step,
+              start: "top 62%",
+              onEnter: () => activate(index),
+              onEnterBack: () => activate(index),
+            });
           });
-
-          if (!image) return;
-          const transforms = [
-            { xPercent: 0, yPercent: 0, scale: 1.015 },
-            { xPercent: -1.3, yPercent: 0.6, scale: 1.045 },
-            { xPercent: 0.8, yPercent: -0.5, scale: 1.025 },
-          ];
-          gsap.to(image, {
-            ...transforms[activeIndex],
-            duration: 0.8,
-            ease: "power3.out",
-            overwrite: true,
-          });
-        };
-
-        activate(0);
-        steps.forEach((step, index) => {
-          ScrollTrigger.create({
-            trigger: step,
-            start: "top 62%",
-            onEnter: () => activate(index),
-            onEnterBack: () => activate(index),
-          });
-        });
-      });
+        },
+      );
 
       return () => media.revert();
     },
@@ -79,19 +82,11 @@ export function CanvasShowcase() {
         <div className="canvas-showcase-frame">
           <div className="canvas-showcase-media absolute inset-0">
             <Image
-              src="/canvas-light.png"
-              alt="Sketch Forge infinite canvas with drawing, text, and diagram tools"
+              src="/brand/workflow-panorama.png"
+              alt="Loose graphite sketches becoming a precise layered technical drawing"
               fill
               sizes="(max-width: 768px) 96vw, 920px"
-              className="img-light object-cover object-left-top"
-            />
-            <Image
-              src="/canvas-dark.png"
-              alt=""
-              aria-hidden
-              fill
-              sizes="(max-width: 768px) 96vw, 920px"
-              className="img-dark object-cover object-left-top"
+              className="object-cover object-center"
             />
           </div>
         </div>

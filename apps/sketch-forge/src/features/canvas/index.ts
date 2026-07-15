@@ -1,6 +1,10 @@
 export { SketchCanvas } from "./components/SketchCanvas";
 export { Toolbar } from "./components/Toolbar";
 export { CanvasActions } from "./components/CanvasActions";
+export {
+  CanvasInspector,
+  type CanvasInspectorPanel,
+} from "./components/CanvasInspector";
 export { BackgroundPicker } from "./components/BackgroundPicker";
 export { StylePanel } from "./components/StylePanel";
 export { SettingsPanel } from "./components/SettingsPanel";

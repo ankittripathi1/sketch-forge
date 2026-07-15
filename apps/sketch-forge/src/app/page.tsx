@@ -14,6 +14,7 @@ const NAV = [
   ["Who it's for", "#who"],
   ["Flow", "#flow"],
   ["Tools", "#tools"],
+  ["Pricing", "#pricing"],
   ["FAQ", "#faq"],
 ] as const;
 

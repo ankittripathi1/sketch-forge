@@ -3,6 +3,7 @@
 import { Loader2, Settings2, Sparkles } from "lucide-react";
 
 interface CanvasActionsProps {
+  embedded?: boolean;
   onBeautify: () => void;
   isBeautifying: boolean;
   hasElements: boolean;
@@ -11,6 +12,7 @@ interface CanvasActionsProps {
 }
 
 export function CanvasActions({
+  embedded = false,
   onBeautify,
   isBeautifying,
   hasElements,
@@ -36,7 +38,13 @@ export function CanvasActions({
   }
 
   return (
-    <div className="absolute right-3 top-4 z-20 flex items-center gap-1 rounded-2xl border border-border-default bg-surface-raised/88 p-1.5 shadow-elev-3 backdrop-blur-xl sm:right-4">
+    <div
+      className={
+        embedded
+          ? "flex shrink-0 items-center gap-1"
+          : "absolute right-3 top-4 z-20 flex items-center gap-1 rounded-2xl border border-border-default bg-surface-raised/88 p-1.5 shadow-elev-3 backdrop-blur-xl sm:right-4"
+      }
+    >
       <button
         onClick={handleBeautifyClick}
         disabled={beautifyDisabled}

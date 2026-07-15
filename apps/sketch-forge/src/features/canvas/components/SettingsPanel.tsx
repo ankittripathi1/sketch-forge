@@ -8,6 +8,7 @@ const STORAGE_BACKEND = "sketch-forge:recognition-backend";
 const STORAGE_KEY = "sketch-forge:recognition-api-key";
 
 interface SettingsPanelProps {
+  embedded?: boolean;
   isOpen: boolean;
   onClose: () => void;
   scribbleEnabled: boolean;
@@ -19,6 +20,7 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({
+  embedded = false,
   isOpen,
   onClose,
   scribbleEnabled,
@@ -53,7 +55,7 @@ export function SettingsPanel({
     localStorage.setItem(STORAGE_BACKEND, v);
   }
 
-  if (!visible) return null;
+  if (!embedded && !visible) return null;
 
   const usingAI = recognitionBackend === "gemini";
   const hasApiKey = recognitionApiKey.trim().length > 0;
@@ -61,27 +63,35 @@ export function SettingsPanel({
   return (
     <>
       {/* Backdrop */}
-      <div
-        className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${isOpen ? "opacity-100" : "opacity-0"}`}
-        onClick={onClose}
-      />
+      {!embedded && (
+        <div
+          className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${isOpen ? "opacity-100" : "opacity-0"}`}
+          onClick={onClose}
+        />
+      )}
 
       {/* Drawer */}
       <div
-        className={`fixed right-0 top-0 z-50 flex h-full w-80 flex-col rounded-l-2xl bg-surface-overlay shadow-elev-3 transition-transform duration-200 ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+        className={
+          embedded
+            ? "flex min-h-0 flex-col"
+            : `fixed right-0 top-0 z-50 flex h-full w-80 flex-col rounded-l-2xl bg-surface-overlay shadow-elev-3 transition-transform duration-200 ${isOpen ? "translate-x-0" : "translate-x-full"}`
+        }
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3.5">
-          <span className="text-[13px] font-semibold tracking-tight text-text-body">
-            Canvas settings
-          </span>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-text-secondary hover:bg-surface-hover hover:text-text-body"
-          >
-            <X size={16} strokeWidth={1.8} />
-          </button>
-        </div>
+        {!embedded && (
+          <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3.5">
+            <span className="text-[13px] font-semibold tracking-tight text-text-body">
+              Canvas settings
+            </span>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-text-secondary hover:bg-surface-hover hover:text-text-body"
+            >
+              <X size={16} strokeWidth={1.8} />
+            </button>
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex flex-col gap-5 overflow-y-auto p-4">
@@ -154,7 +164,9 @@ export function SettingsPanel({
               {usingAI && (
                 <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface-raised p-3">
                   <p className="text-xs font-medium text-text-body">
-                    {hasApiKey ? "Gemini API key is configured" : "API key required"}
+                    {hasApiKey
+                      ? "Gemini API key is configured"
+                      : "API key required"}
                   </p>
                   <p className="text-[10px] leading-relaxed text-text-muted">
                     API keys and shortcut customization live in the main
@@ -173,7 +185,9 @@ export function SettingsPanel({
         </div>
 
         {/* Footer */}
-        <div className="mt-auto border-t border-border-subtle px-4 py-3">
+        <div
+          className={`${embedded ? "hidden" : "mt-auto"} border-t border-border-subtle px-4 py-3`}
+        >
           <p className="text-xs text-text-dim">
             Use main Settings for account, theme, API keys, and shortcuts.
           </p>

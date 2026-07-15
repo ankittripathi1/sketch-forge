@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Blocks,
+  Check,
   FileOutput,
   Search,
   Sparkles,
@@ -47,9 +48,120 @@ export function HomeBody() {
       <Audience />
       <ProductFlow />
       <ToolField />
+      <Pricing />
       <Faq />
       <Closing />
     </main>
+  );
+}
+
+function Pricing() {
+  const freeFeatures = [
+    "Device-first canvas",
+    "Local handwriting recognition",
+    "PNG, SVG, and JSON export",
+    "Optional bring-your-own AI key",
+  ];
+  const proFeatures = [
+    "Everything in Free",
+    "Hosted Claude with no API key setup",
+    "AI beautify and handwriting recognition",
+    "400 hosted AI actions each month",
+  ];
+
+  return (
+    <section id="pricing" className="home-section px-5 md:px-8">
+      <div className="pricing-layout mx-auto max-w-[1240px]">
+        <GsapReveal className="pricing-intro">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">
+            Pricing
+          </p>
+          <h2 className="mt-5 max-w-[12ch] text-[clamp(2.4rem,5vw,4.25rem)] leading-[0.98] tracking-[-0.055em] text-text-heading">
+            Start free. Pay when AI saves real time.
+          </h2>
+          <p className="mt-6 max-w-[46ch] text-[15px] leading-7 text-text-body">
+            The beta stays free. A hosted AI plan is planned for after beta,
+            with a clear monthly allowance and no API key setup.
+          </p>
+        </GsapReveal>
+
+        <div className="pricing-plans">
+          <GsapReveal className="pricing-free" delay={0.04}>
+            <div>
+              <p className="pricing-kicker">Free beta</p>
+              <p className="mt-2 text-[1.8rem] font-semibold tracking-[-0.045em] text-text-heading">
+                $0
+              </p>
+              <p className="mt-1 text-[12px] text-text-muted">
+                No card required
+              </p>
+            </div>
+            <ul className="pricing-feature-grid">
+              {freeFeatures.map((feature) => (
+                <li key={feature}>
+                  <Check size={14} aria-hidden />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/canvas"
+              className="home-button home-button-small group"
+            >
+              Start drawing
+              <ArrowRight
+                size={14}
+                strokeWidth={1.8}
+                aria-hidden
+                className="transition-transform duration-300 group-hover:translate-x-0.5"
+              />
+            </Link>
+          </GsapReveal>
+
+          <GsapReveal className="pricing-pro" delay={0.08}>
+            <div className="pricing-pro-head">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="pricing-kicker text-white/65">Pro</p>
+                  <span className="rounded-full border border-white/18 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/70">
+                    Planned after beta
+                  </span>
+                </div>
+                <p className="mt-5 flex items-end gap-2 text-white">
+                  <span className="text-[clamp(3rem,7vw,5.5rem)] font-semibold leading-none tracking-[-0.07em]">
+                    $9
+                  </span>
+                  <span className="pb-1 text-[12px] text-white/60">
+                    per month
+                  </span>
+                </p>
+              </div>
+              <p className="max-w-[31ch] text-[14px] leading-7 text-white/68">
+                For frequent visual thinkers who want hosted AI without managing
+                provider keys.
+              </p>
+            </div>
+
+            <ul className="pricing-pro-features">
+              {proFeatures.map((feature) => (
+                <li key={feature}>
+                  <Check size={15} aria-hidden />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="pricing-pro-foot">
+              <p>
+                Pricing is based on a conservative Claude Haiku usage model.
+                Allowance and launch details may change before billing ships.
+              </p>
+              <span>Coming after beta</span>
+            </div>
+          </GsapReveal>
+        </div>
+      </div>
+    </section>
   );
 }
 

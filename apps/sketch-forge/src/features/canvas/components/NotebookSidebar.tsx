@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import {
   Folder,
   FileText,
@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ChevronDown,
   Book,
-  Trash2,
   X,
   PlusCircle,
   FolderPlus,
@@ -29,6 +28,11 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<
     Record<string, boolean>
   >({});
+  const [creation, setCreation] = useState<{
+    kind: "folder" | "page";
+    folderId?: string;
+  } | null>(null);
+  const [draftName, setDraftName] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentId =
@@ -57,19 +61,26 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
     router.push(`/canvas?${params.toString()}`);
   };
 
-  const handleCreateFolder = async () => {
-    const name = prompt("Enter folder name:");
-    if (name) await createFolder(name);
+  const beginCreation = (kind: "folder" | "page", folderId?: string) => {
+    setCreation({ kind, folderId });
+    setDraftName("");
   };
 
-  const handleCreatePage = async (folderId?: string) => {
-    const title = prompt("Enter page title:");
-    if (title) {
-      const newPage = await createPage(title, folderId);
+  const submitCreation = async (event: FormEvent) => {
+    event.preventDefault();
+    const name = draftName.trim();
+    if (!creation || !name) return;
+
+    if (creation.kind === "folder") {
+      await createFolder(name);
+    } else {
+      const newPage = await createPage(name, creation.folderId);
       if (newPage) {
         handleSelectPage(newPage);
       }
     }
+    setCreation(null);
+    setDraftName("");
   };
 
   if (!isOpen) return null;
@@ -82,7 +93,9 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
           <span className="text-sm font-bold tracking-tight">Notebooks</span>
         </div>
         <button
+          type="button"
           onClick={onClose}
+          aria-label="Close notebook sidebar"
           className="rounded-lg p-1 hover:bg-surface-hover transition-colors"
         >
           <X size={16} />
@@ -90,11 +103,45 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
+        {creation && (
+          <form
+            onSubmit={submitCreation}
+            className="mx-1 mb-3 rounded-xl border border-border-default bg-surface-raised p-2 shadow-elev-1"
+          >
+            <label className="text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+              {creation.kind === "folder" ? "New folder" : "New page"}
+            </label>
+            <div className="mt-1.5 flex gap-1.5">
+              <input
+                autoFocus
+                value={draftName}
+                onChange={(event) => setDraftName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setCreation(null);
+                }}
+                placeholder={
+                  creation.kind === "folder" ? "Folder name" : "Page title"
+                }
+                className="h-8 min-w-0 flex-1 rounded-lg border border-border-default bg-surface-base px-2 text-[11px] text-text-body outline-none placeholder:text-text-dim focus:border-accent"
+              />
+              <button
+                type="submit"
+                disabled={!draftName.trim()}
+                className="rounded-lg bg-accent px-2.5 text-[10px] font-semibold text-accent-text disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
+          </form>
+        )}
+
         <div className="mb-4">
           <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
             <span>Folders</span>
             <button
-              onClick={handleCreateFolder}
+              type="button"
+              onClick={() => beginCreation("folder")}
+              aria-label="Create folder"
               className="hover:text-accent transition-colors"
             >
               <FolderPlus size={14} />
@@ -106,29 +153,32 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
               .filter((f) => !f.parentId)
               .map((folder) => (
                 <div key={folder.id}>
-                  <button
-                    onClick={() => toggleFolder(folder.id)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-surface-hover"
-                  >
-                    {expandedFolders[folder.id] ? (
-                      <ChevronDown size={14} />
-                    ) : (
-                      <ChevronRight size={14} />
-                    )}
-                    <Folder size={14} className="text-accent" />
-                    <span className="flex-1 text-left truncate">
-                      {folder.name}
-                    </span>
+                  <div className="group flex w-full items-center rounded-lg transition-colors hover:bg-surface-hover">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCreatePage(folder.id);
-                      }}
-                      className="p-0.5 opacity-0 group-hover:opacity-100 hover:text-accent"
+                      type="button"
+                      onClick={() => toggleFolder(folder.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-xs"
+                      aria-expanded={Boolean(expandedFolders[folder.id])}
+                    >
+                      {expandedFolders[folder.id] ? (
+                        <ChevronDown size={14} />
+                      ) : (
+                        <ChevronRight size={14} />
+                      )}
+                      <Folder size={14} className="text-accent" />
+                      <span className="flex-1 text-left truncate">
+                        {folder.name}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => beginCreation("page", folder.id)}
+                      aria-label={`Create page in ${folder.name}`}
+                      className="mr-1 flex h-7 w-7 items-center justify-center rounded-md text-text-muted opacity-0 transition-opacity hover:bg-surface-raised hover:text-accent focus:opacity-100 group-hover:opacity-100"
                     >
                       <Plus size={12} />
                     </button>
-                  </button>
+                  </div>
 
                   {expandedFolders[folder.id] && (
                     <div className="ml-6 mt-0.5 border-l border-border-default pl-2 space-y-0.5">
@@ -151,7 +201,8 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
                           </button>
                         ))}
                       <button
-                        onClick={() => handleCreatePage(folder.id)}
+                        type="button"
+                        onClick={() => beginCreation("page", folder.id)}
                         className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[10px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-body"
                       >
                         <Plus size={12} />
@@ -168,7 +219,9 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
           <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
             <span>Standalone Pages</span>
             <button
-              onClick={() => handleCreatePage()}
+              type="button"
+              onClick={() => beginCreation("page")}
+              aria-label="Create standalone page"
               className="hover:text-accent transition-colors"
             >
               <PlusCircle size={14} />
@@ -221,13 +274,6 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
             </div>
           </div>
         )}
-      </div>
-
-      <div className="mt-auto border-t border-border-default p-4">
-        <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs font-medium transition-colors hover:bg-surface-hover">
-          <Trash2 size={16} className="text-text-secondary" />
-          <span>Trash</span>
-        </button>
       </div>
     </div>
   );

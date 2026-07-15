@@ -168,6 +168,7 @@ function isHexColor(value: string) {
 }
 
 interface StylePanelProps {
+  embedded?: boolean;
   tool: ActiveTool;
   selectedTool: Tool | null;
   onStrokeColor: (c: string) => void;
@@ -184,6 +185,7 @@ interface StylePanelProps {
 }
 
 export function StylePanel({
+  embedded = false,
   tool,
   selectedTool,
   onStrokeColor,
@@ -249,8 +251,26 @@ export function StylePanel({
     onFillColor(color);
   }
 
-  if (tool === "select" && !selectedTool) return null;
-  if (activeTool === "eraser" || activeTool === "image") return null;
+  const styleUnavailable =
+    (tool === "select" && !selectedTool) ||
+    activeTool === "eraser" ||
+    activeTool === "image";
+
+  if (styleUnavailable && !embedded) return null;
+  if (styleUnavailable) {
+    return (
+      <div className="flex min-h-48 flex-col items-center justify-center px-6 text-center">
+        <SlidersHorizontal size={20} className="text-text-dim" />
+        <p className="mt-3 text-[12px] font-semibold text-text-body">
+          Select an element to style it
+        </p>
+        <p className="mt-1 max-w-[24ch] text-[11px] leading-5 text-text-muted">
+          Shape, stroke, fill, and type controls appear here when they are
+          relevant.
+        </p>
+      </div>
+    );
+  }
 
   const showFill =
     activeTool !== "line" &&
@@ -271,35 +291,40 @@ export function StylePanel({
 
   return (
     <>
-      <button
-        type="button"
-        title="Style controls"
-        onClick={() => setIsOpen(true)}
-        className="absolute bottom-[4.25rem] right-4 z-20 flex h-11 w-11 items-center justify-center rounded-2xl border border-border-default bg-surface-raised/88 text-text-secondary shadow-elev-2 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-primary active:translate-y-0 sm:bottom-auto sm:top-[5.5rem]"
-      >
-        <SlidersHorizontal size={19} strokeWidth={1.7} />
-      </button>
+      {!embedded && (
+        <button
+          type="button"
+          title="Style controls"
+          onClick={() => setIsOpen(true)}
+          className="absolute bottom-[4.25rem] right-4 z-20 flex h-11 w-11 items-center justify-center rounded-2xl border border-border-default bg-surface-raised/88 text-text-secondary shadow-elev-2 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-primary active:translate-y-0 sm:bottom-auto sm:top-[5.5rem]"
+        >
+          <SlidersHorizontal size={19} strokeWidth={1.7} />
+        </button>
+      )}
 
       <div
         className={[
-          "absolute bottom-[4.25rem] left-3 right-3 z-30 max-h-[52vh] flex-col gap-3.5 overflow-y-auto overflow-x-hidden rounded-2xl border border-border-default bg-surface-raised/92 p-3.5 shadow-elev-4 backdrop-blur-xl scrollbar-hide",
-          isOpen ? "flex" : "hidden",
-          "sm:bottom-auto sm:left-auto sm:right-4 sm:top-[8.75rem] sm:max-h-[calc(100vh-11rem)] sm:w-56",
+          embedded
+            ? "flex min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden p-4 scrollbar-hide"
+            : "absolute bottom-[4.25rem] left-3 right-3 z-30 max-h-[52vh] flex-col gap-3.5 overflow-y-auto overflow-x-hidden rounded-2xl border border-border-default bg-surface-raised/92 p-3.5 shadow-elev-4 backdrop-blur-xl scrollbar-hide sm:bottom-auto sm:left-auto sm:right-4 sm:top-[8.75rem] sm:max-h-[calc(100vh-11rem)] sm:w-56",
+          embedded || isOpen ? "flex" : "hidden",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
-            Style
-          </span>
-          <button
-            type="button"
-            title="Close style controls"
-            onClick={() => setIsOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"
-          >
-            <X size={16} strokeWidth={1.8} />
-          </button>
-        </div>
+        {!embedded && (
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+              Style
+            </span>
+            <button
+              type="button"
+              title="Close style controls"
+              onClick={() => setIsOpen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"
+            >
+              <X size={16} strokeWidth={1.8} />
+            </button>
+          </div>
+        )}
 
         {hasTextOptions && (
           <>
