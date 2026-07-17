@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Settings2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 
 interface CanvasActionsProps {
   embedded?: boolean;
@@ -70,14 +70,6 @@ export function CanvasActions({
               : "Beautify"
             : "Set up AI"}
         </span>
-      </button>
-
-      <button
-        onClick={onSettingsClick}
-        title="Settings"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-text-secondary outline-none transition-all duration-150 hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-body active:translate-y-0 active:scale-[0.98] sm:h-9 sm:w-9"
-      >
-        <Settings2 size={15} strokeWidth={1.75} />
       </button>
     </div>
   );
