@@ -7,7 +7,6 @@ export {
 } from "./components/CanvasInspector";
 export { BackgroundPicker } from "./components/BackgroundPicker";
 export { StylePanel } from "./components/StylePanel";
-export { SettingsPanel } from "./components/SettingsPanel";
 export { KeyboardShortcutSettings } from "./components/KeyboardShortcutSettings";
 export { NotebookSidebar } from "./components/NotebookSidebar";
 

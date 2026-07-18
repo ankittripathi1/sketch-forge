@@ -8,6 +8,7 @@ import {
   KeyRound,
   Moon,
   Palette,
+  PenLine,
   Sun,
   UserRound,
 } from "lucide-react";
@@ -25,6 +26,7 @@ gsap.registerPlugin(useGSAP);
 
 const STORAGE_BACKEND = "sketch-forge:recognition-backend";
 const STORAGE_KEY = "sketch-forge:recognition-api-key";
+const STORAGE_SCRIBBLE = "sketch-forge:scribble-enabled";
 
 const themes: Array<{
   id: AppTheme;
@@ -53,6 +55,7 @@ export default function SettingsPage() {
   const [recognitionBackend, setRecognitionBackend] = useState<
     "tesseract" | "gemini"
   >("tesseract");
+  const [scribbleEnabled, setScribbleEnabled] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [showKey, setShowKey] = useState(false);
   const keyRef = useRef<HTMLInputElement>(null);
@@ -84,11 +87,17 @@ export default function SettingsPage() {
       setRecognitionBackend(savedBackend);
     }
     setKeyDraft(localStorage.getItem(STORAGE_KEY) ?? "");
+    setScribbleEnabled(localStorage.getItem(STORAGE_SCRIBBLE) === "true");
   }, []);
 
   function handleBackend(nextBackend: "tesseract" | "gemini") {
     setRecognitionBackend(nextBackend);
     localStorage.setItem(STORAGE_BACKEND, nextBackend);
+  }
+
+  function handleScribble(next: boolean) {
+    setScribbleEnabled(next);
+    localStorage.setItem(STORAGE_SCRIBBLE, String(next));
   }
 
   function handleKeySave() {
@@ -191,6 +200,38 @@ export default function SettingsPage() {
           </div>
 
           <div className="dashboard-settings-panel">
+            <div className="mb-5 flex items-center justify-between gap-4 border-b border-border-subtle pb-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-surface-hover text-text-secondary">
+                  <PenLine size={16} strokeWidth={1.8} />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-text-body">
+                    Scribble to text
+                  </p>
+                  <p className="mt-0.5 text-xs leading-5 text-text-secondary">
+                    Convert freehand pen strokes into typed text as you draw.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={scribbleEnabled}
+                aria-label="Toggle scribble to text"
+                onClick={() => handleScribble(!scribbleEnabled)}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 ${
+                  scribbleEnabled ? "bg-accent" : "bg-surface-hover"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-text-primary shadow transition-transform duration-150 ${
+                    scribbleEnabled ? "translate-x-5.5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               {(["tesseract", "gemini"] as const).map((backend) => {
                 const selected = recognitionBackend === backend;

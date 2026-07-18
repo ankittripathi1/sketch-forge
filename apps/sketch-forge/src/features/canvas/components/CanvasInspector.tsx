@@ -1,25 +1,22 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { Palette, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { Palette, SlidersHorizontal, X } from "lucide-react";
 import { BackgroundPicker } from "./BackgroundPicker";
-import { SettingsPanel } from "./SettingsPanel";
 import { StylePanel } from "./StylePanel";
 
-export type CanvasInspectorPanel = "style" | "canvas" | "ai";
+export type CanvasInspectorPanel = "style" | "canvas";
 
 interface CanvasInspectorProps {
   activePanel: CanvasInspectorPanel | null;
   onPanelChange: (panel: CanvasInspectorPanel | null) => void;
   style: Omit<ComponentProps<typeof StylePanel>, "embedded">;
   canvas: Omit<ComponentProps<typeof BackgroundPicker>, "embedded">;
-  ai: Omit<ComponentProps<typeof SettingsPanel>, "embedded">;
 }
 
 const tabs = [
   { id: "style", label: "Style", icon: SlidersHorizontal },
   { id: "canvas", label: "Canvas", icon: Palette },
-  { id: "ai", label: "AI", icon: Sparkles },
 ] as const;
 
 export function CanvasInspector({
@@ -27,7 +24,6 @@ export function CanvasInspector({
   onPanelChange,
   style,
   canvas,
-  ai,
 }: CanvasInspectorProps) {
   return (
     <>
@@ -84,7 +80,6 @@ export function CanvasInspector({
 
         {activePanel === "style" && <StylePanel {...style} embedded />}
         {activePanel === "canvas" && <BackgroundPicker {...canvas} embedded />}
-        {activePanel === "ai" && <SettingsPanel {...ai} embedded />}
       </aside>
     </>
   );

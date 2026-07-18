@@ -64,11 +64,7 @@ export function CanvasActions({
           <Sparkles size={15} strokeWidth={1.75} />
         )}
         <span className="hidden sm:inline">
-          {hasApiKey
-            ? isBeautifying
-              ? "Thinking..."
-              : "Beautify"
-            : "Set up AI"}
+          {isBeautifying ? "Thinking..." : "Beautify"}
         </span>
       </button>
     </div>

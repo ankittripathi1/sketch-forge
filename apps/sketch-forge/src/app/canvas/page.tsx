@@ -42,8 +42,8 @@ import { useAppTheme } from "@/theme/ThemeProvider";
  *      background is rendered via CSS on the container div, not on the canvas.
  *
  *   2. Bridging the `useSketchEngine` hook with the UI panels (Toolbar, StylePanel,
- *      BackgroundPicker, SettingsPanel).  The hook exposes a stable API; this
- *      component wires the right handlers to the right panels.
+ *      BackgroundPicker).  The hook exposes a stable API; this component wires
+ *      the right handlers to the right panels.
  *
  *   3. Registering global keyboard shortcuts (undo, redo, tool hotkeys, space
  *      to pan, delete, escape) via a single window-level listener.
@@ -68,6 +68,14 @@ function CanvasContent() {
     (typeParam === "page" ? searchParams.get("id") : null);
   const isPage = typeParam !== "canvas";
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3400);
+  }, []);
 
   const { resolvedTheme, setTheme } = useAppTheme();
   const {
@@ -149,10 +157,8 @@ function CanvasContent() {
     renderScene,
     renderSelection,
     onPan,
-    scribbleEnabled,
     setScribbleEnabled,
     scribblePending,
-    recognitionBackend,
     setRecognitionBackend,
     recognitionApiKey,
     setRecognitionApiKey,
@@ -244,6 +250,22 @@ function CanvasContent() {
     return () => window.removeEventListener("keydown", closeInspector);
   }, []);
 
+  // Seed recognition + scribble preferences from localStorage on mount. These
+  // are configured on the Settings page (Recognition section); the canvas reads
+  // them here so drawing-time handwriting recognition uses the saved values.
+  useEffect(() => {
+    const backend = localStorage.getItem("sketch-forge:recognition-backend");
+    if (backend === "gemini" || backend === "tesseract") {
+      setRecognitionBackend(backend);
+    }
+    setRecognitionApiKey(
+      localStorage.getItem("sketch-forge:recognition-api-key") ?? "",
+    );
+    setScribbleEnabled(
+      localStorage.getItem("sketch-forge:scribble-enabled") === "true",
+    );
+  }, [setRecognitionBackend, setRecognitionApiKey, setScribbleEnabled]);
+
   async function handleBack() {
     const dest = folderId ? `/dashboard/folder/${folderId}` : "/dashboard";
     if (isDirty) {
@@ -288,7 +310,7 @@ function CanvasContent() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Beautify failed";
       console.error("[beautify]", msg);
-      alert(msg);
+      showToast(msg);
     }
   }
 
@@ -452,16 +474,6 @@ function CanvasContent() {
           onDotColor: setDotColor,
           onThemeApplied: handleThemeApplied,
         }}
-        ai={{
-          isOpen: inspectorPanel === "ai",
-          onClose: () => setInspectorPanel(null),
-          scribbleEnabled,
-          onScribbleChange: setScribbleEnabled,
-          recognitionBackend,
-          onRecognitionBackend: setRecognitionBackend,
-          recognitionApiKey,
-          onRecognitionApiKey: setRecognitionApiKey,
-        }}
       />
 
       <NotebookSidebar
@@ -476,7 +488,11 @@ function CanvasContent() {
           isBeautifying={isBeautifying}
           hasElements={hasElements}
           hasApiKey={hasApiKey}
-          onSettingsClick={() => setInspectorPanel("ai")}
+          onSettingsClick={() =>
+            showToast(
+              "No Gemini API key set — add one in Settings to use AI beautify.",
+            )
+          }
         />
       </div>
 
@@ -541,7 +557,11 @@ function CanvasContent() {
             isBeautifying={isBeautifying}
             hasElements={hasElements}
             hasApiKey={hasApiKey}
-            onSettingsClick={() => setInspectorPanel("ai")}
+            onSettingsClick={() =>
+              showToast(
+                "No Gemini API key set — add one in Settings to use AI beautify.",
+              )
+            }
           />
         </div>
       </div>
@@ -563,6 +583,12 @@ function CanvasContent() {
           </span>
         </div>
       </div>
+
+      {toast && (
+        <div role="status" aria-live="polite" className="dashboard-toast">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
