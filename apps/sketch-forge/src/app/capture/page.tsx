@@ -7,6 +7,7 @@ import { CaptureToolbar, FolderPicker } from "@/features/capture";
 import { useRouter } from "next/navigation";
 import { SketchElement } from "@repo/element/types";
 import { Loader2 } from "lucide-react";
+import { PUBLIC_API_URL } from "@/api/config";
 
 export default function QuickCapturePage() {
   const router = useRouter();
@@ -88,7 +89,7 @@ export default function QuickCapturePage() {
     try {
       const thumbnail = await generateThumbnail(elements.current);
 
-      const response = await fetch("http://localhost:4001/pages", {
+      const response = await fetch(`${PUBLIC_API_URL}/pages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

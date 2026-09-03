@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE_NAME } from "@/api/config";
 
 const PROTECTED_ROUTES = ["/dashboard", "/canvas", "/capture"];
 
@@ -10,7 +11,7 @@ export function middleware(request: NextRequest) {
 
   if (!isProtected) return NextResponse.next();
 
-  const hasSession = Boolean(request.cookies.get("session")?.value);
+  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE_NAME)?.value);
   if (hasSession) return NextResponse.next();
 
   const loginUrl = new URL("/login", request.url);
