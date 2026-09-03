@@ -2,23 +2,28 @@
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
   "globalEnv": [
-    "RESEND_API_KEY",
-    "HASH_SALT",
-    "FRONTEND_URL",
+    "DATABASE_URL",
+    "TEST_DATABASE_URL",
     "JWT_SECRET",
+    "JWT_SECRET_PREVIOUS",
+    "PUBLIC_ORIGIN",
+    "API_PUBLIC_URL",
+    "TRUST_PROXY",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "HASH_SALT",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
     "API_INTERNAL_URL",
-    "API_URL",
-    "CORS_ORIGINS",
     "NEXT_PUBLIC_API_URL",
-    "NODE_ENV"
+    "NODE_ENV",
+    "PORT"
   ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
