@@ -9,6 +9,8 @@ export { BackgroundPicker } from "./components/BackgroundPicker";
 export { StylePanel } from "./components/StylePanel";
 export { KeyboardShortcutSettings } from "./components/KeyboardShortcutSettings";
 export { NotebookSidebar } from "./components/NotebookSidebar";
+export { NotesDrawer, useNotesDrawerWidth } from "./components/NotesDrawer";
+export { DocView } from "./components/DocView";
 
 export { useCanvasSync } from "./hooks/useCanvasSync";
 export { useCanvasPreferences } from "./hooks/useCanvasPreferences";

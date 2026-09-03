@@ -101,7 +101,7 @@ export function Toolbar({
   const { isMac } = useShortcutPlatform();
 
   return (
-    <div className="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100vw-16px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border border-border-default bg-surface-raised/88 p-1.5 shadow-elev-3 backdrop-blur-xl sm:max-w-[min(52rem,calc(100vw-16rem))]">
+    <div className="pointer-events-auto absolute bottom-4 left-[calc((100%-var(--notes-w,0px))/2)] z-20 flex max-w-[calc(100vw-var(--notes-w,0px)-16px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border border-border-default bg-surface-raised/88 p-1.5 shadow-elev-3 backdrop-blur-xl sm:max-w-[min(52rem,calc(100vw-var(--notes-w,0px)-16rem))]">
       {TOOL_GROUPS.map((group, groupIdx) => (
         <div key={groupIdx} className="flex items-center gap-1">
           {group.items.map((t) => (

@@ -3,10 +3,14 @@ import { SketchElementSchema } from "./canvas.js";
 
 export const PageStatusSchema = z.enum(["new", "learning", "mastered"]);
 
+export const PageViewModeSchema = z.enum(["doc", "canvas"]);
+
 export const CreatePageSchema = z.object({
   folderId: z.string().uuid().optional().nullable(),
   title: z.string().min(1).max(255).optional(),
   elements: z.array(SketchElementSchema).optional().nullable(),
+  note: z.string().max(200_000).optional().nullable(),
+  viewMode: PageViewModeSchema.optional(),
   thumbnail: z.string().optional().nullable(),
   thumbnailLight: z.string().optional().nullable(),
   thumbnailDark: z.string().optional().nullable(),
@@ -23,3 +27,4 @@ export const UpdatePageSchema = CreatePageSchema.partial().extend({
 export type CreatePage = z.infer<typeof CreatePageSchema>;
 export type UpdatePage = z.infer<typeof UpdatePageSchema>;
 export type PageStatus = z.infer<typeof PageStatusSchema>;
+export type PageViewMode = z.infer<typeof PageViewModeSchema>;

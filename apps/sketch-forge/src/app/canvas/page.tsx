@@ -8,6 +8,9 @@ import {
   CanvasInspector,
   type CanvasInspectorPanel,
   NotebookSidebar,
+  NotesDrawer,
+  DocView,
+  useNotesDrawerWidth,
   useCanvasSync,
   useCanvasPreferences,
   useCanvasEditorRuntime,
@@ -26,8 +29,11 @@ import {
   Book,
   CheckCircle2,
   ChevronLeft,
+  FileText,
   Loader2,
   PanelLeftOpen,
+  PenLine,
+  Frame,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppTheme } from "@/theme/ThemeProvider";
@@ -68,6 +74,12 @@ function CanvasContent() {
     (typeParam === "page" ? searchParams.get("id") : null);
   const isPage = typeParam !== "canvas";
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Search deep-links land with ?notes=1 when the match came from the note.
+  const [isNotesOpen, setIsNotesOpen] = useState(
+    isPage && searchParams.get("notes") === "1",
+  );
+  const { width: notesWidth, persistWidth: setNotesWidth } =
+    useNotesDrawerWidth();
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -147,6 +159,7 @@ function CanvasContent() {
     clearPointerPosition,
     getViewportBounds,
     pasteClipboardElements,
+    pasteClipboardImage,
     deleteSelected,
     duplicateSelected,
     deselect,
@@ -173,6 +186,10 @@ function CanvasContent() {
     folderId,
     title,
     setTitle,
+    note,
+    setNote,
+    viewMode,
+    setViewMode,
     triggerSave,
     isSaving,
     isDirty,
@@ -292,6 +309,13 @@ function CanvasContent() {
    */
   const hasApiKey = recognitionApiKey.trim().length > 0;
 
+  /**
+   * Doc view mode (PRD §7): the note becomes the primary full-width surface and
+   * the canvas hides behind the top-bar mode toggle. Only pages have modes;
+   * standalone canvases are always canvas-mode.
+   */
+  const isDocMode = isPage && viewMode === "doc";
+
   // ─── Event handlers ────────────────────────────────────────────────────────
 
   /**
@@ -372,6 +396,7 @@ function CanvasContent() {
       getPointerPosition,
       getViewportBounds,
       pasteElements: pasteClipboardElements,
+      pasteImage: pasteClipboardImage,
       deleteSelected,
       duplicateSelected,
       deselect,
@@ -389,26 +414,35 @@ function CanvasContent() {
   return (
     <div
       className="canvas-shell relative h-[100dvh] w-screen overflow-hidden"
-      style={getBackgroundStyle(
-        background,
-        zoomLevel / 100,
-        panOffsetDisplay,
-        backgroundColor,
-        gridColor,
-        dotColor,
-      )}
+      style={{
+        ...getBackgroundStyle(
+          background,
+          zoomLevel / 100,
+          panOffsetDisplay,
+          backgroundColor,
+          gridColor,
+          dotColor,
+        ),
+        // Right-anchored floating controls read this to shift out from
+        // under the notes drawer (PRD §6: nothing gets covered).
+        ["--notes-w" as string]: isNotesOpen
+          ? `min(${notesWidth}px, 88vw)`
+          : "0px",
+      }}
     >
-      <Toolbar
-        tool={tool}
-        onToolChange={(nextTool) =>
-          editorCommands.execute(commandSetTool, { tool: nextTool })
-        }
-        onUndo={() => editorCommands.execute(commandUndo, undefined)}
-        onRedo={() => editorCommands.execute(commandRedo, undefined)}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        shortcuts={shortcutSettings.registry}
-      />
+      {!isDocMode && (
+        <Toolbar
+          tool={tool}
+          onToolChange={(nextTool) =>
+            editorCommands.execute(commandSetTool, { tool: nextTool })
+          }
+          onUndo={() => editorCommands.execute(commandUndo, undefined)}
+          onRedo={() => editorCommands.execute(commandRedo, undefined)}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          shortcuts={shortcutSettings.registry}
+        />
+      )}
 
       <SketchCanvas
         sceneCanvasRef={sceneCanvasRef}
@@ -428,7 +462,7 @@ function CanvasContent() {
         renderScene={renderScene}
         renderSelection={renderSelection}
       />
-      {!hasElements && (
+      {!hasElements && !isDocMode && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-6">
           <div className="canvas-empty-state max-w-sm text-center">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
@@ -445,6 +479,7 @@ function CanvasContent() {
         </div>
       )}
 
+      {!isDocMode && (
       <CanvasInspector
         activePanel={inspectorPanel}
         onPanelChange={setInspectorPanel}
@@ -475,28 +510,56 @@ function CanvasContent() {
           onThemeApplied: handleThemeApplied,
         }}
       />
+      )}
 
       <NotebookSidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="pointer-events-auto absolute left-3 top-3 z-20 rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl sm:hidden">
-        <CanvasActions
-          embedded
-          onBeautify={handleBeautify}
-          isBeautifying={isBeautifying}
-          hasElements={hasElements}
-          hasApiKey={hasApiKey}
-          onSettingsClick={() =>
-            showToast(
-              "No Gemini API key set — add one in Settings to use AI beautify.",
-            )
-          }
+      {isPage && !isDocMode && (
+        <NotesDrawer
+          isOpen={isNotesOpen}
+          width={notesWidth}
+          onWidthChange={setNotesWidth}
+          onClose={() => setIsNotesOpen(false)}
+          note={note}
+          onNoteChange={setNote}
+          isSaving={isSaving}
+          hasSaved={lastSavedAt !== null}
         />
-      </div>
+      )}
 
-      <div className="pointer-events-none absolute left-3 right-3 top-3 z-20 hidden items-start justify-between gap-4 sm:flex sm:left-4 sm:right-4 sm:top-4">
+      {isDocMode && (
+        <DocView
+          title={title}
+          onTitleChange={setTitle}
+          onTitleCommit={() => triggerSave()}
+          note={note}
+          onNoteChange={setNote}
+          isSaving={isSaving}
+          hasSaved={lastSavedAt !== null}
+        />
+      )}
+
+      {!isDocMode && (
+        <div className="pointer-events-auto absolute left-3 top-3 z-20 rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl sm:hidden">
+          <CanvasActions
+            embedded
+            onBeautify={handleBeautify}
+            isBeautifying={isBeautifying}
+            hasElements={hasElements}
+            hasApiKey={hasApiKey}
+            onSettingsClick={() =>
+              showToast(
+                "No Gemini API key set — add one in Settings to use AI beautify.",
+              )
+            }
+          />
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute left-3 right-[calc(0.75rem+var(--notes-w,0px))] top-3 z-20 hidden items-start justify-between gap-4 sm:flex sm:left-4 sm:right-[calc(1rem+var(--notes-w,0px))] sm:top-4">
         <div className="pointer-events-auto flex max-w-[min(34rem,52vw)] select-none items-center gap-1.5 overflow-hidden rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
           {isPage && (
             <button
@@ -511,7 +574,11 @@ function CanvasContent() {
             </button>
           )}
           <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            onClick={() => {
+              // The two drawers are mutually exclusive (PRD §6).
+              if (!isSidebarOpen) setIsNotesOpen(false);
+              setIsSidebarOpen(!isSidebarOpen);
+            }}
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:-translate-y-0.5 active:translate-y-0 ${
               isSidebarOpen
                 ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
@@ -550,23 +617,79 @@ function CanvasContent() {
             )}
           </span>
         </div>
-        <div className="pointer-events-auto rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
-          <CanvasActions
-            embedded
-            onBeautify={handleBeautify}
-            isBeautifying={isBeautifying}
-            hasElements={hasElements}
-            hasApiKey={hasApiKey}
-            onSettingsClick={() =>
-              showToast(
-                "No Gemini API key set — add one in Settings to use AI beautify.",
-              )
-            }
-          />
+        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
+          {isPage && (
+            <div
+              className="flex items-center rounded-lg bg-surface-sunken p-0.5"
+              role="group"
+              aria-label="View mode"
+            >
+              <button
+                onClick={() => setViewMode("doc")}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold transition-all ${
+                  isDocMode
+                    ? "bg-surface-raised text-accent shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+                title="Document view"
+                aria-pressed={isDocMode}
+              >
+                <FileText size={13} />
+                <span className="hidden 2xl:inline">Doc</span>
+              </button>
+              <button
+                onClick={() => setViewMode("canvas")}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold transition-all ${
+                  !isDocMode
+                    ? "bg-surface-raised text-accent shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+                title="Canvas view"
+                aria-pressed={!isDocMode}
+              >
+                <Frame size={13} />
+                <span className="hidden 2xl:inline">Canvas</span>
+              </button>
+            </div>
+          )}
+          {!isDocMode && (
+            <>
+              <CanvasActions
+                embedded
+                onBeautify={handleBeautify}
+                isBeautifying={isBeautifying}
+                hasElements={hasElements}
+                hasApiKey={hasApiKey}
+                onSettingsClick={() =>
+                  showToast(
+                    "No Gemini API key set — add one in Settings to use AI beautify.",
+                  )
+                }
+              />
+              {isPage && (
+                <button
+                  onClick={() => {
+                    if (!isNotesOpen) setIsSidebarOpen(false);
+                    setIsNotesOpen(!isNotesOpen);
+                  }}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:-translate-y-0.5 active:translate-y-0 ${
+                    isNotesOpen
+                      ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
+                      : "text-text-secondary hover:bg-surface-hover hover:text-accent"
+                  }`}
+                  title="Toggle page notes"
+                  aria-label="Toggle page notes"
+                >
+                  <PenLine size={16} strokeWidth={2} />
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      <div className="absolute right-4 top-[76px] z-10 flex items-center gap-2 sm:bottom-4 sm:top-auto">
+      {!isDocMode && (
+      <div className="absolute right-[calc(1rem+var(--notes-w,0px))] top-[76px] z-10 flex items-center gap-2 sm:bottom-4 sm:top-auto">
         {/* Scribble "recognizing" badge */}
         {scribblePending && (
           <div className="flex items-center gap-1.5 rounded-xl border border-border-default bg-surface-raised/88 px-2.5 py-1.5 shadow-elev-2 backdrop-blur-xl">
@@ -583,6 +706,7 @@ function CanvasContent() {
           </span>
         </div>
       </div>
+      )}
 
       {toast && (
         <div role="status" aria-live="polite" className="dashboard-toast">

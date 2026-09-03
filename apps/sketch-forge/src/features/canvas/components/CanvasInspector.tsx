@@ -27,7 +27,7 @@ export function CanvasInspector({
 }: CanvasInspectorProps) {
   return (
     <>
-      <div className="pointer-events-auto absolute right-3 top-[4.5rem] z-20 flex flex-col gap-1 rounded-2xl border border-border-default bg-surface-raised/90 p-1.5 shadow-elev-3 backdrop-blur-xl sm:right-4 sm:top-[5rem]">
+      <div className="pointer-events-auto absolute right-[calc(0.75rem+var(--notes-w,0px))] top-[4.5rem] z-20 flex flex-col gap-1 rounded-2xl border border-border-default bg-surface-raised/90 p-1.5 shadow-elev-3 backdrop-blur-xl sm:right-[calc(1rem+var(--notes-w,0px))] sm:top-[5rem]">
         {tabs.map(({ id, label, icon: Icon }) => {
           const isActive = activePanel === id;
           return (
@@ -53,7 +53,7 @@ export function CanvasInspector({
       <aside
         aria-label="Canvas inspector"
         aria-hidden={!activePanel}
-        className={`pointer-events-auto absolute bottom-[4.75rem] left-3 right-3 z-30 flex max-h-[64dvh] flex-col overflow-hidden rounded-2xl border border-border-default bg-surface-raised/94 shadow-elev-4 backdrop-blur-2xl transition-[opacity,transform] duration-300 ease-out sm:bottom-auto sm:left-auto sm:right-[4.75rem] sm:top-[5rem] sm:max-h-[calc(100dvh-6rem)] sm:w-[18rem] ${
+        className={`pointer-events-auto absolute bottom-[4.75rem] left-3 right-3 z-30 flex max-h-[64dvh] flex-col overflow-hidden rounded-2xl border border-border-default bg-surface-raised/94 shadow-elev-4 backdrop-blur-2xl transition-[opacity,transform] duration-300 ease-out sm:bottom-auto sm:left-auto sm:right-[calc(4.75rem+var(--notes-w,0px))] sm:top-[5rem] sm:max-h-[calc(100dvh-6rem)] sm:w-[18rem] ${
           activePanel
             ? "translate-y-0 opacity-100 sm:translate-x-0"
             : "pointer-events-none translate-y-3 opacity-0 sm:translate-x-3 sm:translate-y-0"

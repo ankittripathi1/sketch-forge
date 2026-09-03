@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { SketchElement } from "@repo/element/types";
+import type { PageViewMode } from "@repo/schema";
 import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createEntity, fetchEntity, updateEntity } from "@/api/canvas";
@@ -46,13 +47,21 @@ export function useCanvasSync({
   const canvasIdFromUrl = typeParam === "canvas" ? routeId : pageIdFromUrl;
   const entityType = typeParam === "canvas" ? "canvases" : "pages";
   const requestedFolderId = searchParams.get("folderId");
+  // "New note" / "New canvas" creation flows pass ?mode=doc|canvas so a freshly
+  // created page opens in the view its entry point implied.
+  const requestedMode =
+    searchParams.get("mode") === "doc" ? "doc" : "canvas";
 
   const [title, setTitle] = useState("Untitled");
+  const [note, setNoteState] = useState("");
+  const [viewMode, setViewModeState] = useState<PageViewMode>(requestedMode);
   const [folderId, setFolderId] = useState<string | null>(requestedFolderId);
   const [isDirty, setIsDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [loadVersion, setLoadVersion] = useState(0);
   const currentTitleRef = useRef(title);
+  const currentNoteRef = useRef(note);
+  const currentViewModeRef = useRef(viewMode);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -74,6 +83,7 @@ export function useCanvasSync({
   }, [setElements]);
 
   const appliedIdRef = useRef<string | null>(null);
+  const migratedNoteRef = useRef(false);
   useEffect(() => {
     if (!loadQuery.data) return;
     if (appliedIdRef.current === loadQuery.data.id) return;
@@ -85,6 +95,22 @@ export function useCanvasSync({
     setLoadVersion((version) => version + 1);
     if (entityType === "pages") {
       setFolderId(loadQuery.data.folderId ?? null);
+      const loadedMode: PageViewMode =
+        loadQuery.data.viewMode === "doc" ? "doc" : "canvas";
+      setViewModeState(loadedMode);
+      currentViewModeRef.current = loadedMode;
+      // The MVP kept notes in localStorage; migrate any leftover local note
+      // into the page record on first load, then clear the local key.
+      let nextNote = loadQuery.data.note ?? "";
+      const legacyKey = `sketch-forge:notes:${loadQuery.data.id}`;
+      const legacyNote = localStorage.getItem(legacyKey);
+      if (legacyNote && !nextNote) {
+        nextNote = legacyNote;
+        localStorage.removeItem(legacyKey);
+        migratedNoteRef.current = true;
+      }
+      setNoteState(nextNote);
+      currentNoteRef.current = nextNote;
     }
   }, [loadQuery.data, entityType]);
 
@@ -93,6 +119,7 @@ export function useCanvasSync({
       createEntity(entityType, {
         title: "Untitled",
         elements: [],
+        ...(entityType === "pages" ? { viewMode: requestedMode } : {}),
         ...(entityType === "pages" && requestedFolderId
           ? { folderId: requestedFolderId }
           : {}),
@@ -138,6 +165,12 @@ export function useCanvasSync({
       return updateEntity(entityType, canvasId, {
         elements: vars.elements,
         title: vars.title,
+        ...(entityType === "pages"
+          ? {
+              note: currentNoteRef.current,
+              viewMode: currentViewModeRef.current,
+            }
+          : {}),
         ...(vars.thumbnail ? { thumbnail: vars.thumbnail } : {}),
         ...(vars.thumbnailLight ? { thumbnailLight: vars.thumbnailLight } : {}),
         ...(vars.thumbnailDark ? { thumbnailDark: vars.thumbnailDark } : {}),
@@ -264,6 +297,32 @@ export function useCanvasSync({
     [triggerSave],
   );
 
+  const updateNote = useCallback(
+    (nextNote: string) => {
+      setNoteState(nextNote);
+      currentNoteRef.current = nextNote;
+      triggerSave();
+    },
+    [triggerSave],
+  );
+
+  const updateViewMode = useCallback(
+    (nextMode: PageViewMode) => {
+      setViewModeState(nextMode);
+      currentViewModeRef.current = nextMode;
+      triggerSave();
+    },
+    [triggerSave],
+  );
+
+  // Persist a note migrated from localStorage once the page id is known.
+  useEffect(() => {
+    if (migratedNoteRef.current && canvasId) {
+      migratedNoteRef.current = false;
+      triggerSave();
+    }
+  }, [canvasId, loadVersion, triggerSave]);
+
   const saveNow = useCallback(
     async (newTitle?: string) => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -296,6 +355,10 @@ export function useCanvasSync({
     lastSavedAt,
     loadVersion,
     title,
+    note,
+    viewMode,
+    setNote: updateNote,
+    setViewMode: updateViewMode,
     setTitle: updateTitle,
     triggerSave,
     markDirty: triggerSave,

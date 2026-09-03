@@ -163,3 +163,190 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+/* Page notes editor: a borderless document surface, not a form field. */
+.notes-editor-content {
+  font-size: 15px;
+  line-height: 1.7;
+  padding: 1rem 1.5rem 4rem;
+  color: var(--color-text-body);
+  caret-color: var(--color-accent);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.notes-editor-content ::selection {
+  background: rgba(224, 49, 94, 0.18);
+}
+
+/*
+ * Doc view mode: wide reading column. Drops the editor's own horizontal
+ * padding so the body shares the title's left edge, and uses a larger,
+ * more comfortable measure for long-form writing.
+ */
+.notes-editor-doc {
+  padding: 0.25rem 0 6rem;
+  font-size: 1.0625rem; /* 17px */
+  line-height: 1.78;
+}
+.notes-editor-doc h1 {
+  font-size: 1.85em;
+}
+.notes-editor-doc h2 {
+  font-size: 1.4em;
+}
+.notes-editor-doc h3 {
+  font-size: 1.18em;
+}
+.notes-editor-doc p {
+  margin: 0.72em 0;
+}
+
+/*
+ * CodeMirror source editor host (doc view). Let the editor grow with its
+ * content so the reading column scrolls as one document — no inner scrollbar.
+ */
+.markdown-source-editor .cm-editor {
+  background: transparent;
+}
+.markdown-source-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.markdown-source-editor .cm-scroller {
+  overflow: visible;
+}
+.markdown-source-editor .cm-content {
+  word-break: break-word;
+}
+
+/* Reading-column document title — visually part of the same document. */
+.doc-title {
+  font-size: clamp(1.9rem, 3.4vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  color: var(--color-text-heading);
+}
+
+/* The PRD forbids a boxed focus ring on the writing surface. */
+.notes-editor-content:focus-visible {
+  outline: none;
+}
+.notes-editor-content :is(h1, h2, h3) {
+  color: var(--color-text-heading);
+  font-weight: 600;
+  margin: 1.25em 0 0.4em;
+}
+.notes-editor-content h1 { font-size: 1.5em; }
+.notes-editor-content h2 { font-size: 1.25em; }
+.notes-editor-content h3 { font-size: 1.1em; }
+.notes-editor-content p { margin: 0.5em 0; }
+.notes-editor-content :is(ul, ol) {
+  padding-left: 1.4em;
+  margin: 0.5em 0;
+}
+.notes-editor-content ul { list-style: disc; }
+.notes-editor-content ol { list-style: decimal; }
+.notes-editor-content blockquote {
+  border-left: 3px solid var(--color-border-accent);
+  padding-left: 0.9em;
+  margin: 0.75em 0;
+  color: var(--color-text-secondary);
+}
+.notes-editor-content code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-surface-sunken);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.notes-editor-content pre {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 0.75em 0;
+  overflow-x: auto;
+}
+.notes-editor-content pre code {
+  background: none;
+  padding: 0;
+}
+.notes-editor-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.notes-editor-content ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.notes-editor-content ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+}
+.notes-editor-content ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+/* Callout / admonition blocks (`:::note … :::`). */
+.notes-editor-content div[data-callout] {
+  border-left: 3px solid #8b8b8b;
+  background: rgba(139, 139, 139, 0.08);
+  border-radius: 8px;
+  padding: 0.6em 0.9em;
+  margin: 0.85em 0;
+}
+.notes-editor-content div[data-callout] > :first-child {
+  margin-top: 0;
+}
+.notes-editor-content div[data-callout] > :last-child {
+  margin-bottom: 0;
+}
+.notes-editor-content div[data-callout]::before {
+  content: attr(data-variant);
+  display: block;
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b8b8b;
+  margin-bottom: 0.3em;
+}
+.notes-editor-content div[data-callout][data-variant="tip"] {
+  border-left-color: #22c55e;
+  background: rgba(34, 197, 94, 0.09);
+}
+.notes-editor-content div[data-callout][data-variant="tip"]::before {
+  color: #22c55e;
+}
+.notes-editor-content div[data-callout][data-variant="info"] {
+  border-left-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.09);
+}
+.notes-editor-content div[data-callout][data-variant="info"]::before {
+  color: #3b82f6;
+}
+.notes-editor-content div[data-callout][data-variant="warning"] {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+.notes-editor-content div[data-callout][data-variant="warning"]::before {
+  color: #f59e0b;
+}
+.notes-editor-content div[data-callout][data-variant="danger"] {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.09);
+}
+.notes-editor-content div[data-callout][data-variant="danger"]::before {
+  color: #ef4444;
+}
+
+/* Empty-state prompt (set via the placeholder option or data attribute). */
+.notes-editor-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-dim);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}

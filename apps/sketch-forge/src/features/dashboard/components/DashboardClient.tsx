@@ -8,6 +8,7 @@ import {
   FileText,
   Folder as FolderIcon,
   FolderPlus,
+  Frame,
   LayoutGrid,
   List,
   Plus,
@@ -222,11 +223,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               New folder
             </button>
             <button
-              onClick={() => router.push("/canvas")}
+              onClick={() => router.push("/canvas?mode=doc")}
+              className="dashboard-action dashboard-action-secondary"
+            >
+              <FileText size={16} strokeWidth={1.7} />
+              New note
+            </button>
+            <button
+              onClick={() => router.push("/canvas?mode=canvas")}
               className="dashboard-action dashboard-action-primary"
             >
-              <Plus size={17} strokeWidth={2} />
-              New page
+              <Frame size={16} strokeWidth={2} />
+              New canvas
             </button>
           </div>
         </div>
@@ -331,7 +339,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             ))}
           </div>
         ) : (
-          <EmptyNotesState onCreate={() => router.push("/canvas")} />
+          <EmptyNotesState onCreate={() => router.push("/canvas?mode=doc")} />
         )}
       </section>
 

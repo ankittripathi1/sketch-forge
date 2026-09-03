@@ -42,6 +42,8 @@ export interface SearchResult {
   thumbnailDark: string | null;
   folderId: string | null;
   snippet: string;
+  /** True when the match came from the page note (opens the notes drawer). */
+  noteMatch: boolean;
 }
 
 export interface DashboardData {
