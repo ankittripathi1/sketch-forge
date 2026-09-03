@@ -8,6 +8,7 @@ import {
   SketchElement,
   extractSearchableText,
 } from "@repo/schema";
+import { ownsFolder } from "../lib/ownership.js";
 
 const pagesRouter = new Hono<{ Variables: AuthVariables }>();
 
@@ -23,6 +24,8 @@ pagesRouter.get("/search", async (c) => {
     return c.json([]);
   }
 
+  const tsQuery = query.trim().split(/\s+/).join(" & ");
+
   // Alternative with snippets using select syntax
   const rawResults = await db
     .select({
@@ -32,7 +35,10 @@ pagesRouter.get("/search", async (c) => {
       thumbnailLight: pages.thumbnailLight,
       thumbnailDark: pages.thumbnailDark,
       folderId: pages.folderId,
-      snippet: sql<string>`ts_headline('english', ${pages.searchableText}, to_tsquery('english', ${query.trim().split(/\s+/).join(" & ")}), 'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15')`,
+      snippet: sql<string>`ts_headline('english', ${pages.searchableText}, to_tsquery('english', ${tsQuery}), 'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15')`,
+      // True when the page note itself matches — the client deep-links into
+      // the notes drawer for these results.
+      noteMatch: sql<boolean>`to_tsvector('english', coalesce(${pages.note}, '')) @@ to_tsquery('english', ${tsQuery})`,
     })
     .from(pages)
     .where(
@@ -41,7 +47,7 @@ pagesRouter.get("/search", async (c) => {
         folderId ? eq(pages.folderId, folderId) : undefined,
         or(
           like(pages.title, `%${query}%`),
-          sql`to_tsvector('english', ${pages.searchableText}) @@ to_tsquery('english', ${query.trim().split(/\s+/).join(" & ")})`,
+          sql`to_tsvector('english', ${pages.searchableText}) @@ to_tsquery('english', ${tsQuery})`,
         ),
       ),
     )
@@ -201,19 +207,38 @@ pagesRouter.post("/", async (c) => {
 
   const elements = parsed.data.elements || [];
 
-  const searchableText = extractSearchableText(elements);
+  const searchableText = extractSearchableText(elements, parsed.data.note);
+  const destinationFolderId = parsed.data.folderId;
 
-  const [newPage] = await db
-    .insert(pages)
-    .values({
-      ...parsed.data,
-      userId,
-      elements: elements,
-      searchableText,
-    })
-    .returning();
+  // The folder ownership check and the insert share one transaction so a folder
+  // cannot change hands between the two.
+  const result = await db.transaction(async (tx) => {
+    if (
+      destinationFolderId &&
+      !(await ownsFolder(tx, destinationFolderId, userId))
+    ) {
+      return { ok: false } as const;
+    }
 
-  return c.json(newPage, 201);
+    const [newPage] = await tx
+      .insert(pages)
+      .values({
+        ...parsed.data,
+        userId,
+        elements: elements,
+        searchableText,
+      })
+      .returning();
+
+    return { ok: true, page: newPage } as const;
+  });
+
+  if (!result.ok) {
+    // Deliberately the same response as a folder that does not exist.
+    return c.json({ error: "Folder not found" }, 404);
+  }
+
+  return c.json(result.page, 201);
 });
 
 // PATCH /pages/:id - update page
@@ -230,27 +255,62 @@ pagesRouter.patch("/:id", async (c) => {
     );
   }
 
-  const [updatedPage] = await db
-    .update(pages)
-    .set({
-      ...parsed.data,
-      updatedAt: new Date(),
-      ...(parsed.data.elements
-        ? {
-            searchableText: extractSearchableText(
-              parsed.data.elements as SketchElement[],
-            ),
-          }
-        : {}),
-    })
-    .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
-    .returning();
+  const destinationFolderId = parsed.data.folderId;
 
-  if (!updatedPage) {
-    return c.json({ error: "Page not found or unauthorized" }, 404);
+  // Page ownership, destination-folder ownership, and the update all run in one
+  // transaction so neither resource can change hands mid-request.
+  const result = await db.transaction(async (tx) => {
+    const existing = await tx.query.pages.findFirst({
+      where: and(eq(pages.id, pageId), eq(pages.userId, userId)),
+      columns: { elements: true, note: true },
+    });
+    if (!existing) {
+      return { ok: false, reason: "page" } as const;
+    }
+
+    // A null folderId moves the page back to the root and needs no check.
+    if (
+      destinationFolderId &&
+      !(await ownsFolder(tx, destinationFolderId, userId))
+    ) {
+      return { ok: false, reason: "folder" } as const;
+    }
+
+    // Elements and note both feed the search index; when only one of them is
+    // in the patch, the other half comes from the stored row.
+    let searchableText: string | undefined;
+    if (parsed.data.elements !== undefined || parsed.data.note !== undefined) {
+      searchableText = extractSearchableText(
+        (parsed.data.elements ?? existing.elements ?? []) as SketchElement[],
+        parsed.data.note !== undefined ? parsed.data.note : existing.note,
+      );
+    }
+
+    const [updatedPage] = await tx
+      .update(pages)
+      .set({
+        ...parsed.data,
+        updatedAt: new Date(),
+        ...(searchableText !== undefined ? { searchableText } : {}),
+      })
+      .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+      .returning();
+
+    if (!updatedPage) {
+      return { ok: false, reason: "page" } as const;
+    }
+
+    return { ok: true, page: updatedPage } as const;
+  });
+
+  if (!result.ok) {
+    return result.reason === "folder"
+      ? // Deliberately the same response as a folder that does not exist.
+        c.json({ error: "Folder not found" }, 404)
+      : c.json({ error: "Page not found or unauthorized" }, 404);
   }
 
-  return c.json(updatedPage);
+  return c.json(result.page);
 });
 
 // DELETE /pages/:id - delete page

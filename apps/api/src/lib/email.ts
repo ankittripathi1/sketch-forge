@@ -1,28 +1,58 @@
 import { Resend } from "resend";
 import { createHash, randomBytes } from "crypto";
 import { db, magicLinkTokens } from "@repo/db";
+import { lt } from "drizzle-orm";
+import { apiPublicUrl, env } from "./env.js";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
-export async function sendMagicLink(userId: string, email: string) {
+const TOKEN_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * A magic link is a bearer credential: anyone holding it can sign in as its
+ * owner. Printing it is only ever acceptable on a developer machine that has no
+ * mail provider configured.
+ */
+export function shouldPrintMagicLink(
+  nodeEnv: string,
+  hasMailProvider: boolean,
+): boolean {
+  return nodeEnv === "development" && !hasMailProvider;
+}
+
+/** Drops magic-link tokens that can no longer be redeemed. */
+export async function deleteExpiredMagicLinkTokens(): Promise<void> {
+  await db
+    .delete(magicLinkTokens)
+    .where(lt(magicLinkTokens.expiresAt, new Date()));
+}
+
+export async function sendMagicLink(
+  userId: string,
+  email: string,
+): Promise<void> {
   const rawToken = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
   await db.insert(magicLinkTokens).values({
     userId,
     tokenHash,
-    expiresAt,
+    expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
   });
 
-  const link = `${process.env.API_URL}/auth/verify?token=${rawToken}`;
+  const link = `${apiPublicUrl}/auth/verify?token=${rawToken}`;
 
-  console.log("[magic-link] sending to:", email);
-  console.log("[magic-link] link:", link);
+  if (shouldPrintMagicLink(env.NODE_ENV, resend !== null)) {
+    console.log(`[dev] magic link: ${link}`);
+    return;
+  }
 
-  const result = await resend.emails.send({
-    from: "SketchForge <onboarding@resend.dev>",
+  if (!resend) {
+    throw new Error("Cannot send a magic link: RESEND_API_KEY is not set");
+  }
+
+  const { error } = await resend.emails.send({
+    from: env.EMAIL_FROM!,
     to: email,
     subject: "Sign in to SketchForge",
     html: `
@@ -40,5 +70,9 @@ export async function sendMagicLink(userId: string, email: string) {
     `,
   });
 
-  console.log("[magic-link] resend result:", JSON.stringify(result));
+  if (error) {
+    // The provider echoes the recipient and request payload back in `error`.
+    // Only the reason is safe to surface.
+    throw new Error(`Magic link delivery failed: ${error.name}`);
+  }
 }

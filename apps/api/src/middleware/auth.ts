@@ -1,7 +1,7 @@
-import { jwtVerify } from "jose";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
-import { JWT_SECRET } from "../lib/jwt.js";
+import { SESSION_COOKIE } from "../lib/cookies.js";
+import { verifySessionToken } from "../lib/jwt.js";
 
 export type AuthVariables = {
   userId: string;
@@ -9,23 +9,19 @@ export type AuthVariables = {
 
 export const authMiddleware = createMiddleware<{ Variables: AuthVariables }>(
   async (c, next) => {
-    const cookie = getCookie(c, "session");
+    const token = getCookie(c, SESSION_COOKIE);
 
-    if (!cookie) {
+    if (!token) {
       return c.json({ error: "Not authenticated" }, 401);
     }
 
-    try {
-      const { payload } = await jwtVerify(cookie, JWT_SECRET);
+    const userId = await verifySessionToken(token);
 
-      if (!payload.sub) {
-        return c.json({ error: "Invalid token" }, 401);
-      }
-
-      c.set("userId", payload.sub);
-      await next();
-    } catch {
+    if (!userId) {
       return c.json({ error: "Invalid token" }, 401);
     }
+
+    c.set("userId", userId);
+    await next();
   },
 );

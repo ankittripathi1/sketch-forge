@@ -2,18 +2,72 @@ import { decodeIdToken, generateState } from "arctic";
 import { Hono } from "hono";
 import { generateCodeVerifier } from "oslo/oauth2";
 import { google } from "../lib/oauth.js";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { db, magicLinkTokens, oauthAccounts, userTable } from "@repo/db";
+import { getCookie } from "hono/cookie";
+import { db, magicLinkTokens, userTable } from "@repo/db";
 import { and, eq, gt } from "drizzle-orm";
 import { loginSchema } from "@repo/schema";
-import { sendMagicLink } from "../lib/email.js";
+import { deleteExpiredMagicLinkTokens, sendMagicLink } from "../lib/email.js";
 import { createHash } from "crypto";
-import { getJwtToken, JWT_SECRET } from "../lib/jwt.js";
-import { jwtVerify } from "jose";
+import { createSessionToken, verifySessionToken } from "../lib/jwt.js";
+import { resolveGoogleUser } from "../lib/googleAccount.js";
+import { env } from "../lib/env.js";
+import {
+  LOGIN_NEXT_COOKIE,
+  OAUTH_STATE_COOKIE,
+  OAUTH_VERIFIER_COOKIE,
+  SESSION_COOKIE,
+  clearAuthCookies,
+  clearCookie,
+  setSessionCookie,
+  setShortLivedCookie,
+} from "../lib/cookies.js";
+import {
+  checkIdentifierLimit,
+  rateLimitByAddress,
+  type RateLimitOptions,
+} from "../lib/rateLimit.js";
 
 const auth = new Hono();
 
-auth.post("/login", async (c) => {
+const LOGIN_ADDRESS_LIMIT: RateLimitOptions = {
+  scope: "login",
+  limit: 10,
+  windowSeconds: 15 * 60,
+};
+
+// Applied to the submitted address so one mailbox cannot be flooded from many
+// clients. Returns the same 429 as the address limiter either way, so it never
+// reveals whether the account exists.
+const LOGIN_EMAIL_LIMIT: RateLimitOptions = {
+  scope: "login",
+  limit: 5,
+  windowSeconds: 15 * 60,
+};
+
+const VERIFY_LIMIT: RateLimitOptions = {
+  scope: "verify",
+  limit: 20,
+  windowSeconds: 15 * 60,
+};
+
+const OAUTH_LIMIT: RateLimitOptions = {
+  scope: "oauth",
+  limit: 20,
+  windowSeconds: 15 * 60,
+};
+
+/** Only same-site paths are accepted, so `next` cannot become an open redirect. */
+function safeNextPath(value: string | undefined): string {
+  return value && value.startsWith("/") && !value.startsWith("//")
+    ? value
+    : "/dashboard";
+}
+
+function loginErrorRedirect(reason: string) {
+  return `${env.PUBLIC_ORIGIN}/login?error=${reason}`;
+}
+
+auth.post("/login", rateLimitByAddress(LOGIN_ADDRESS_LIMIT), async (c) => {
   const body = await c.req.json();
 
   const parsed = loginSchema.safeParse(body);
@@ -29,6 +83,13 @@ auth.post("/login", async (c) => {
   }
 
   const { email } = parsed.data;
+
+  const throttled = checkIdentifierLimit(c, LOGIN_EMAIL_LIMIT, email);
+  if (throttled) {
+    return throttled;
+  }
+
+  await deleteExpiredMagicLinkTokens();
 
   let user = await db.query.userTable.findFirst({
     where: eq(userTable.email, email),
@@ -47,48 +108,43 @@ auth.post("/login", async (c) => {
   );
 });
 
-auth.get("/verify", async (c) => {
+auth.get("/verify", rateLimitByAddress(VERIFY_LIMIT), async (c) => {
   const { token } = c.req.query();
 
   if (!token) {
-    return c.json({ error: "Token required" }, 400);
+    return c.redirect(loginErrorRedirect("invalid_token"));
   }
 
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
-  const validToken = await db.query.magicLinkTokens.findFirst({
-    where: and(
-      eq(magicLinkTokens.tokenHash, tokenHash),
-      gt(magicLinkTokens.expiresAt, new Date()),
-    ),
-  });
+  // Delete-and-return in one statement. Two concurrent redemptions of the same
+  // link race on the same row, and only one of them gets a row back.
+  const [redeemed] = await db
+    .delete(magicLinkTokens)
+    .where(
+      and(
+        eq(magicLinkTokens.tokenHash, tokenHash),
+        gt(magicLinkTokens.expiresAt, new Date()),
+      ),
+    )
+    .returning();
 
-  if (!validToken) {
-    return c.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_token`);
+  if (!redeemed?.userId) {
+    return c.redirect(loginErrorRedirect("invalid_token"));
   }
 
-  await db.delete(magicLinkTokens).where(eq(magicLinkTokens.id, validToken.id));
+  setSessionCookie(c, await createSessionToken(redeemed.userId));
 
-  if (!validToken.userId) {
-    return c.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_token`);
-  }
-
-  const JWTtoken = await getJwtToken(validToken.userId);
-
-  setCookie(c, "session", JWTtoken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  });
-
-  return c.redirect(`${process.env.FRONTEND_URL}`);
+  return c.redirect(`${env.PUBLIC_ORIGIN}/dashboard`);
 });
 
-auth.get("/google", async (c) => {
+auth.get("/google", rateLimitByAddress(OAUTH_LIMIT), async (c) => {
+  if (!google) {
+    return c.json({ error: "Google login is not configured" }, 404);
+  }
+
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
-  const nextPath = c.req.query("next");
 
   const url = google.createAuthorizationURL(state, codeVerifier, [
     "openid",
@@ -96,132 +152,104 @@ auth.get("/google", async (c) => {
     "profile",
   ]);
 
-  setCookie(c, "google_state", state, {
-    httpOnly: true,
-    secure: false,
-    maxAge: 60 * 10,
-    path: "/",
-  });
+  setShortLivedCookie(c, OAUTH_STATE_COOKIE, state);
+  setShortLivedCookie(c, OAUTH_VERIFIER_COOKIE, codeVerifier);
 
-  setCookie(c, "google_code_verifier", codeVerifier, {
-    httpOnly: true,
-    secure: false,
-    maxAge: 60 * 10,
-    path: "/",
-  });
-
-  if (nextPath?.startsWith("/")) {
-    setCookie(c, "login_next", nextPath, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 10,
-      path: "/",
-    });
+  const nextPath = c.req.query("next");
+  if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
+    setShortLivedCookie(c, LOGIN_NEXT_COOKIE, nextPath);
   }
 
   return c.redirect(url.toString());
 });
 
-auth.get("/google/callback", async (c) => {
+auth.get("/google/callback", rateLimitByAddress(OAUTH_LIMIT), async (c) => {
+  if (!google) {
+    return c.json({ error: "Google login is not configured" }, 404);
+  }
+
   const { code, state } = c.req.query();
 
-  const storedState = getCookie(c, "google_state");
-  const storedVerifier = getCookie(c, "google_code_verifier");
+  const storedState = getCookie(c, OAUTH_STATE_COOKIE);
+  const storedVerifier = getCookie(c, OAUTH_VERIFIER_COOKIE);
 
-  if (!code || !state || state !== storedState || !storedVerifier) {
+  // Single-use regardless of the outcome below.
+  clearCookie(c, OAUTH_STATE_COOKIE);
+  clearCookie(c, OAUTH_VERIFIER_COOKIE);
+
+  if (!code || !state || !storedState || state !== storedState) {
     return c.json({ error: "Invalid OAuth state" }, 400);
   }
 
-  const tokens = await google.validateAuthorizationCode(code, storedVerifier);
-
-  const claims = decodeIdToken(tokens.idToken()) as {
-    sub: string;
-    email: string;
-    name: string;
-    picture: string;
-  };
-  const googleId = claims.sub;
-  const email = claims.email;
-  const name = claims.name;
-  const avatarUrl = claims.picture;
-
-  const existingOauth = await db
-    .select()
-    .from(oauthAccounts)
-    .where(eq(oauthAccounts.providerAccountId, googleId))
-    .limit(1);
-
-  let userId: string;
-
-  if (existingOauth.length > 0) {
-    userId = existingOauth[0]!.userId!;
-  } else {
-    const newUser = await db
-      .insert(userTable)
-      .values({ email, name, avatarUrl })
-      .returning();
-
-    userId = newUser[0]!.id;
-
-    await db.insert(oauthAccounts).values({
-      userId,
-      provider: "google",
-      providerAccountId: googleId,
-    });
+  if (!storedVerifier) {
+    return c.json({ error: "Invalid OAuth state" }, 400);
   }
 
-  const JWTtoken = await getJwtToken(userId);
+  let claims: {
+    sub?: string;
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+    picture?: string;
+  };
 
-  setCookie(c, "session", JWTtoken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
+  try {
+    const tokens = await google.validateAuthorizationCode(code, storedVerifier);
+    claims = decodeIdToken(tokens.idToken()) as typeof claims;
+  } catch {
+    // The provider response can carry the code and client secret.
+    return c.json({ error: "Google sign-in failed" }, 400);
+  }
+
+  const googleId = claims.sub;
+  const email = claims.email;
+
+  // Without a verified email an attacker could register any address at the
+  // provider and take over the matching local account below.
+  if (!googleId || !email || claims.email_verified !== true) {
+    return c.redirect(loginErrorRedirect("google_email_unverified"));
+  }
+
+  // Google asserted this address, so linking it to an existing local account is
+  // safe and avoids colliding with the unique email constraint.
+  const userId = await resolveGoogleUser({
+    googleId,
+    email,
+    name: claims.name,
+    avatarUrl: claims.picture,
   });
 
-  const nextPath = getCookie(c, "login_next");
-  deleteCookie(c, "login_next");
+  setSessionCookie(c, await createSessionToken(userId));
 
-  return c.redirect(
-    `${process.env.FRONTEND_URL}${nextPath?.startsWith("/") ? nextPath : "/dashboard"}`,
-  );
+  const nextPath = safeNextPath(getCookie(c, LOGIN_NEXT_COOKIE));
+  clearCookie(c, LOGIN_NEXT_COOKIE);
+
+  return c.redirect(`${env.PUBLIC_ORIGIN}${nextPath}`);
 });
 
 auth.post("/logout", (c) => {
-  deleteCookie(c, "google_state");
-  deleteCookie(c, "google_code_verifier");
-  deleteCookie(c, "login_next");
-  deleteCookie(c, "session");
+  clearAuthCookies(c);
   return c.json({ message: "Logged out" });
 });
 
 auth.get("/me", async (c) => {
-  const cookie = getCookie(c, "session");
+  const token = getCookie(c, SESSION_COOKIE);
 
-  if (!cookie) {
+  if (!token) {
     return c.json({ error: "Not authenticated" }, 401);
   }
 
-  try {
-    const { payload } = await jwtVerify(cookie, JWT_SECRET);
-    const userId = (payload.sub ?? payload.userId) as string | undefined;
+  const userId = await verifySessionToken(token);
 
-    if (!userId) {
-      return c.json({ error: "Invalid token" }, 401);
-    }
-
-    const user = await db.query.userTable.findFirst({
-      where: eq(userTable.id, userId),
-    });
-
-    if (!user) {
-      return c.json({ user });
-    }
-
-    return c.json({ user });
-  } catch {
+  if (!userId) {
     return c.json({ error: "Invalid token" }, 401);
   }
+
+  const user = await db.query.userTable.findFirst({
+    where: eq(userTable.id, userId),
+  });
+
+  return c.json({ user });
 });
 
 export default auth;
