@@ -1,6 +1,6 @@
 {
-  "id": "a7df276f-7748-4612-b11c-fc3d53f265f4",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "310fbce2-8a45-434f-b977-cd0fa9a4e797",
+  "prevId": "663cdab5-9d4f-4c3f-a4be-219403002259",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -298,29 +298,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "oauth_accounts_provider_account_idx": {
-          "name": "oauth_accounts_provider_account_idx",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "providerAccountId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "oauth_accounts_user_id_users_id_fk": {
           "name": "oauth_accounts_user_id_users_id_fk",

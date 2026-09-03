@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -36,15 +37,24 @@ export const userRelations = relations(userTable, ({ many }) => ({
   reviewLogs: many(reviewLogs),
 }));
 
-export const oauthAccounts = pgTable("oauth_accounts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => userTable.id, {
-    onDelete: "cascade",
+export const oauthAccounts = pgTable(
+  "oauth_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => userTable.id, {
+      onDelete: "cascade",
+    }),
+    provider: text().notNull(),
+    providerAccountId: text().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    providerAccountIdx: uniqueIndex("oauth_accounts_provider_account_idx").on(
+      table.provider,
+      table.providerAccountId,
+    ),
   }),
-  provider: text().notNull(),
-  providerAccountId: text().notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+);
 
 export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
   user: one(userTable, {
@@ -140,6 +150,10 @@ export const pages = pgTable(
       onDelete: "cascade",
     }),
     title: text("title").notNull().default("Untitled"),
+    note: text("note"),
+    viewMode: text("view_mode", { enum: ["doc", "canvas"] })
+      .notNull()
+      .default("canvas"),
     elements: jsonb("elements"),
     thumbnail: text("thumbnail"),
     thumbnailLight: text("thumbnail_light"),

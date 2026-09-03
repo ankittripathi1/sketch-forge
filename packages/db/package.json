@@ -5,12 +5,14 @@
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./migrate": "./src/migrate.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:migrate": "bun src/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "test:migrations": "bun test src/migrate.test.ts"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",

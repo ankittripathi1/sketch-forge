@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1778410905826,
-      "tag": "0000_kind_shatterstar",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1779950000000,
-      "tag": "0001_page_theme_thumbnails",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1781542545501,
-      "tag": "0002_mixed_master_chief",
+      "when": 1787750472696,
+      "tag": "0000_yummy_bucky",
       "breakpoints": true
     }
   ]
