@@ -1,10 +1,12 @@
 import {
   defineEditorCommand,
-  getContextualPasteTranslation,
-  type CanvasViewportBounds,
   type EditorCommandManager,
   type EditorCommand,
-} from "@repo/canvas-engine";
+} from "@repo/canvas-engine/editor/commandManager";
+import {
+  getContextualPasteTranslation,
+  type CanvasViewportBounds,
+} from "@repo/canvas-engine/lib/pastePlacement";
 import type { ActiveTool, Point, SketchElement } from "@repo/element";
 import type { CanvasClipboardService } from "./CanvasClipboardService";
 
@@ -19,6 +21,7 @@ export type CanvasEditorCommandContext = {
   getPointerPosition: () => Point | null;
   getViewportBounds: () => CanvasViewportBounds | null;
   pasteElements: (elements: SketchElement[], offset: Point) => boolean;
+  pasteImage: (clipboardData: DataTransfer | null) => boolean;
   deleteSelected: () => void;
   duplicateSelected: () => void;
   deselect: () => void;
@@ -79,17 +82,23 @@ export const commandPaste = defineEditorCommand<
   id: "clipboard.paste",
   perform: (context, { clipboardData }) => {
     const clipboard = context.clipboard.read(clipboardData);
-    if (!clipboard) return unhandled;
+    if (clipboard) {
+      const translation = getContextualPasteTranslation(clipboard.elements, {
+        selectedElements: context.getSelectedElements(),
+        pointer: context.getPointerPosition(),
+        viewport: context.getViewportBounds(),
+      });
 
-    const translation = getContextualPasteTranslation(clipboard.elements, {
-      selectedElements: context.getSelectedElements(),
-      pointer: context.getPointerPosition(),
-      viewport: context.getViewportBounds(),
-    });
+      return {
+        handled: context.pasteElements(clipboard.elements, translation),
+      };
+    }
 
-    return {
-      handled: context.pasteElements(clipboard.elements, translation),
-    };
+    // No internal element payload — fall back to a clipboard image
+    // (e.g. a pasted screenshot), inserting it onto the canvas.
+    if (context.pasteImage(clipboardData)) return handled;
+
+    return unhandled;
   },
 });
 

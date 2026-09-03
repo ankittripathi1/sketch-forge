@@ -50,6 +50,7 @@ import {
   undoCanvas,
   getSelectedCanvasElements,
   pasteCanvasElements,
+  pasteImageFromClipboard as pasteImageFromClipboardCmd,
 } from "./lib/canvasCommands";
 import { getSelectedElements } from "@repo/element/selection";
 import {
@@ -649,6 +650,25 @@ export function useSketchEngine(
     return pasteCanvasElements(canvasCommandsContext(), sourceElements, offset);
   }
 
+  /**
+   * Pastes an image from the clipboard onto the canvas. Drops it under the
+   * pointer when one is known, otherwise at the centre of the current viewport.
+   * Returns true when an image was found (so the caller can consume the event).
+   */
+  function pasteClipboardImage(clipboardData: DataTransfer | null): boolean {
+    const bounds = getViewportBounds();
+    const canvasPoint =
+      getPointerPosition() ??
+      (bounds
+        ? { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+        : { x: 0, y: 0 });
+    return pasteImageFromClipboardCmd(
+      canvasCommandsContext(),
+      clipboardData,
+      canvasPoint,
+    );
+  }
+
   function deselect() {
     deselectCanvas(canvasCommandsContext());
   }
@@ -721,6 +741,7 @@ export function useSketchEngine(
     clearPointerPosition,
     getViewportBounds,
     pasteClipboardElements,
+    pasteClipboardImage,
     deleteSelected,
     duplicateSelected,
     deselect,

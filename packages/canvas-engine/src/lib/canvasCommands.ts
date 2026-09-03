@@ -94,17 +94,17 @@ export function replaceCanvasElements(
   ctx.renderSceneAndSelection();
 }
 
-export function handleImageDrop(
+/**
+ * Reads an image `File` as a data URL and drops it onto the scene at the given
+ * canvas-space point. Shared by drag-and-drop and clipboard paste.
+ */
+function insertImageFromFile(
   ctx: CanvasCommandsContext,
-  event: DragEvent,
-  point: Point,
+  file: File,
+  canvasPoint: Point,
 ) {
-  const files = event.dataTransfer?.files;
-  if (!files || files.length === 0) return;
-  const file = files[0]!;
   if (!file.type.startsWith("image/")) return;
 
-  const canvasPoint = ctx.screenToCanvas(point);
   const reader = new FileReader();
   reader.onload = () => {
     const element = buildImageElement(canvasPoint, reader.result as string);
@@ -115,6 +115,48 @@ export function handleImageDrop(
     ctx.renderScene();
   };
   reader.readAsDataURL(file);
+}
+
+/** Returns the first image file found on a clipboard/drag payload, if any. */
+function getImageFileFromTransfer(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  for (const item of data.items) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  // Fallback for browsers that only populate `files`.
+  for (const file of data.files) {
+    if (file.type.startsWith("image/")) return file;
+  }
+  return null;
+}
+
+export function handleImageDrop(
+  ctx: CanvasCommandsContext,
+  event: DragEvent,
+  point: Point,
+) {
+  const file = getImageFileFromTransfer(event.dataTransfer);
+  if (!file) return;
+  insertImageFromFile(ctx, file, ctx.screenToCanvas(point));
+}
+
+/**
+ * Pastes an image from the clipboard onto the canvas at `canvasPoint`
+ * (canvas-space). Returns true when an image was found and insertion started,
+ * so the caller can `preventDefault()` and skip element/text paste.
+ */
+export function pasteImageFromClipboard(
+  ctx: CanvasCommandsContext,
+  clipboardData: DataTransfer | null,
+  canvasPoint: Point,
+): boolean {
+  const file = getImageFileFromTransfer(clipboardData);
+  if (!file) return false;
+  insertImageFromFile(ctx, file, canvasPoint);
+  return true;
 }
 
 export function getSelectedCanvasElements(
