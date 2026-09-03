@@ -1,10 +1,5 @@
-import type {
-  ActiveTool,
-  FillStyle,
-  SketchElement,
-} from "@repo/element/types";
-import {  DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
-
+import type { ActiveTool, FillStyle, SketchElement } from "@repo/element/types";
+import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 
 export type DrawingToolbarStyle = {
   strokeColor: string;

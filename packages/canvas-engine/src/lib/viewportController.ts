@@ -1,115 +1,86 @@
-import type { ActiveTool, Point, SketchElement } from "@repo/element/types";
+import type { Point } from "@repo/element/types";
 import {
   panByOffset,
   panByPointerMove,
   zoomAroundScreenPoint,
 } from "./viewport";
 import { getSelectCursor } from "../tools/select";
+import type { SketchEditor } from "../editor/sketchEditor";
 
-type Ref<T> = { current: T };
-
-type CanvasInteraction =
-  | { type: "idle" }
-  | { type: "drawing" }
-  | { type: "panning"; lastScreenPoint: Point };
-
-export type ViewportControllerContext = {
-  tool: ActiveTool;
-  canvasInteraction: Ref<CanvasInteraction>;
-  panOffset: Ref<Point>;
-  zoom: Ref<number>;
-  elements: Ref<SketchElement[]>;
-  isPanning: Ref<boolean>;
-  selectedElementsList: () => SketchElement[];
-  screenToCanvas: (point: Point) => Point;
-  setZoomLevel: (zoom: number) => void;
-  scheduleViewportRender: () => void;
-};
-
-export function beginPanning(
-  ctx: ViewportControllerContext,
-  screenPoint: Point,
-) {
-  ctx.canvasInteraction.current = {
+export function beginPanning(editor: SketchEditor, screenPoint: Point) {
+  editor.frame.canvasInteraction = {
     type: "panning",
     lastScreenPoint: screenPoint,
   };
 }
 
-export function handlePanningMove(
-  ctx: ViewportControllerContext,
-  screenPoint: Point,
-) {
-  if (ctx.canvasInteraction.current.type !== "panning") return false;
+export function handlePanningMove(editor: SketchEditor, screenPoint: Point) {
+  if (editor.frame.canvasInteraction.type !== "panning") return false;
 
-  const interaction = ctx.canvasInteraction.current;
-  ctx.panOffset.current = panByPointerMove(
-    ctx.panOffset.current,
+  const interaction = editor.frame.canvasInteraction;
+  editor.frame.panOffset = panByPointerMove(
+    editor.frame.panOffset,
     interaction.lastScreenPoint,
     screenPoint,
   );
-  ctx.canvasInteraction.current = {
+  editor.frame.canvasInteraction = {
     type: "panning",
     lastScreenPoint: screenPoint,
   };
-  ctx.scheduleViewportRender();
+  editor.scheduleViewportRender();
   return true;
 }
 
 export function zoomViewport({
-  ctx,
+  editor,
   delta,
   cursorScreen,
   minZoom,
   maxZoom,
 }: {
-  ctx: ViewportControllerContext;
+  editor: SketchEditor;
   delta: number;
   cursorScreen: Point;
   minZoom: number;
   maxZoom: number;
 }) {
   const next = zoomAroundScreenPoint({
-    currentZoom: ctx.zoom.current,
-    panOffset: ctx.panOffset.current,
+    currentZoom: editor.frame.zoom,
+    panOffset: editor.frame.panOffset,
     cursorScreen,
     delta,
     minZoom,
     maxZoom,
   });
-  ctx.zoom.current = next.zoom;
-  ctx.setZoomLevel(Math.round(next.zoom * 100));
-  ctx.panOffset.current = next.panOffset;
-  ctx.scheduleViewportRender();
+  editor.frame.zoom = next.zoom;
+  editor.setZoomDisplay(Math.round(next.zoom * 100));
+  editor.frame.panOffset = next.panOffset;
+  editor.scheduleViewportRender();
 }
 
-export function panViewport(
-  ctx: ViewportControllerContext,
-  dx: number,
-  dy: number,
-) {
-  ctx.panOffset.current = panByOffset(ctx.panOffset.current, dx, dy);
-  ctx.scheduleViewportRender();
+export function panViewport(editor: SketchEditor, dx: number, dy: number) {
+  editor.frame.panOffset = panByOffset(editor.frame.panOffset, dx, dy);
+  editor.scheduleViewportRender();
 }
 
 export function getCursorForPoint(
-  ctx: ViewportControllerContext,
+  editor: SketchEditor,
   screenPoint: Point,
 ): string {
-  if (ctx.isPanning.current) return "grab";
+  if (editor.frame.isPanning) return "grab";
 
-  if (ctx.tool === "select") {
-    const point = ctx.screenToCanvas(screenPoint);
+  if (editor.getState().activeTool === "select") {
+    const point = editor.screenToCanvas(screenPoint);
     return (
       getSelectCursor({
-        selected: ctx.selectedElementsList(),
-        elements: ctx.elements.current,
+        selected: editor.selectedElementsList(),
+        elements: editor.frame.elements,
         point,
-        zoom: ctx.zoom.current,
+        zoom: editor.frame.zoom,
       }) ?? "crosshair"
     );
   }
 
-  if (ctx.tool === "text") return "text";
+  if (editor.getState().activeTool === "text") return "text";
   return "crosshair";
 }

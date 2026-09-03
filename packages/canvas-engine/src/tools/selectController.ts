@@ -1,9 +1,4 @@
-import type {
-  AnchorSide,
-  Point,
-  SketchElement,
-  Tool,
-} from "@repo/element/types";
+import type { Point } from "@repo/element/types";
 import {
   addToSelection,
   setSelection,
@@ -15,63 +10,26 @@ import {
   getSelectPointerDownAction,
   getSelectPointerMoveAction,
   moveSelectedElements,
-  type SelectionMarquee,
-  type SelectInteraction,
 } from "./select";
-
-type Ref<T> = { current: T };
-
-type BindableShape = { shape: SketchElement; anchor: AnchorSide };
-
-export type SelectControllerContext = {
-  elements: Ref<SketchElement[]>;
-  selectedIds: Ref<Set<string>>;
-  selectionMarquee: Ref<SelectionMarquee | null>;
-  selectInteraction: Ref<SelectInteraction>;
-  hoveredAnchor: Ref<BindableShape | null>;
-  zoom: Ref<number>;
-  screenToCanvas: (point: Point) => Point;
-  selectedElementsList: () => SketchElement[];
-  setSelectedElements: (next: SketchElement[]) => void;
-  setSelectedTool: (tool: Tool | null) => void;
-  syncToolbarStyleFromElement: (element: SketchElement) => void;
-  clearSelection: () => void;
-  applyResize: (
-    element: SketchElement,
-    handle: number,
-    point: Point,
-  ) => SketchElement;
-  syncBoundArrows: (
-    shapeIds: Set<string>,
-    elements: SketchElement[],
-  ) => SketchElement[];
-  findBindableShape: (
-    point: Point,
-    exclude?: Set<string>,
-  ) => BindableShape | null;
-  commitSelectedElementSnapshot: (options?: { render?: boolean }) => void;
-  renderSceneAndSelection: () => void;
-  renderSelection: () => void;
-  scheduleSelectionRender: () => void;
-  scheduleSceneAndSelectionRender: () => void;
-};
+import type { SketchEditor } from "../editor/sketchEditor";
+import { syncToolbarStyleFromElement } from "../lib/toolStyleController";
 
 export function handleSelectPointerDown(
-  ctx: SelectControllerContext,
+  editor: SketchEditor,
   point: Point,
   shiftKey: boolean,
 ) {
   const action = getSelectPointerDownAction({
     point,
-    selected: ctx.selectedElementsList(),
-    elements: ctx.elements.current,
-    zoom: ctx.zoom.current,
+    selected: editor.selectedElementsList(),
+    elements: editor.frame.elements,
+    zoom: editor.frame.zoom,
     shiftKey,
   });
 
   switch (action.type) {
     case "start-drag":
-      ctx.selectInteraction.current = {
+      editor.frame.selectInteraction = {
         type: "dragging",
         lastPoint: point,
         moved: false,
@@ -79,7 +37,7 @@ export function handleSelectPointerDown(
       return;
 
     case "start-resize":
-      ctx.selectInteraction.current = {
+      editor.frame.selectInteraction = {
         type: "resizing",
         handle: action.handle,
         origin: action.origin,
@@ -88,38 +46,40 @@ export function handleSelectPointerDown(
       return;
 
     case "toggle-element":
-      ctx.selectedIds.current = toggleSelection(
-        ctx.selectedIds.current,
-        action.element.id,
-      );
-      ctx.setSelectedTool(null);
-      ctx.renderSceneAndSelection();
+      editor.setAppState({
+        selectedElementIds: toggleSelection(
+          new Set(editor.getState().selectedElementIds),
+          action.element.id,
+        ),
+      });
+      editor.setSelectedTool(null);
+      editor.renderSceneAndSelection();
       return;
 
     case "select-element":
-      ctx.setSelectedElements([action.element]);
-      ctx.setSelectedTool(action.element.tool);
-      ctx.syncToolbarStyleFromElement(action.element);
-      ctx.selectInteraction.current = {
+      editor.setSelectedElements([action.element]);
+      editor.setSelectedTool(action.element.tool);
+      syncToolbarStyleFromElement(editor, action.element);
+      editor.frame.selectInteraction = {
         type: "dragging",
         lastPoint: point,
         moved: false,
       };
-      ctx.renderSceneAndSelection();
+      editor.renderSceneAndSelection();
       return;
 
     case "clear-selection":
-      ctx.clearSelection();
-      ctx.renderSceneAndSelection();
+      editor.clearSelection();
+      editor.renderSceneAndSelection();
       return;
 
     case "start-marquee":
-      ctx.selectionMarquee.current = action.marquee;
-      ctx.selectInteraction.current = {
+      editor.frame.selectionMarquee = action.marquee;
+      editor.frame.selectInteraction = {
         type: "marquee",
         additive: action.additive,
       };
-      ctx.renderSelection();
+      editor.renderSelection();
       return;
 
     case "none":
@@ -128,69 +88,69 @@ export function handleSelectPointerDown(
 }
 
 export function handleSelectPointerMove(
-  ctx: SelectControllerContext,
+  editor: SketchEditor,
   screenPoint: Point,
 ) {
   const action = getSelectPointerMoveAction({
-    interaction: ctx.selectInteraction.current,
+    interaction: editor.frame.selectInteraction,
     screenPoint,
-    screenToCanvas: ctx.screenToCanvas,
-    selectionMarquee: ctx.selectionMarquee.current,
-    selectedCount: ctx.selectedIds.current.size,
+    screenToCanvas: editor.screenToCanvas,
+    selectionMarquee: editor.frame.selectionMarquee,
+    selectedCount: new Set(editor.getState().selectedElementIds).size,
   });
 
   switch (action.type) {
     case "update-marquee":
-      ctx.selectionMarquee.current = action.marquee;
-      ctx.scheduleSelectionRender();
+      editor.frame.selectionMarquee = action.marquee;
+      editor.scheduleSelectionRender();
       return true;
 
     case "resize": {
-      const updated = ctx.applyResize(
+      const updated = editor.applyResize(
         action.interaction.origin,
         action.interaction.handle,
         action.point,
       );
-      ctx.selectInteraction.current = { ...action.interaction, moved: true };
-      ctx.setSelectedElements([updated]);
+      editor.frame.selectInteraction = { ...action.interaction, moved: true };
+      editor.setSelectedElements([updated]);
       const movedIds = new Set([updated.id]);
-      ctx.elements.current = ctx.syncBoundArrows(
-        movedIds,
-        ctx.elements.current,
+      editor.setSceneElements(
+        editor.syncBoundArrows(movedIds, editor.frame.elements),
       );
-      ctx.hoveredAnchor.current = getResizeAnchorPreview({
+      editor.frame.hoveredAnchor = getResizeAnchorPreview({
         updated,
         handle: action.interaction.handle,
         point: action.point,
-        findBindableShape: ctx.findBindableShape,
+        findBindableShape: editor.findBindableShape,
       });
 
-      ctx.scheduleSceneAndSelectionRender();
+      editor.scheduleSceneAndSelectionRender();
       return true;
     }
 
     case "drag": {
-      ctx.selectInteraction.current = {
+      editor.frame.selectInteraction = {
         ...action.interaction,
         lastPoint: action.point,
         moved: true,
       };
-      ctx.elements.current = moveSelectedElements(
-        ctx.elements.current,
-        ctx.selectedIds.current,
-        action.dx,
-        action.dy,
+      editor.setSceneElements(
+        moveSelectedElements(
+          editor.frame.elements,
+          new Set(editor.getState().selectedElementIds),
+          action.dx,
+          action.dy,
+        ),
       );
 
-      const movedIds = new Set(ctx.selectedIds.current);
+      const movedIds = new Set(new Set(editor.getState().selectedElementIds));
       if (movedIds.size > 0) {
-        ctx.elements.current = ctx.syncBoundArrows(
-          movedIds,
-          ctx.elements.current,
+        editor.setSceneElements(
+          editor.syncBoundArrows(movedIds, editor.frame.elements),
         );
       }
 
-      ctx.scheduleSceneAndSelectionRender();
+      editor.scheduleSceneAndSelectionRender();
       return true;
     }
 
@@ -199,38 +159,52 @@ export function handleSelectPointerMove(
   }
 }
 
-export function finalizeSelectInteraction(ctx: SelectControllerContext) {
+export function finalizeSelectInteraction(editor: SketchEditor) {
   const action = getSelectFinalizeAction({
-    interaction: ctx.selectInteraction.current,
-    selectionMarquee: ctx.selectionMarquee.current,
-    elements: ctx.elements.current,
+    interaction: editor.frame.selectInteraction,
+    selectionMarquee: editor.frame.selectionMarquee,
+    elements: editor.frame.elements,
   });
-  ctx.selectInteraction.current = { type: "idle" };
+  editor.frame.selectInteraction = { type: "idle" };
 
   switch (action.type) {
     case "finish-marquee":
       if (action.ids.length > 0) {
-        ctx.selectedIds.current = action.additive
-          ? addToSelection(ctx.selectedIds.current, action.ids)
-          : setSelection(action.ids);
+        editor.setAppState({
+          selectedElementIds: action.additive
+            ? addToSelection(
+                new Set(editor.getState().selectedElementIds),
+                action.ids,
+              )
+            : setSelection(action.ids),
+        });
       } else if (!action.additive) {
-        ctx.selectedIds.current = setSelection([]);
-        ctx.setSelectedTool(null);
+        editor.setAppState({
+          selectedElementIds: setSelection([]),
+          selectedTool: null,
+        });
       }
-      ctx.selectionMarquee.current = null;
-      ctx.renderSceneAndSelection();
+      editor.frame.selectionMarquee = null;
+      editor.renderSceneAndSelection();
       return;
 
     case "finish-resize":
-      ctx.hoveredAnchor.current = null;
-      if (action.moved && ctx.selectedIds.current.size > 0) {
-        ctx.commitSelectedElementSnapshot();
+      editor.frame.hoveredAnchor = null;
+      if (
+        action.moved &&
+        new Set(editor.getState().selectedElementIds).size > 0
+      ) {
+        editor.commitSelectedElementSnapshot();
       }
       return;
 
     case "finish-drag":
-      if (!action.moved || ctx.selectedIds.current.size === 0) return;
-      ctx.commitSelectedElementSnapshot({ render: true });
+      if (
+        !action.moved ||
+        new Set(editor.getState().selectedElementIds).size === 0
+      )
+        return;
+      editor.commitSelectedElementSnapshot({ render: true });
       return;
 
     case "none":

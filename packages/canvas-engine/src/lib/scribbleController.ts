@@ -1,51 +1,38 @@
-import type { SketchElement } from "@repo/element/types";
 import {
   debounceForBackend,
   recognizeHandwriting,
-  type RecognitionConfig,
 } from "@repo/canvas-core/lib/recognition";
 import { buildTextFromStrokes } from "./scribble";
+import type { SketchEditor } from "../editor/sketchEditor";
 
-type Ref<T> = { current: T };
+/** The recognition settings, in the shape `@repo/canvas-core` expects. */
+function recognitionConfig(editor: SketchEditor) {
+  const state = editor.getState();
+  return { backend: state.recognitionBackend, apiKey: state.recognitionApiKey };
+}
 
-export type ScribbleControllerContext = {
-  pendingScribbleIds: Ref<string[]>;
-  scribbleTimer: Ref<ReturnType<typeof setTimeout> | null>;
-  recognitionConfig: Ref<RecognitionConfig>;
-  elements: Ref<SketchElement[]>;
-  strokeColor: string;
-  fontFamily: string;
-  fontWeight: "normal" | "bold";
-  setScribblePending: (pending: boolean) => void;
-  pushHistorySnapshot: (snapshot?: SketchElement[]) => void;
-  renderScene: () => void;
-};
+export function queueScribbleStroke(editor: SketchEditor, id: string) {
+  editor.frame.pendingScribbleIds.push(id);
+  editor.setScribblePending(true);
+  if (editor.frame.scribbleTimer) clearTimeout(editor.frame.scribbleTimer);
 
-export function queueScribbleStroke(
-  ctx: ScribbleControllerContext,
-  id: string,
-) {
-  ctx.pendingScribbleIds.current.push(id);
-  ctx.setScribblePending(true);
-  if (ctx.scribbleTimer.current) clearTimeout(ctx.scribbleTimer.current);
-
-  const debounceMs = debounceForBackend(ctx.recognitionConfig.current.backend);
-  ctx.scribbleTimer.current = setTimeout(() => {
-    void flushScribbleBatch(ctx);
+  const debounceMs = debounceForBackend(editor.getState().recognitionBackend);
+  editor.frame.scribbleTimer = setTimeout(() => {
+    void flushScribbleBatch(editor);
   }, debounceMs);
 }
 
-export async function flushScribbleBatch(ctx: ScribbleControllerContext) {
-  const ids = new Set(ctx.pendingScribbleIds.current);
-  ctx.pendingScribbleIds.current = [];
+export async function flushScribbleBatch(editor: SketchEditor) {
+  const ids = new Set(editor.frame.pendingScribbleIds);
+  editor.frame.pendingScribbleIds = [];
 
   if (!ids.size) {
-    ctx.setScribblePending(false);
+    editor.setScribblePending(false);
     return;
   }
 
   try {
-    const strokeEls = ctx.elements.current.filter(
+    const strokeEls = editor.frame.elements.filter(
       (el) => el.tool === "freehand" && ids.has(el.id),
     );
     if (!strokeEls.length) return;
@@ -56,23 +43,23 @@ export async function flushScribbleBatch(ctx: ScribbleControllerContext) {
 
     if (!strokes.length) return;
 
-    const text = await recognizeHandwriting(
-      strokes,
-      ctx.recognitionConfig.current,
-    );
+    const text = await recognizeHandwriting(strokes, recognitionConfig(editor));
 
+    const style = editor.getState().currentItemStyle;
     const textEl = buildTextFromStrokes(strokes, text, {
-      strokeColor: ctx.strokeColor,
-      fontFamily: ctx.fontFamily,
-      fontWeight: ctx.fontWeight,
+      strokeColor: style.strokeColor,
+      fontFamily: style.fontFamily,
+      fontWeight: style.fontWeight,
     });
     if (!textEl) return;
 
-    ctx.elements.current = ctx.elements.current.filter((el) => !ids.has(el.id));
-    ctx.elements.current = [...ctx.elements.current, textEl];
-    ctx.pushHistorySnapshot();
-    ctx.renderScene();
+    editor.setSceneElements([
+      ...editor.frame.elements.filter((el) => !ids.has(el.id)),
+      textEl,
+    ]);
+    editor.pushHistorySnapshot();
+    editor.renderScene();
   } finally {
-    ctx.setScribblePending(false);
+    editor.setScribblePending(false);
   }
 }

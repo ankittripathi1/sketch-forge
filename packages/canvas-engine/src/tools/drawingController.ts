@@ -1,10 +1,4 @@
-import type {
-  AnchorSide,
-  FillStyle,
-  Point,
-  SketchElement,
-  Tool,
-} from "@repo/element/types";
+import type { Point, Tool } from "@repo/element/types";
 import { clearCanvas } from "../lib/transform";
 import {
   bindArrowEnd,
@@ -15,72 +9,47 @@ import {
   isStrokeDraft,
   updateDraftElement,
 } from "./drawing";
+import type { SketchEditor } from "../editor/sketchEditor";
+import { queueScribbleStroke } from "../lib/scribbleController";
 
-type Ref<T> = { current: T };
+export type { CanvasInteraction } from "./interactions";
 
-type BindableShape = { shape: SketchElement; anchor: AnchorSide };
+/** The style a new element is drawn with, taken from the toolbar. */
+function draftStyle(editor: SketchEditor) {
+  const { strokeColor, fillColor, fillStyle, strokeWidth } =
+    editor.getState().currentItemStyle;
+  return { strokeColor, fillColor, fillStyle, strokeWidth };
+}
 
-export type CanvasInteraction =
-  | { type: "idle" }
-  | { type: "drawing" }
-  | { type: "panning"; lastScreenPoint: Point };
-
-export type DrawingControllerContext = {
-  tool: Tool;
-  style: {
-    strokeColor: string;
-    fillColor: string;
-    fillStyle: FillStyle;
-    strokeWidth: number;
-  };
-  canvasInteraction: Ref<CanvasInteraction>;
-  currentElement: Ref<SketchElement | null>;
-  hoveredAnchor: Ref<BindableShape | null>;
-  elements: Ref<SketchElement[]>;
-  interactionCanvas: Ref<HTMLCanvasElement | null>;
-  rafId: Ref<number>;
-  scribbleEnabled: boolean;
-  queueScribble: (id: string) => void;
-  findBindableShape: (
-    point: Point,
-    exclude?: Set<string>,
-  ) => BindableShape | null;
-  normalizeElement: (element: SketchElement) => SketchElement;
-  commitCreatedElement: (
-    element: SketchElement,
-    options?: { select?: boolean; nextTool?: Tool | "select" },
-  ) => void;
-  commitSceneElements: (elements: SketchElement[]) => void;
-  renderActiveElement: () => void;
-  renderScene: () => void;
-  renderSceneAndSelection: () => void;
-  scheduleActiveElementRender: () => void;
-};
-
-export function startDrawing(ctx: DrawingControllerContext, point: Point) {
-  ctx.canvasInteraction.current = { type: "drawing" };
+export function startDrawing(editor: SketchEditor, point: Point) {
+  const activeTool = editor.getState().activeTool as Tool;
+  editor.frame.canvasInteraction = { type: "drawing" };
   const { startBinding, startPoint } = getDraftStart({
-    tool: ctx.tool,
+    tool: activeTool,
     point,
-    findBindableShape: ctx.findBindableShape,
+    findBindableShape: editor.findBindableShape,
   });
-  ctx.currentElement.current = buildDraftElement({
-    tool: ctx.tool,
+  editor.frame.currentElement = buildDraftElement({
+    tool: activeTool,
     point,
-    style: ctx.style,
+    style: draftStyle(editor),
     startBinding,
     startPoint,
   });
-  ctx.renderActiveElement();
+  editor.renderActiveElement();
 }
 
-export function updateArrowHover(ctx: DrawingControllerContext, point: Point) {
-  if (ctx.tool !== "arrow" || ctx.canvasInteraction.current.type === "drawing")
+export function updateArrowHover(editor: SketchEditor, point: Point) {
+  const activeTool = editor.getState().activeTool;
+  if (
+    activeTool !== "arrow" ||
+    editor.frame.canvasInteraction.type === "drawing"
+  )
     return false;
 
-  const target = ctx.findBindableShape(point);
+  const target = editor.findBindableShape(point);
   const next = target ? { shape: target.shape, anchor: target.anchor } : null;
-  const prev = ctx.hoveredAnchor.current;
+  const prev = editor.frame.hoveredAnchor;
   const changed =
     (!prev && next) ||
     (prev && !next) ||
@@ -88,76 +57,75 @@ export function updateArrowHover(ctx: DrawingControllerContext, point: Point) {
       next &&
       (prev.shape.id !== next.shape.id || prev.anchor !== next.anchor));
   if (changed) {
-    ctx.hoveredAnchor.current = next;
-    ctx.scheduleActiveElementRender();
+    editor.frame.hoveredAnchor = next;
+    editor.scheduleActiveElementRender();
   }
   return true;
 }
 
-export function handleDrawingPointerMove(
-  ctx: DrawingControllerContext,
-  point: Point,
-) {
+export function handleDrawingPointerMove(editor: SketchEditor, point: Point) {
   if (
-    ctx.canvasInteraction.current.type !== "drawing" ||
-    !ctx.currentElement.current
+    editor.frame.canvasInteraction.type !== "drawing" ||
+    !editor.frame.currentElement
   )
     return;
 
   const { endPoint, anchorHint } = getDraftEnd({
-    element: ctx.currentElement.current,
+    element: editor.frame.currentElement,
     point,
-    findBindableShape: ctx.findBindableShape,
+    findBindableShape: editor.findBindableShape,
   });
-  ctx.hoveredAnchor.current = anchorHint;
+  editor.frame.hoveredAnchor = anchorHint;
 
-  ctx.currentElement.current = updateDraftElement(
-    ctx.currentElement.current,
+  editor.frame.currentElement = updateDraftElement(
+    editor.frame.currentElement,
     point,
     endPoint,
   );
-  ctx.scheduleActiveElementRender();
+  editor.scheduleActiveElementRender();
 }
 
-export function finalizeDrawingInteraction(ctx: DrawingControllerContext) {
+export function finalizeDrawingInteraction(editor: SketchEditor) {
+  const activeTool = editor.getState().activeTool as Tool;
   if (
-    ctx.canvasInteraction.current.type !== "drawing" ||
-    !ctx.currentElement.current
+    editor.frame.canvasInteraction.type !== "drawing" ||
+    !editor.frame.currentElement
   )
     return;
 
-  ctx.canvasInteraction.current = { type: "idle" };
-  cancelAnimationFrame(ctx.rafId.current);
+  editor.frame.canvasInteraction = { type: "idle" };
+  cancelAnimationFrame(editor.frame.interactionRafId);
 
-  if (ctx.tool === "eraser") {
+  if (activeTool === "eraser") {
     const nextElements = eraseIntersectingElements(
-      ctx.elements.current,
-      ctx.currentElement.current,
+      editor.frame.elements,
+      editor.frame.currentElement,
     );
-    ctx.currentElement.current = null;
-    ctx.commitSceneElements(nextElements);
-    ctx.renderSceneAndSelection();
+    editor.frame.currentElement = null;
+    editor.commitSceneElements(nextElements);
+    editor.renderSceneAndSelection();
     return;
   }
 
-  let justCreated = ctx.normalizeElement(ctx.currentElement.current);
-  ctx.currentElement.current = null;
-  ctx.hoveredAnchor.current = null;
+  let justCreated = editor.normalizeElement(editor.frame.currentElement);
+  editor.frame.currentElement = null;
+  editor.frame.hoveredAnchor = null;
 
-  justCreated = bindArrowEnd(justCreated, ctx.findBindableShape);
+  justCreated = bindArrowEnd(justCreated, editor.findBindableShape);
 
-  if (isStrokeDraft(ctx.tool)) {
-    ctx.commitCreatedElement(justCreated, { select: false });
-    ctx.renderScene();
+  if (isStrokeDraft(activeTool)) {
+    editor.commitCreatedElement(justCreated, { select: false });
+    editor.renderScene();
 
-    if (ctx.tool === "freehand" && ctx.scribbleEnabled) {
-      ctx.queueScribble(justCreated.id);
+    if (activeTool === "freehand" && editor.getState().scribbleEnabled) {
+      queueScribbleStroke(editor, justCreated.id);
     }
 
-    const interactionCanvas = ctx.interactionCanvas.current;
+    const interactionCanvas = editor.surface.interaction();
     if (interactionCanvas) clearCanvas(interactionCanvas);
     return;
   }
 
-  ctx.commitCreatedElement(justCreated);
+  editor.commitCreatedElement(justCreated);
+  editor.renderSceneAndSelection();
 }

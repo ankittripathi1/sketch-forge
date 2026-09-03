@@ -32,10 +32,7 @@ export function performAction<TPayload>(
   return action.perform(context, payload);
 }
 
-export function applyActionResult(
-  ctx: ActionDispatcher,
-  result: ActionResult,
-) {
+export function applyActionResult(ctx: ActionDispatcher, result: ActionResult) {
   if (result.elements) {
     ctx.setSceneElements([...result.elements]);
   }

@@ -10,50 +10,38 @@ import { actionAddElement, actionInsertElements } from "../actions/elements";
 import { cloneElementsForPaste, getSelectedElements } from "@repo/element";
 import type { SketchEditor } from "../editor/sketchEditor";
 
-/**
- * Everything these commands need beyond the editor itself: turning a screen
- * point into canvas space, and painting. Both belong to the canvas surface, not
- * to the scene.
- */
-export type CanvasCommandsContext = {
-  editor: SketchEditor;
-  screenToCanvas: (point: Point) => Point;
-  renderScene: () => void;
-  renderSceneAndSelection: () => void;
-};
-
-export function undoCanvas(ctx: CanvasCommandsContext) {
-  if (!ctx.editor.undo()) return;
-  ctx.renderSceneAndSelection();
+export function undoCanvas(editor: SketchEditor) {
+  if (!editor.undo()) return;
+  editor.renderSceneAndSelection();
 }
 
-export function redoCanvas(ctx: CanvasCommandsContext) {
-  if (!ctx.editor.redo()) return;
-  ctx.renderSceneAndSelection();
+export function redoCanvas(editor: SketchEditor) {
+  if (!editor.redo()) return;
+  editor.renderSceneAndSelection();
 }
 
-export function deleteSelectedElements(ctx: CanvasCommandsContext) {
-  const result = ctx.editor.dispatch(actionDeleteSelected, undefined);
+export function deleteSelectedElements(editor: SketchEditor) {
+  const result = editor.dispatch(actionDeleteSelected, undefined);
   if (!result) return;
 
-  ctx.renderSceneAndSelection();
+  editor.renderSceneAndSelection();
 }
 
 export function duplicateSelectedElements(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
   offset: number,
 ) {
-  const result = ctx.editor.dispatch(actionDuplicateSelected, { offset });
+  const result = editor.dispatch(actionDuplicateSelected, { offset });
   if (!result) return;
 
-  ctx.renderSceneAndSelection();
+  editor.renderSceneAndSelection();
 }
 
-export function deselectCanvas(ctx: CanvasCommandsContext) {
-  const result = ctx.editor.dispatch(actionDeselect, undefined);
+export function deselectCanvas(editor: SketchEditor) {
+  const result = editor.dispatch(actionDeselect, undefined);
   if (!result) return;
 
-  ctx.renderSceneAndSelection();
+  editor.renderSceneAndSelection();
 }
 
 /**
@@ -61,12 +49,12 @@ export function deselectCanvas(ctx: CanvasCommandsContext) {
  * back into the document that was open before.
  */
 export function replaceCanvasElements(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
   newElements: SketchElement[],
 ) {
-  ctx.editor.frame.history = createHistory();
-  ctx.editor.commitSceneElements(newElements);
-  ctx.renderSceneAndSelection();
+  editor.frame.history = createHistory();
+  editor.commitSceneElements(newElements);
+  editor.renderSceneAndSelection();
 }
 
 /**
@@ -74,7 +62,7 @@ export function replaceCanvasElements(
  * canvas-space point. Shared by drag-and-drop and clipboard paste.
  */
 function insertImageFromFile(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
   file: File,
   canvasPoint: Point,
 ) {
@@ -83,11 +71,11 @@ function insertImageFromFile(
   const reader = new FileReader();
   reader.onload = () => {
     const element = buildImageElement(canvasPoint, reader.result as string);
-    ctx.editor.dispatch(actionAddElement, {
+    editor.dispatch(actionAddElement, {
       element,
       select: false,
     });
-    ctx.renderScene();
+    editor.renderScene();
   };
   reader.readAsDataURL(file);
 }
@@ -109,13 +97,13 @@ function getImageFileFromTransfer(data: DataTransfer | null): File | null {
 }
 
 export function handleImageDrop(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
   event: DragEvent,
   point: Point,
 ) {
   const file = getImageFileFromTransfer(event.dataTransfer);
   if (!file) return;
-  insertImageFromFile(ctx, file, ctx.screenToCanvas(point));
+  insertImageFromFile(editor, file, editor.screenToCanvas(point));
 }
 
 /**
@@ -124,27 +112,27 @@ export function handleImageDrop(
  * so the caller can `preventDefault()` and skip element/text paste.
  */
 export function pasteImageFromClipboard(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
   clipboardData: DataTransfer | null,
   canvasPoint: Point,
 ): boolean {
   const file = getImageFileFromTransfer(clipboardData);
   if (!file) return false;
-  insertImageFromFile(ctx, file, canvasPoint);
+  insertImageFromFile(editor, file, canvasPoint);
   return true;
 }
 
 export function getSelectedCanvasElements(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
 ): SketchElement[] {
   return getSelectedElements(
-    ctx.editor.getElements(),
-    new Set(ctx.editor.getState().selectedElementIds),
+    editor.getElements(),
+    new Set(editor.getState().selectedElementIds),
   );
 }
 
 export function pasteCanvasElements(
-  ctx: CanvasCommandsContext,
+  editor: SketchEditor,
   sourceElements: SketchElement[],
   offset: Point,
 ): boolean {
@@ -153,12 +141,12 @@ export function pasteCanvasElements(
   }
   const pastedElements = cloneElementsForPaste(sourceElements, offset);
 
-  const result = ctx.editor.dispatch(actionInsertElements, {
+  const result = editor.dispatch(actionInsertElements, {
     elements: pastedElements,
   });
 
   if (!result) return false;
 
-  ctx.renderSceneAndSelection();
+  editor.renderSceneAndSelection();
   return true;
 }

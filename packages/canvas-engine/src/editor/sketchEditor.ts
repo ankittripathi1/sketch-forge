@@ -1,26 +1,43 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { createHistory, type HistoryState } from "@repo/element/history";
 import type {
   ActiveTool,
   Point,
   SketchElement,
   Tool,
 } from "@repo/element/types";
-import { mergeElementsById, setSelection } from "@repo/element/selection";
+import {
+  getSelectedElements,
+  mergeElementsById,
+  setSelection,
+} from "@repo/element/selection";
+import * as geometry from "@repo/element/transform";
+import type { AnchorSide } from "@repo/element/types";
+import type { BindableShape } from "../tools/interactions";
 import {
   createInitialAppState,
   type CanvasAppState,
   type CanvasTheme,
   type CurrentItemStyle,
 } from "../appState";
-import { createScene, updateSceneElements, type SketchScene } from "../scene";
+import { updateSceneElements } from "../scene";
+import { createFrameState, type CanvasFrameState } from "./frameState";
+import { createRenderers } from "../lib/rendering";
+import {
+  screenToCanvas as screenToCanvasMath,
+  canvasToScreen as canvasToScreenMath,
+} from "@repo/math";
+import type { CanvasViewportBounds } from "../lib/pastePlacement";
 import {
   getHistoryStatus,
   pushHistorySnapshot as pushSnapshotToHistory,
   redoHistory,
   undoHistory,
 } from "../lib/historyModel";
-import { applyActionResult, dispatchAction, performAction } from "../actions/manager";
+import {
+  applyActionResult,
+  dispatchAction,
+  performAction,
+} from "../actions/manager";
 import { actionUpdateStyle } from "../actions/style";
 import {
   actionAddElement,
@@ -71,11 +88,47 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
   }));
 
   // Frame state. Mutated in place, never observed by React.
-  const frame = {
-    elements: [] as SketchElement[],
-    scene: createScene() as SketchScene,
-    history: createHistory() as HistoryState,
-  };
+  const frame: CanvasFrameState = createFrameState();
+
+  function screenToCanvas(point: Point): Point {
+    return screenToCanvasMath(point, frame.zoom, frame.panOffset);
+  }
+
+  function canvasToScreen(point: Point): Point {
+    return canvasToScreenMath(point, frame.zoom, frame.panOffset);
+  }
+
+  /** The visible canvas-space rectangle, or null before the canvas attaches. */
+  function getViewportBounds(): CanvasViewportBounds | null {
+    const canvas = surface.interaction();
+    if (!canvas) return null;
+
+    const { width, height } = canvas.getBoundingClientRect();
+    const topLeft = screenToCanvas({ x: 0, y: 0 });
+    const bottomRight = screenToCanvas({ x: width, y: height });
+
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
+    };
+  }
+
+  /** Where the pointer is in canvas space, or null if it has left the canvas. */
+  function getPointerPosition(): Point | null {
+    return frame.pointerScreenPosition
+      ? screenToCanvas(frame.pointerScreenPosition)
+      : null;
+  }
+
+  const renderers = createRenderers({
+    surface,
+    frame,
+    selectedIds: () => store.getState().selectedElementIds,
+    setPanOffsetDisplay: (panOffsetDisplay) =>
+      store.setState({ panOffsetDisplay }),
+  });
 
   function getState(): CanvasAppState {
     return store.getState();
@@ -221,6 +274,65 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
     return true;
   }
 
+  function selectedElementsList(): SketchElement[] {
+    return getSelectedElements(
+      frame.elements,
+      new Set(getState().selectedElementIds),
+    );
+  }
+
+  function normalizeElement(element: SketchElement): SketchElement {
+    return geometry.normalizeElement(element);
+  }
+
+  /** Resizes an element by one handle, re-measuring text so labels still fit. */
+  function applyResize(
+    element: SketchElement,
+    handle: number,
+    to: Point,
+  ): SketchElement {
+    const style = getState().currentItemStyle;
+    return geometry.applyResizeWithTextMeasurement({
+      element,
+      handle,
+      to,
+      allElements: [...frame.elements],
+      zoom: frame.zoom,
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+    });
+  }
+
+  function findBindableShape(
+    point: Point,
+    exclude: Set<string> = new Set(),
+  ): BindableShape | null {
+    return geometry.findBindableShape(
+      point,
+      [...frame.elements],
+      frame.zoom,
+      exclude,
+    );
+  }
+
+  /** Re-points any arrows bound to the given shapes after those shapes moved. */
+  function syncBoundArrows(shapeIds: Set<string>, list: SketchElement[]) {
+    return geometry.syncBoundArrows(shapeIds, list, [...frame.elements]);
+  }
+
+  /**
+   * Commits the current selection as a history entry, normalising each element
+   * first so a shape dragged right-to-left is stored left-to-right.
+   */
+  function commitSelectedElementSnapshot({ render = false } = {}) {
+    const normalized = selectedElementsList().map(normalizeElement);
+    commitUpdatedElements(normalized, {
+      selectedElementIds: normalized.map((element) => element.id),
+    });
+    if (render) renderers.renderSelection();
+  }
+
   function undo() {
     const { snapshot } = undoHistory(frame.history);
     publishHistoryStatus();
@@ -253,6 +365,14 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
     frame,
     getState,
     setAppState,
+    ...renderers,
+    screenToCanvas,
+    canvasToScreen,
+    getViewportBounds,
+    getPointerPosition,
+    clearPointerPosition() {
+      frame.pointerScreenPosition = null;
+    },
 
     /**
      * Runs an action against the editor. Internal to the engine: the tool
@@ -268,7 +388,8 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
     setZoomDisplay: (zoomDisplay: number) => setAppState({ zoomDisplay }),
     setPanOffsetDisplay: (panOffsetDisplay: Point) =>
       setAppState({ panOffsetDisplay }),
-    setIsBeautifying: (isBeautifying: boolean) => setAppState({ isBeautifying }),
+    setIsBeautifying: (isBeautifying: boolean) =>
+      setAppState({ isBeautifying }),
     setScribblePending: (isScribblePending: boolean) =>
       setAppState({ isScribblePending }),
     setScribbleEnabled: (scribbleEnabled: boolean) =>
@@ -291,6 +412,14 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
     setActiveTool,
     setStyle,
     setToolbarStyle,
+    setSelectedTool: (selectedTool: Tool | null) =>
+      setAppState({ selectedTool }),
+    selectedElementsList,
+    normalizeElement,
+    applyResize,
+    findBindableShape,
+    syncBoundArrows,
+    commitSelectedElementSnapshot,
     undo,
     redo,
     notifyChange: () => options.onChange?.(),

@@ -1,72 +1,62 @@
-import type { SketchElement } from "@repo/element/types";
-import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
 import { applyLayoutUpdates } from "./beautify";
 import { recolorByTheme } from "@repo/element/recolor";
+import type { SketchEditor } from "../editor/sketchEditor";
 
-type Ref<T> = { current: T };
-
-export type CanvasEffectsContext = {
-  elements: Ref<SketchElement[]>;
-  recognitionConfig: Ref<RecognitionConfig>;
-  selectedElementsList: () => SketchElement[];
-  setStrokeColor: (color: string) => void;
-  setIsBeautifying: (isBeautifying: boolean) => void;
-  syncBoundArrows: (
-    shapeIds: Set<string>,
-    elements: SketchElement[],
-  ) => SketchElement[];
-  pushHistorySnapshot: (snapshot?: SketchElement[]) => void;
-  renderSceneAndSelection: () => void;
-};
-
-export async function beautifyLayout(ctx: CanvasEffectsContext) {
-  const apiKey = ctx.recognitionConfig.current.apiKey?.trim();
+export async function beautifyLayout(editor: SketchEditor) {
+  const apiKey = editor.getState().recognitionApiKey?.trim();
   if (!apiKey) {
     throw new Error("A Gemini API key is required. Add it in Settings.");
   }
 
-  const allElements = [...ctx.elements.current];
+  const allElements = [...editor.frame.elements];
   if (!allElements.length) return;
 
-  ctx.setIsBeautifying(true);
+  editor.setIsBeautifying(true);
   try {
     const updates = await getAILayout(allElements, apiKey);
     if (!updates.length) return;
 
     const updateMap = new Map(updates.map((u) => [u.id, u]));
-    ctx.elements.current = applyLayoutUpdates(ctx.elements.current, updateMap);
+    editor.setSceneElements(
+      applyLayoutUpdates(editor.frame.elements, updateMap),
+    );
 
-    const allIds = new Set(ctx.elements.current.map((element) => element.id));
-    ctx.elements.current = ctx.syncBoundArrows(allIds, ctx.elements.current);
+    const allIds = new Set(editor.frame.elements.map((element) => element.id));
+    editor.setSceneElements(
+      editor.syncBoundArrows(allIds, editor.frame.elements),
+    );
 
-    ctx.pushHistorySnapshot([...ctx.elements.current]);
-    ctx.renderSceneAndSelection();
+    editor.pushHistorySnapshot([...editor.frame.elements]);
+    editor.renderSceneAndSelection();
   } finally {
-    ctx.setIsBeautifying(false);
+    editor.setIsBeautifying(false);
   }
 }
 
 export function applyThemeColors(
-  ctx: CanvasEffectsContext,
+  editor: SketchEditor,
   isDark: boolean,
   options: { recordHistory?: boolean } = {},
 ) {
   const result = recolorByTheme(
-    ctx.elements.current,
-    ctx.selectedElementsList(),
+    editor.frame.elements,
+    editor.selectedElementsList(),
     isDark,
   );
 
-  ctx.setStrokeColor(result.newDefaultStroke);
-  ctx.elements.current = result.elements.map(
-    (element) =>
-      result.selected.find((selected) => selected.id === element.id) ?? element,
+  editor.setToolbarStyle({ strokeColor: result.newDefaultStroke });
+  editor.setSceneElements(
+    result.elements.map(
+      (element) =>
+        result.selected.find((selected) => selected.id === element.id) ??
+        element,
+    ),
   );
 
   if (result.changed && options.recordHistory !== false) {
-    ctx.pushHistorySnapshot([...ctx.elements.current]);
+    editor.pushHistorySnapshot([...editor.frame.elements]);
   }
-  ctx.renderSceneAndSelection();
+  editor.renderSceneAndSelection();
   return result.changed;
 }

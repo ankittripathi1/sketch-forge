@@ -1,111 +1,92 @@
-import type { ActiveTool, Point, SketchElement, Tool } from "@repo/element/types";
+import type { Point, SketchElement } from "@repo/element/types";
 import { hitTestElement } from "@repo/element/bounds";
 import {
   canEditTextForElement,
   getTextEditPreviewElement,
   openTextCreationEditor,
   openTextEditEditor,
-  type TextEditorStyle,
 } from "./text";
-
-type Ref<T> = { current: T };
-
-export type TextControllerContext = {
-  tool: ActiveTool;
-  elements: Ref<SketchElement[]>;
-  selectedIds: Ref<Set<string>>;
-  zoom: Ref<number>;
-  screenToCanvas: (point: Point) => Point;
-  canvasToScreen: (point: Point) => Point;
-  textEditorStyle: () => TextEditorStyle;
-  selectedElementsList: () => SketchElement[];
-  commitSelectedElements: () => void;
-  commitCreatedElement: (element: SketchElement) => void;
-  saveSelectedElementEdit: (element: SketchElement) => void;
-  clearSelection: () => void;
-  setSelectedElements: (next: SketchElement[]) => void;
-  setSelectedTool: (tool: Tool | null) => void;
-  renderSceneAndSelection: () => void;
-  renderSelection: () => void;
-};
+import type { SketchEditor } from "../editor/sketchEditor";
+import { getTextEditorStyle } from "../lib/toolStyleController";
 
 export function startTextCreation(
-  ctx: TextControllerContext,
+  editor: SketchEditor,
   screenPoint: Point,
   point: Point,
 ) {
-  ctx.commitSelectedElements();
+  editor.commitSelectedElements();
   openTextCreationEditor({
     screenPoint,
     point,
-    style: ctx.textEditorStyle(),
+    style: getTextEditorStyle(editor, editor.frame.zoom),
   }).then((element) => {
-    if (element) ctx.commitCreatedElement(element);
+    if (element) {
+      editor.commitCreatedElement(element);
+      editor.renderSceneAndSelection();
+    }
   });
 }
 
-function restoreSelectedElement(
-  ctx: TextControllerContext,
-  element: SketchElement,
-) {
-  ctx.setSelectedElements([element]);
-  ctx.setSelectedTool(element.tool);
-  ctx.renderSelection();
+function restoreSelectedElement(editor: SketchEditor, element: SketchElement) {
+  editor.setSelectedElements([element]);
+  editor.setSelectedTool(element.tool);
+  editor.renderSelection();
 }
 
-export function editSelectedText(ctx: TextControllerContext) {
-  const selected = ctx.selectedElementsList();
+export function editSelectedText(editor: SketchEditor) {
+  const selected = editor.selectedElementsList();
   if (selected.length !== 1) return;
   const element = selected[0]!;
   if (!canEditTextForElement(element)) return;
 
   const screenPos =
     element.tool === "text"
-      ? ctx.canvasToScreen({ x: element.x1, y: element.y1 })
-      : ctx.canvasToScreen({
-        x: Math.min(element.x1, element.x2),
-        y: Math.min(element.y1, element.y2),
-      });
+      ? editor.canvasToScreen({ x: element.x1, y: element.y1 })
+      : editor.canvasToScreen({
+          x: Math.min(element.x1, element.x2),
+          y: Math.min(element.y1, element.y2),
+        });
 
-  ctx.setSelectedElements([getTextEditPreviewElement(element)])
-  ctx.renderSceneAndSelection()
+  editor.setSelectedElements([getTextEditPreviewElement(element)]);
+  editor.renderSceneAndSelection();
 
   openTextEditEditor({
     element,
     screenPoint: screenPos,
-    style: ctx.textEditorStyle(),
+    style: getTextEditorStyle(editor, editor.frame.zoom),
   }).then((updated) => {
     if (!updated) {
-      restoreSelectedElement(ctx, element);
+      restoreSelectedElement(editor, element);
       return;
     }
-    ctx.saveSelectedElementEdit(updated);
+    editor.saveSelectedElementEdit(updated);
+    editor.renderSceneAndSelection();
   });
 }
 
 export function handleTextDoubleClick(
-  ctx: TextControllerContext,
+  editor: SketchEditor,
   screenPoint: Point,
 ) {
-  if (ctx.tool === "text") {
-    const point = ctx.screenToCanvas(screenPoint);
-    startTextCreation(ctx, screenPoint, point);
+  if (editor.getState().activeTool === "text") {
+    const point = editor.screenToCanvas(screenPoint);
+    startTextCreation(editor, screenPoint, point);
     return;
   }
 
-  if (ctx.tool !== "select") return;
+  if (editor.getState().activeTool !== "select") return;
 
-  const point = ctx.screenToCanvas(screenPoint);
-  const hit = [...ctx.elements.current]
+  const point = editor.screenToCanvas(screenPoint);
+  const hit = [...editor.frame.elements]
     .reverse()
-    .find((el) => hitTestElement(el, point, 8 / ctx.zoom.current));
+    .find((el) => hitTestElement(el, point, 8 / editor.frame.zoom));
 
   if (!hit || !canEditTextForElement(hit)) return;
 
-  if (!ctx.selectedIds.current.has(hit.id)) {
-    ctx.setSelectedElements([hit]);
-    ctx.setSelectedTool(hit.tool);
-    ctx.renderSceneAndSelection();
+  if (!editor.getState().selectedElementIds.has(hit.id)) {
+    editor.setSelectedElements([hit]);
+    editor.setSelectedTool(hit.tool);
+    editor.renderSceneAndSelection();
   }
-  editSelectedText(ctx);
+  editSelectedText(editor);
 }

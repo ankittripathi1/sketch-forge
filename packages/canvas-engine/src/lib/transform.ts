@@ -1,6 +1,5 @@
 import { Point } from "@repo/canvas-core";
 
-
 export function getDeviceScale(canvas: HTMLCanvasElement): number {
   const rect = canvas.getBoundingClientRect();
   return rect.width > 0 ? canvas.width / rect.width : 1;

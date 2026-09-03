@@ -1,4 +1,5 @@
 import type { AnchorSide, Point, SketchElement } from "@repo/element/types";
+import type { SelectInteraction, SelectionMarquee } from "./interactions";
 import {
   getBoundingBox,
   getElementsBoundingBox,
@@ -7,23 +8,7 @@ import {
   isElementInsideRect,
 } from "@repo/element/bounds";
 
-export type SelectInteraction =
-  | { type: "idle" }
-  | { type: "dragging"; lastPoint: Point; moved: boolean }
-  | {
-      type: "resizing";
-      handle: number;
-      origin: SketchElement;
-      moved: boolean;
-    }
-  | { type: "marquee"; additive: boolean };
-
-export type SelectionMarquee = {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-};
+export type { SelectInteraction, SelectionMarquee } from "./interactions";
 
 export type SelectPointerDownAction =
   | { type: "start-drag" }

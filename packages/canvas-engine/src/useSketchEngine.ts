@@ -2,33 +2,11 @@
 
 import { RefObject, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { SketchElement, Point, FillStyle } from "@repo/element/types";
 import {
-  SketchElement,
-  Point,
-  Tool,
-  ActiveTool,
-  FillStyle,
-} from "@repo/element/types";
-import type { AnchorSide } from "@repo/element/types";
-import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
-import {
-  screenToCanvas as screenToCanvasMath,
-  canvasToScreen as canvasToScreenMath,
-} from "@repo/math";
-import * as geometry from "@repo/element/transform";
-import {
-  applyThemeColors as applyControllerThemeColors,
-  beautifyLayout as beautifyControllerLayout,
-  type CanvasEffectsContext,
+  applyThemeColors,
+  beautifyLayout,
 } from "./lib/canvasEffectsController";
-import {
-  getTextEditorStyle,
-  syncToolbarStyleFromElement as syncControllerToolbarStyleFromElement,
-} from "./lib/toolStyleController";
-import {
-  queueScribbleStroke,
-  type ScribbleControllerContext,
-} from "./lib/scribbleController";
 import {
   deleteSelectedElements,
   deselectCanvas,
@@ -36,48 +14,35 @@ import {
   handleImageDrop,
   redoCanvas,
   replaceCanvasElements,
-  type CanvasCommandsContext,
   undoCanvas,
   getSelectedCanvasElements,
   pasteCanvasElements,
-  pasteImageFromClipboard as pasteImageFromClipboardCmd,
+  pasteImageFromClipboard,
 } from "./lib/canvasCommands";
-import { getSelectedElements } from "@repo/element/selection";
 import {
   beginPanning,
   getCursorForPoint as getViewportCursorForPoint,
   handlePanningMove,
   panViewport,
-  type ViewportControllerContext,
   zoomViewport,
 } from "./lib/viewportController";
 import {
   editSelectedText,
   handleTextDoubleClick,
-  startTextCreation as startTextControllerCreation,
-  type TextControllerContext,
+  startTextCreation,
 } from "./tools/textController";
 import {
-  type SelectionMarquee,
-  type SelectInteraction,
-} from "./tools/select";
-import {
-  finalizeSelectInteraction as finalizeSelectControllerInteraction,
-  handleSelectPointerDown as handleSelectControllerPointerDown,
-  handleSelectPointerMove as handleSelectControllerPointerMove,
-  type SelectControllerContext,
+  finalizeSelectInteraction,
+  handleSelectPointerDown,
+  handleSelectPointerMove,
 } from "./tools/selectController";
-import { createRenderers } from "./lib/rendering";
 import {
-  finalizeDrawingInteraction as finalizeDrawingControllerInteraction,
-  handleDrawingPointerMove as handleDrawingControllerPointerMove,
-  startDrawing as startDrawingController,
-  updateArrowHover as updateControllerArrowHover,
-  type CanvasInteraction,
-  type DrawingControllerContext,
+  finalizeDrawingInteraction,
+  handleDrawingPointerMove,
+  startDrawing,
+  updateArrowHover,
 } from "./tools/drawingController";
 import { createSketchEditor, type SketchEditor } from "./editor/sketchEditor";
-import type { CanvasViewportBounds } from "./lib/pastePlacement";
 import type { CanvasTheme, CurrentItemStyle } from "./appState";
 
 const MIN_ZOOM = 0.05;
@@ -87,9 +52,9 @@ const DUPLICATE_OFFSET = 24;
 /**
  * React binding for {@link createSketchEditor}.
  *
- * The editor owns the scene, the history and the view state; this hook creates
- * one, subscribes React to its store, and holds the interaction refs the tool
- * controllers still read directly.
+ * Creates one editor, subscribes React to its view state, and routes pointer
+ * events to the tool controllers. All state lives on the editor; this hook
+ * holds none of its own.
  */
 export function useSketchEngine(
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>,
@@ -112,6 +77,28 @@ export function useSketchEngine(
     }),
   );
 
+  /**
+   * Ref-shaped views onto frame state, for callers that still expect refs.
+   * They go away when the pages move to calling the editor directly.
+   */
+  const elementsRef = useRef({
+    get current() {
+      return editor.frame.elements;
+    },
+    set current(next: SketchElement[]) {
+      editor.setSceneElements(next);
+    },
+  }).current as unknown as { current: SketchElement[] };
+
+  const isPanningRef = useRef({
+    get current() {
+      return editor.frame.isPanning;
+    },
+    set current(next: boolean) {
+      editor.frame.isPanning = next;
+    },
+  }).current as unknown as { current: boolean };
+
   const appState = useStore(editor.store);
   const {
     activeTool: tool,
@@ -127,564 +114,164 @@ export function useSketchEngine(
     recognitionBackend,
     recognitionApiKey,
   } = appState;
-  const {
-    strokeColor,
-    fillColor,
-    fillStyle,
-    strokeWidth,
-    fontFamily,
-    fontSize,
-    fontWeight,
-    textAlign,
-    textVerticalAlign,
-  } = currentItemStyle;
 
   useEffect(() => {
     editor.setTheme(canvasMode);
   }, [editor, canvasMode]);
 
-  // Frame state the tool controllers still reach into directly. These move onto
-  // the editor with the controllers themselves.
-  const selectionMarquee = useRef<SelectionMarquee | null>(null);
-  const selectInteraction = useRef<SelectInteraction>({ type: "idle" });
-  const canvasInteraction = useRef<CanvasInteraction>({ type: "idle" });
-  const currentElement = useRef<SketchElement | null>(null);
-  const isPanning = useRef(false);
-  const zoom = useRef(1);
-  const panOffset = useRef<Point>({ x: 0, y: 0 });
-  const pointerScreenPosition = useRef<Point | null>(null);
-  const rafId = useRef<number>(0);
-  const viewportRafId = useRef<number>(0);
-  const hoveredAnchor = useRef<{
-    shape: SketchElement;
-    anchor: AnchorSide;
-  } | null>(null);
-  const pendingScribbleIds = useRef<string[]>([]);
-  const scribbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  /**
-   * Ref-shaped views onto editor state, so the controllers keep working while
-   * they still take a hand-built context. Reads and whole-value writes only;
-   * nothing mutates these in place.
-   */
-  const elements = useRef({
-    get current() {
-      return editor.getElements();
-    },
-    set current(next: SketchElement[]) {
-      editor.setSceneElements(next);
-    },
-  }).current as unknown as RefObject<SketchElement[]>;
-
-  const selectedIds = useRef({
-    get current() {
-      return editor.getState().selectedElementIds as Set<string>;
-    },
-    set current(next: Set<string>) {
-      editor.setAppState({ selectedElementIds: next });
-    },
-  }).current as unknown as RefObject<Set<string>>;
-
-  const recognitionConfigRef = useRef({
-    get current(): RecognitionConfig {
-      const state = editor.getState();
-      return {
-        backend: state.recognitionBackend,
-        apiKey: state.recognitionApiKey,
-      };
-    },
-  }).current as unknown as RefObject<RecognitionConfig>;
-
-  function screenToCanvas(point: Point): Point {
-    return screenToCanvasMath(point, zoom.current, panOffset.current);
-  }
-
-  function canvasToScreen(point: Point): Point {
-    return canvasToScreenMath(point, zoom.current, panOffset.current);
-  }
-
-  function getViewportBounds(): CanvasViewportBounds | null {
-    const canvas = editor.surface.interaction();
-    if (!canvas) return null;
-
-    const { width, height } = canvas.getBoundingClientRect();
-    const topLeft = screenToCanvas({ x: 0, y: 0 });
-    const bottomRight = screenToCanvas({ x: width, y: height });
-
-    return {
-      x: topLeft.x,
-      y: topLeft.y,
-      width: bottomRight.x - topLeft.x,
-      height: bottomRight.y - topLeft.y,
-    };
-  }
-
-  function getPointerPosition(): Point | null {
-    return pointerScreenPosition.current
-      ? screenToCanvas(pointerScreenPosition.current)
-      : null;
-  }
-
-  function clearPointerPosition() {
-    pointerScreenPosition.current = null;
-  }
-
-  const renderers = createRenderers({
-    sceneCanvas: sceneCanvasRef,
-    interactionCanvas: interactionCavasRef,
-    elements,
-    selectedIds,
-    currentElement,
-    hoveredAnchor,
-    selectionMarquee,
-    zoom,
-    panOffset,
-    interactionRafId: rafId,
-    viewportRafId,
-    setPanOffsetDisplay: editor.setPanOffsetDisplay,
-  });
-  const {
-    renderScene,
-    renderActiveElement,
-    renderSelection,
-    renderSceneAndSelection,
-    scheduleSelectionRender,
-    scheduleActiveElementRender,
-    scheduleSceneAndSelectionRender,
-    scheduleViewportRender,
-  } = renderers;
-
-  function selectedElementsList() {
-    return getSelectedElements(editor.getElements(), selectedIds.current);
-  }
-
-  function updateSelectedElements(updates: Partial<SketchElement>) {
-    if (!editor.updateSelectedElements(updates)) return;
-    renderSceneAndSelection();
-  }
-
   function applyStyle(style: Partial<CurrentItemStyle>) {
     if (!editor.setStyle(style)) return;
-    renderSceneAndSelection();
-  }
-
-  function syncToolbarStyleFromElement(element: SketchElement) {
-    syncControllerToolbarStyleFromElement(editor, element);
-  }
-
-  function saveSelectedElementEdit(element: SketchElement) {
-    editor.saveSelectedElementEdit(element);
-    renderSceneAndSelection();
-  }
-
-  function commitCreatedElement(
-    element: SketchElement,
-    options: { select?: boolean; nextTool?: ActiveTool } = {},
-  ) {
-    editor.commitCreatedElement(element, options);
-    renderSceneAndSelection();
-  }
-
-  function commitSceneElements(nextElements: SketchElement[]) {
-    editor.commitSceneElements(nextElements);
-  }
-
-  function textEditorStyle() {
-    return getTextEditorStyle(editor, zoom.current);
-  }
-
-  function commitSelectedElements() {
-    editor.commitSelectedElements();
-    renderSceneAndSelection();
-  }
-
-  const clearSelection = editor.clearSelection;
-  const setSelectedElements = editor.setSelectedElements;
-  const pushHistorySnapshot = editor.pushHistorySnapshot;
-  const setSelectedTool = (next: Tool | null) =>
-    editor.setAppState({ selectedTool: next });
-
-  function textControllerContext(): TextControllerContext {
-    return {
-      tool,
-      elements,
-      selectedIds,
-      zoom,
-      screenToCanvas,
-      canvasToScreen,
-      textEditorStyle,
-      selectedElementsList,
-      commitSelectedElements,
-      commitCreatedElement,
-      saveSelectedElementEdit,
-      clearSelection,
-      setSelectedElements,
-      setSelectedTool,
-      renderSceneAndSelection,
-      renderSelection,
-    };
-  }
-
-  function normalizeElement(el: SketchElement): SketchElement {
-    return geometry.normalizeElement(el);
-  }
-
-  function applyResize(
-    el: SketchElement,
-    handle: number,
-    to: Point,
-  ): SketchElement {
-    return geometry.applyResizeWithTextMeasurement({
-      element: el,
-      handle,
-      to,
-      allElements: [...editor.getElements()],
-      zoom: zoom.current,
-      fontFamily,
-      fontSize,
-      fontWeight,
-    });
-  }
-
-  function findBindableShape(
-    point: Point,
-    exclude: Set<string> = new Set(),
-  ): { shape: SketchElement; anchor: AnchorSide } | null {
-    return geometry.findBindableShape(
-      point,
-      [...editor.getElements()],
-      zoom.current,
-      exclude,
-    );
-  }
-
-  function syncBoundArrows(shapeIds: Set<string>, list: SketchElement[]) {
-    return geometry.syncBoundArrows(shapeIds, list, [...editor.getElements()]);
-  }
-
-  function commitSelectedElementSnapshot({ render = false } = {}) {
-    const normalized = selectedElementsList().map(normalizeElement);
-    editor.commitUpdatedElements(normalized, {
-      selectedElementIds: normalized.map((element) => element.id),
-    });
-    if (render) renderSelection();
-  }
-
-  function selectControllerContext(): SelectControllerContext {
-    return {
-      elements,
-      selectedIds,
-      selectionMarquee,
-      selectInteraction,
-      hoveredAnchor,
-      zoom,
-      screenToCanvas,
-      selectedElementsList,
-      setSelectedElements,
-      setSelectedTool,
-      syncToolbarStyleFromElement,
-      clearSelection,
-      applyResize,
-      syncBoundArrows,
-      findBindableShape,
-      commitSelectedElementSnapshot,
-      renderSceneAndSelection,
-      renderSelection,
-      scheduleSelectionRender,
-      scheduleSceneAndSelectionRender,
-    };
-  }
-
-  function scribbleControllerContext(): ScribbleControllerContext {
-    return {
-      pendingScribbleIds,
-      scribbleTimer,
-      recognitionConfig: recognitionConfigRef,
-      elements,
-      strokeColor,
-      fontFamily,
-      fontWeight,
-      setScribblePending: editor.setScribblePending,
-      pushHistorySnapshot,
-      renderScene,
-    };
-  }
-
-  function queueScribble(id: string) {
-    queueScribbleStroke(scribbleControllerContext(), id);
-  }
-
-  function drawingControllerContext(): DrawingControllerContext {
-    return {
-      tool: tool as Tool,
-      style: { strokeColor, fillColor, fillStyle, strokeWidth },
-      canvasInteraction,
-      currentElement,
-      hoveredAnchor,
-      elements,
-      interactionCanvas: interactionCavasRef,
-      rafId,
-      scribbleEnabled,
-      queueScribble,
-      findBindableShape,
-      normalizeElement,
-      commitCreatedElement,
-      commitSceneElements,
-      renderActiveElement,
-      renderScene,
-      renderSceneAndSelection,
-      scheduleActiveElementRender,
-    };
-  }
-
-  function viewportControllerContext(): ViewportControllerContext {
-    return {
-      tool,
-      canvasInteraction,
-      panOffset,
-      zoom,
-      elements,
-      isPanning,
-      selectedElementsList,
-      screenToCanvas,
-      setZoomLevel: editor.setZoomDisplay,
-      scheduleViewportRender,
-    };
-  }
-
-  function canvasCommandsContext(): CanvasCommandsContext {
-    return {
-      editor,
-      screenToCanvas,
-      renderScene,
-      renderSceneAndSelection,
-    };
-  }
-
-  function canvasEffectsContext(): CanvasEffectsContext {
-    return {
-      elements,
-      recognitionConfig: recognitionConfigRef,
-      selectedElementsList,
-      setStrokeColor: (color: string) =>
-        editor.setToolbarStyle({ strokeColor: color }),
-      setIsBeautifying: editor.setIsBeautifying,
-      syncBoundArrows,
-      pushHistorySnapshot,
-      renderSceneAndSelection,
-    };
+    editor.renderSceneAndSelection();
   }
 
   function onPointerDown(screenPoint: Point, e: React.PointerEvent) {
-    pointerScreenPosition.current = screenPoint;
+    editor.frame.pointerScreenPosition = screenPoint;
     if (tool === "select" && e.button === 2) return;
-    if (isPanning.current) {
-      return beginPanning(viewportControllerContext(), screenPoint);
+    if (editor.frame.isPanning) {
+      return beginPanning(editor, screenPoint);
     }
 
-    const point = screenToCanvas(screenPoint);
+    const point = editor.screenToCanvas(screenPoint);
     if (tool === "text") {
-      return startTextControllerCreation(
-        textControllerContext(),
-        screenPoint,
-        point,
-      );
+      return startTextCreation(editor, screenPoint, point);
     }
 
-    if (tool !== "select" && selectedIds.current.size > 0) {
-      commitSelectedElements();
+    if (tool !== "select" && editor.getState().selectedElementIds.size > 0) {
+      editor.commitSelectedElements();
+      editor.renderSceneAndSelection();
     }
 
     if (tool === "select") {
-      return handleSelectControllerPointerDown(
-        selectControllerContext(),
-        point,
-        e.shiftKey,
-      );
+      return handleSelectPointerDown(editor, point, e.shiftKey);
     }
-    startDrawingController(drawingControllerContext(), point);
+    startDrawing(editor, point);
   }
 
   function onPointerMove(screenPoint: Point) {
-    pointerScreenPosition.current = screenPoint;
-    if (handlePanningMove(viewportControllerContext(), screenPoint)) return;
-    if (
-      tool === "select" &&
-      handleSelectControllerPointerMove(selectControllerContext(), screenPoint)
-    )
+    editor.frame.pointerScreenPosition = screenPoint;
+    if (handlePanningMove(editor, screenPoint)) return;
+    if (tool === "select" && handleSelectPointerMove(editor, screenPoint))
       return;
-    const point = screenToCanvas(screenPoint);
-    const drawingCtx = drawingControllerContext();
-    if (updateControllerArrowHover(drawingCtx, point)) return;
-    handleDrawingControllerPointerMove(drawingCtx, point);
+    const point = editor.screenToCanvas(screenPoint);
+    if (updateArrowHover(editor, point)) return;
+    handleDrawingPointerMove(editor, point);
   }
 
   async function finalizeElement() {
-    if (canvasInteraction.current.type === "panning") {
-      canvasInteraction.current = { type: "idle" };
+    if (editor.frame.canvasInteraction.type === "panning") {
+      editor.frame.canvasInteraction = { type: "idle" };
       return;
     }
 
     if (tool === "select") {
-      return finalizeSelectControllerInteraction(selectControllerContext());
+      return finalizeSelectInteraction(editor);
     }
-    finalizeDrawingControllerInteraction(drawingControllerContext());
-  }
-
-  function handleZoom(delta: number, cursorScreen: Point) {
-    zoomViewport({
-      ctx: viewportControllerContext(),
-      cursorScreen,
-      delta,
-      minZoom: MIN_ZOOM,
-      maxZoom: MAX_ZOOM,
-    });
-  }
-
-  function onPan(dx: number, dy: number) {
-    panViewport(viewportControllerContext(), dx, dy);
-  }
-
-  function getCursorForPoint(screenPoint: Point): string {
-    return getViewportCursorForPoint(viewportControllerContext(), screenPoint);
-  }
-
-  function handleDrop(e: DragEvent, point: Point) {
-    handleImageDrop(canvasCommandsContext(), e, point);
-  }
-
-  function onDoubleClick(screenPoint: Point) {
-    handleTextDoubleClick(textControllerContext(), screenPoint);
-  }
-
-  function editSelected() {
-    editSelectedText(textControllerContext());
-  }
-
-  function undo() {
-    undoCanvas(canvasCommandsContext());
-  }
-
-  function redo() {
-    redoCanvas(canvasCommandsContext());
-  }
-
-  function deleteSelected() {
-    deleteSelectedElements(canvasCommandsContext());
-  }
-
-  function duplicateSelected() {
-    duplicateSelectedElements(canvasCommandsContext(), DUPLICATE_OFFSET);
-  }
-
-  function getClipboardElements(): SketchElement[] {
-    return getSelectedCanvasElements(canvasCommandsContext());
-  }
-
-  function pasteClipboardElements(
-    sourceElements: SketchElement[],
-    offset: Point,
-  ): boolean {
-    return pasteCanvasElements(canvasCommandsContext(), sourceElements, offset);
-  }
-
-  /**
-   * Pastes an image from the clipboard onto the canvas. Drops it under the
-   * pointer when one is known, otherwise at the centre of the current viewport.
-   * Returns true when an image was found (so the caller can consume the event).
-   */
-  function pasteClipboardImage(clipboardData: DataTransfer | null): boolean {
-    const bounds = getViewportBounds();
-    const canvasPoint =
-      getPointerPosition() ??
-      (bounds
-        ? { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
-        : { x: 0, y: 0 });
-    return pasteImageFromClipboardCmd(
-      canvasCommandsContext(),
-      clipboardData,
-      canvasPoint,
-    );
-  }
-
-  function deselect() {
-    deselectCanvas(canvasCommandsContext());
+    finalizeDrawingInteraction(editor);
   }
 
   function stopPanning() {
-    isPanning.current = false;
-    if (canvasInteraction.current.type === "panning") {
-      canvasInteraction.current = { type: "idle" };
+    editor.frame.isPanning = false;
+    if (editor.frame.canvasInteraction.type === "panning") {
+      editor.frame.canvasInteraction = { type: "idle" };
     }
   }
 
-  function setElements(newElements: SketchElement[]) {
-    replaceCanvasElements(canvasCommandsContext(), newElements);
+  /**
+   * Pastes an image from the clipboard. Drops it under the pointer when one is
+   * known, otherwise at the centre of the current viewport. Returns true when
+   * an image was found, so the caller can consume the event.
+   */
+  function pasteClipboardImage(clipboardData: DataTransfer | null): boolean {
+    const bounds = editor.getViewportBounds();
+    const canvasPoint =
+      editor.getPointerPosition() ??
+      (bounds
+        ? { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+        : { x: 0, y: 0 });
+    return pasteImageFromClipboard(editor, clipboardData, canvasPoint);
   }
 
   return {
     editor,
-    elements,
-    setElements,
     tool,
-
     setTool: editor.setActiveTool,
-    strokeColor,
-    setStrokeColor: (color: string) => applyStyle({ strokeColor: color }),
-    fillColor,
-    setFillColor: (color: string) => applyStyle({ fillColor: color }),
-    fillStyle,
-    setFillStyle: (style: FillStyle) => applyStyle({ fillStyle: style }),
-    strokeWidth,
-    setStrokeWidth: (width: number) => applyStyle({ strokeWidth: width }),
     selectedTool,
-    fontFamily,
+
+    strokeColor: currentItemStyle.strokeColor,
+    setStrokeColor: (color: string) => applyStyle({ strokeColor: color }),
+    fillColor: currentItemStyle.fillColor,
+    setFillColor: (color: string) => applyStyle({ fillColor: color }),
+    fillStyle: currentItemStyle.fillStyle,
+    setFillStyle: (style: FillStyle) => applyStyle({ fillStyle: style }),
+    strokeWidth: currentItemStyle.strokeWidth,
+    setStrokeWidth: (width: number) => applyStyle({ strokeWidth: width }),
+    fontFamily: currentItemStyle.fontFamily,
     setFontFamily: (font: string) => applyStyle({ fontFamily: font }),
-    fontSize,
+    fontSize: currentItemStyle.fontSize,
     setFontSize: (size: number) => applyStyle({ fontSize: size }),
-    fontWeight,
+    fontWeight: currentItemStyle.fontWeight,
     setFontWeight: (weight: "normal" | "bold") =>
       applyStyle({ fontWeight: weight }),
-    textAlign,
+    textAlign: currentItemStyle.textAlign,
     setTextAlign: (align: "left" | "center" | "right") =>
       applyStyle({ textAlign: align }),
-    textVerticalAlign,
+    textVerticalAlign: currentItemStyle.textVerticalAlign,
     setTextVerticalAlign: (align: "top" | "middle" | "bottom") =>
       applyStyle({ textVerticalAlign: align }),
+
     applyThemeColors: (
       isDark: boolean,
       options?: { recordHistory?: boolean },
-    ) => applyControllerThemeColors(canvasEffectsContext(), isDark, options),
-    beautifyLayout: () => beautifyControllerLayout(canvasEffectsContext()),
+    ) => applyThemeColors(editor, isDark, options),
+    beautifyLayout: () => beautifyLayout(editor),
     isBeautifying,
+
     zoomLevel,
     panOffsetDisplay,
     onPointerDown,
     onPointerMove,
     finalizeElement,
-    handleZoom,
-    isPanningRef: isPanning,
+    handleZoom: (delta: number, cursorScreen: Point) =>
+      zoomViewport({
+        editor,
+        cursorScreen,
+        delta,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+      }),
+    onPan: (dx: number, dy: number) => panViewport(editor, dx, dy),
+    getCursorForPoint: (screenPoint: Point) =>
+      getViewportCursorForPoint(editor, screenPoint),
+    isPanningRef,
     stopPanning,
-    undo,
-    redo,
+
+    undo: () => undoCanvas(editor),
+    redo: () => redoCanvas(editor),
     canUndo,
     canRedo,
-    getClipboardElements,
-    getPointerPosition,
-    clearPointerPosition,
-    getViewportBounds,
-    pasteClipboardElements,
+
+    getClipboardElements: () => getSelectedCanvasElements(editor),
+    getPointerPosition: editor.getPointerPosition,
+    clearPointerPosition: editor.clearPointerPosition,
+    getViewportBounds: editor.getViewportBounds,
+    pasteClipboardElements: (source: SketchElement[], offset: Point) =>
+      pasteCanvasElements(editor, source, offset),
     pasteClipboardImage,
-    deleteSelected,
-    duplicateSelected,
-    deselect,
-    getCursorForPoint,
-    handleDrop,
-    onDoubleClick,
-    editSelected,
-    renderScene,
-    renderSelection,
-    onPan,
+    deleteSelected: () => deleteSelectedElements(editor),
+    duplicateSelected: () =>
+      duplicateSelectedElements(editor, DUPLICATE_OFFSET),
+    deselect: () => deselectCanvas(editor),
+
+    handleDrop: (e: DragEvent, point: Point) =>
+      handleImageDrop(editor, e, point),
+    onDoubleClick: (screenPoint: Point) =>
+      handleTextDoubleClick(editor, screenPoint),
+    editSelected: () => editSelectedText(editor),
+    renderScene: editor.renderScene,
+    renderSelection: editor.renderSelection,
+
+    elements: elementsRef,
+    setElements: (next: SketchElement[]) => replaceCanvasElements(editor, next),
     scribbleEnabled,
     setScribbleEnabled: editor.setScribbleEnabled,
     scribblePending,
