@@ -47,7 +47,7 @@ describe("getBoundingBox", () => {
 describe("hitTestElement", () => {
   test("hits inside a rectangle bounding box", () => {
     const el = makeElement();
-    expect(hitTestElement(el, { x: 500, y: 25 })).toBe(false);
+    expect(hitTestElement(el, { x: 50, y: 25 })).toBe(true);
   });
 
   test("misses well outside the threshold", () => {
@@ -59,6 +59,48 @@ describe("hitTestElement", () => {
     const line = makeElement({ tool: "line", x1: 0, y1: 0, x2: 100, y2: 0 });
     expect(hitTestElement(line, { x: 50, y: 3 })).toBe(true);
     expect(hitTestElement(line, { x: 50, y: 20 })).toBe(false);
+  });
+
+  test("hits curved arrows along their quadratic path", () => {
+    const arrow = makeElement({
+      tool: "arrow",
+      x1: 0,
+      y1: 0,
+      x2: 100,
+      y2: 0,
+      bend: 50,
+    });
+
+    expect(hitTestElement(arrow, { x: 50, y: 25 }, 5)).toBe(true);
+    expect(hitTestElement(arrow, { x: 50, y: -20 }, 5)).toBe(false);
+  });
+
+  test("uses stroke width when hit-testing highlighters", () => {
+    const highlighter = makeElement({
+      tool: "highlighter",
+      strokeWidth: 20,
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+    });
+
+    expect(hitTestElement(highlighter, { x: 50, y: 8 }, 2)).toBe(true);
+    expect(hitTestElement(highlighter, { x: 50, y: 12 }, 2)).toBe(false);
+  });
+
+  test("checks every segment of a freehand stroke", () => {
+    const freehand = makeElement({
+      tool: "freehand",
+      points: [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+      ],
+    });
+
+    expect(hitTestElement(freehand, { x: 19, y: 15 }, 3)).toBe(true);
+    expect(hitTestElement(freehand, { x: 10, y: 10 }, 3)).toBe(false);
   });
 });
 
