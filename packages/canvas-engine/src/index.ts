@@ -1,12 +1,21 @@
 export { useSketchEngine } from "./useSketchEngine";
-export { useCanvasUI } from "./store";
-export type { CanvasUIState } from "./store";
+export {
+  createSketchEditor,
+  type SketchEditor,
+  type SketchEditorOptions,
+} from "./editor/sketchEditor";
+export { createNullSurface, type Surface } from "./editor/surface";
+export {
+  CanvasEditorProvider,
+  useEditorState,
+  useSketchEditor,
+} from "./react/editorContext";
 export {
   createInitialAppState,
   updateAppState,
   type CanvasAppState,
   type CanvasTheme,
-  type ZoomState,
+  type CurrentItemStyle,
 } from "./appState";
 export {
   cloneSceneElements,
@@ -39,7 +48,11 @@ export {
   type UpdateElementsPayload,
 } from "./actions/elements";
 export { actionSetActiveTool, type SetActiveToolPayload } from "./actions/tool";
-export { performAction, type DispatchActionContext } from "./actions/manager";
+export {
+  performAction,
+  type ActionDispatcher,
+  type DispatchActionContext,
+} from "./actions/manager";
 export {
   defineEditorCommand,
   EditorCommandManager,

@@ -174,71 +174,71 @@ describe("canvas selection actions", () => {
 });
 
 describe("action dispatch integration", () => {
-  test("applies element and app-state updates and captures history", () => {
-    const elements = { current: [] as SketchElement[] };
-    const history = { current: createHistory() };
+  /**
+   * A stand-in for the editor. The point of the five-method dispatcher is that
+   * a test can be one of the two adapters without pulling in React or a canvas.
+   */
+  function makeDispatcher() {
+    const history = createHistory();
+    let elements: SketchElement[] = [];
     let appState = createInitialAppState();
-    const statuses: { canUndo: boolean; canRedo: boolean }[] = [];
-    let changeCount = 0;
-    const element = makeElement();
+    let captureCount = 0;
 
-    const result = dispatchAction(
-      {
-        elements,
-        history,
-        setSceneElements(nextElements) {
-          elements.current = nextElements;
+    return {
+      history,
+      get elements() {
+        return elements;
+      },
+      get appState() {
+        return appState;
+      },
+      get captureCount() {
+        return captureCount;
+      },
+      dispatcher: {
+        getElements: () => elements,
+        setSceneElements(next: SketchElement[]) {
+          elements = next;
         },
         getAppState: () => appState,
-        applyAppState(updates) {
+        setAppState(updates: Partial<typeof appState>) {
           appState = updateAppState(appState, updates);
         },
-        setHistoryStatus(status) {
-          statuses.push(status);
-        },
-        onChange() {
-          changeCount++;
+        captureHistory() {
+          captureCount++;
+          history.push([...elements]);
         },
       },
-      actionAddElement,
-      { element },
-    );
+    };
+  }
+
+  test("applies element and app-state updates and captures history", () => {
+    const target = makeDispatcher();
+    const element = makeElement();
+
+    const result = dispatchAction(target.dispatcher, actionAddElement, {
+      element,
+    });
 
     expect(result).not.toBe(false);
-    expect(elements.current).toEqual([element]);
-    expect(appState.selectedElementIds).toEqual(new Set([element.id]));
-    expect(history.current.getCurrent()).toEqual([element]);
-    expect(statuses).toEqual([{ canUndo: true, canRedo: false }]);
-    expect(changeCount).toBe(1);
+    expect(target.elements).toEqual([element]);
+    expect(target.appState.selectedElementIds).toEqual(new Set([element.id]));
+    expect(target.history.getCurrent()).toEqual([element]);
+    expect(target.captureCount).toBe(1);
   });
 
-  test("does not mutate context when an action returns false", () => {
-    const element = makeElement();
-    const elements = { current: [element] };
-    const history = { current: createHistory() };
-    let appState = createInitialAppState();
-    let applyCount = 0;
+  test("does not touch the dispatcher when an action returns false", () => {
+    const target = makeDispatcher();
 
     const result = dispatchAction(
-      {
-        elements,
-        history,
-        getAppState: () => appState,
-        applyAppState(updates) {
-          applyCount++;
-          appState = updateAppState(appState, updates);
-        },
-        setHistoryStatus() {
-          throw new Error("history should not change");
-        },
-      },
+      target.dispatcher,
       actionDeleteSelected,
       undefined,
     );
 
     expect(result).toBe(false);
-    expect(elements.current).toEqual([element]);
-    expect(history.current.getCurrent()).toEqual([]);
-    expect(applyCount).toBe(0);
+    expect(target.elements).toEqual([]);
+    expect(target.history.getCurrent()).toEqual([]);
+    expect(target.captureCount).toBe(0);
   });
 });

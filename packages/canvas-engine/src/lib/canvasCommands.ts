@@ -1,66 +1,39 @@
-import { createHistory, type HistoryState } from "@repo/element/history";
+import { createHistory } from "@repo/element/history";
 import type { Point, SketchElement } from "@repo/element/types";
-import { redoHistory, undoHistory, type HistoryStatus } from "./historyModel";
 import { buildImageElement } from "../tools/image";
-import type { CanvasAppState } from "../appState";
 import {
   actionDeleteSelected,
   actionDeselect,
   actionDuplicateSelected,
 } from "../actions/selection";
-import { dispatchAction } from "../actions/manager";
-import {
-  actionAddElement,
-  actionInsertElements,
-  actionReplaceScene,
-} from "../actions/elements";
+import { actionAddElement, actionInsertElements } from "../actions/elements";
 import { cloneElementsForPaste, getSelectedElements } from "@repo/element";
+import type { SketchEditor } from "../editor/sketchEditor";
 
-type Ref<T> = { current: T };
-
+/**
+ * Everything these commands need beyond the editor itself: turning a screen
+ * point into canvas space, and painting. Both belong to the canvas surface, not
+ * to the scene.
+ */
 export type CanvasCommandsContext = {
-  elements: Ref<SketchElement[]>;
-  selectedIds: Ref<Set<string>>;
-  history: Ref<HistoryState>;
-  setSceneElements: (elements: SketchElement[]) => void;
-  getAppState: () => CanvasAppState;
-  applyAppState: (updates: Partial<CanvasAppState>) => void;
-  onChange?: () => void;
+  editor: SketchEditor;
   screenToCanvas: (point: Point) => Point;
-  setHistoryStatus: (status: HistoryStatus) => void;
-  clearSelection: () => void;
   renderScene: () => void;
   renderSceneAndSelection: () => void;
 };
 
 export function undoCanvas(ctx: CanvasCommandsContext) {
-  const { snapshot, status } = undoHistory(ctx.history.current);
-  ctx.setHistoryStatus(status);
-  if (!snapshot) return;
-
-  dispatchAction(ctx, actionReplaceScene, {
-    elements: snapshot,
-    captureUpdate: "none",
-  });
-  ctx.onChange?.();
+  if (!ctx.editor.undo()) return;
   ctx.renderSceneAndSelection();
 }
 
 export function redoCanvas(ctx: CanvasCommandsContext) {
-  const { snapshot, status } = redoHistory(ctx.history.current);
-  ctx.setHistoryStatus(status);
-  if (!snapshot) return;
-
-  dispatchAction(ctx, actionReplaceScene, {
-    elements: snapshot,
-    captureUpdate: "none",
-  });
-  ctx.onChange?.();
+  if (!ctx.editor.redo()) return;
   ctx.renderSceneAndSelection();
 }
 
 export function deleteSelectedElements(ctx: CanvasCommandsContext) {
-  const result = dispatchAction(ctx, actionDeleteSelected, undefined);
+  const result = ctx.editor.dispatch(actionDeleteSelected, undefined);
   if (!result) return;
 
   ctx.renderSceneAndSelection();
@@ -70,27 +43,29 @@ export function duplicateSelectedElements(
   ctx: CanvasCommandsContext,
   offset: number,
 ) {
-  const result = dispatchAction(ctx, actionDuplicateSelected, { offset });
+  const result = ctx.editor.dispatch(actionDuplicateSelected, { offset });
   if (!result) return;
 
   ctx.renderSceneAndSelection();
 }
 
 export function deselectCanvas(ctx: CanvasCommandsContext) {
-  const result = dispatchAction(ctx, actionDeselect, undefined);
+  const result = ctx.editor.dispatch(actionDeselect, undefined);
   if (!result) return;
 
   ctx.renderSceneAndSelection();
 }
 
+/**
+ * Replaces the whole scene and starts a fresh history, so an undo cannot walk
+ * back into the document that was open before.
+ */
 export function replaceCanvasElements(
   ctx: CanvasCommandsContext,
   newElements: SketchElement[],
 ) {
-  ctx.history.current = createHistory();
-  dispatchAction(ctx, actionReplaceScene, {
-    elements: newElements,
-  });
+  ctx.editor.frame.history = createHistory();
+  ctx.editor.commitSceneElements(newElements);
   ctx.renderSceneAndSelection();
 }
 
@@ -108,7 +83,7 @@ function insertImageFromFile(
   const reader = new FileReader();
   reader.onload = () => {
     const element = buildImageElement(canvasPoint, reader.result as string);
-    dispatchAction(ctx, actionAddElement, {
+    ctx.editor.dispatch(actionAddElement, {
       element,
       select: false,
     });
@@ -162,7 +137,10 @@ export function pasteImageFromClipboard(
 export function getSelectedCanvasElements(
   ctx: CanvasCommandsContext,
 ): SketchElement[] {
-  return getSelectedElements(ctx.elements.current, ctx.selectedIds.current);
+  return getSelectedElements(
+    ctx.editor.getElements(),
+    new Set(ctx.editor.getState().selectedElementIds),
+  );
 }
 
 export function pasteCanvasElements(
@@ -175,7 +153,7 @@ export function pasteCanvasElements(
   }
   const pastedElements = cloneElementsForPaste(sourceElements, offset);
 
-  const result = dispatchAction(ctx, actionInsertElements, {
+  const result = ctx.editor.dispatch(actionInsertElements, {
     elements: pastedElements,
   });
 

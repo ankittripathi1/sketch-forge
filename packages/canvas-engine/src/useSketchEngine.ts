@@ -1,6 +1,7 @@
 "use client";
 
-import { RefObject, useRef, useState } from "react";
+import { RefObject, useEffect, useRef, useState } from "react";
+import { useStore } from "zustand";
 import {
   SketchElement,
   Point,
@@ -9,7 +10,6 @@ import {
   FillStyle,
 } from "@repo/element/types";
 import type { AnchorSide } from "@repo/element/types";
-import { createHistory } from "@repo/element/history";
 import type { RecognitionConfig } from "@repo/canvas-core/lib/recognition";
 import {
   screenToCanvas as screenToCanvasMath,
@@ -22,18 +22,8 @@ import {
   type CanvasEffectsContext,
 } from "./lib/canvasEffectsController";
 import {
-  applyFillColor as applyControllerFillColor,
-  applyFillStyle as applyControllerFillStyle,
-  applyFontFamily as applyControllerFontFamily,
-  applyFontSize as applyControllerFontSize,
-  applyFontWeight as applyControllerFontWeight,
-  applyStrokeColor as applyControllerStrokeColor,
-  applyStrokeWidth as applyControllerStrokeWidth,
-  applyTextAlign as applyControllerTextAlign,
-  applyTextVerticalAlign as applyControllerTextVerticalAlign,
   getTextEditorStyle,
   syncToolbarStyleFromElement as syncControllerToolbarStyleFromElement,
-  type ToolStyleControllerContext,
 } from "./lib/toolStyleController";
 import {
   queueScribbleStroke,
@@ -68,7 +58,6 @@ import {
   type TextControllerContext,
 } from "./tools/textController";
 import {
-  findSingleSelectionHandle,
   type SelectionMarquee,
   type SelectInteraction,
 } from "./tools/select";
@@ -79,7 +68,6 @@ import {
   type SelectControllerContext,
 } from "./tools/selectController";
 import { createRenderers } from "./lib/rendering";
-import { useCanvasUI } from "./store";
 import {
   finalizeDrawingInteraction as finalizeDrawingControllerInteraction,
   handleDrawingPointerMove as handleDrawingControllerPointerMove,
@@ -88,20 +76,57 @@ import {
   type CanvasInteraction,
   type DrawingControllerContext,
 } from "./tools/drawingController";
-import { createScene } from "./scene";
-import { createEditorController } from "./editor/editorController";
+import { createSketchEditor, type SketchEditor } from "./editor/sketchEditor";
 import type { CanvasViewportBounds } from "./lib/pastePlacement";
+import type { CanvasTheme, CurrentItemStyle } from "./appState";
 
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 20;
 const DUPLICATE_OFFSET = 24;
 
+/**
+ * React binding for {@link createSketchEditor}.
+ *
+ * The editor owns the scene, the history and the view state; this hook creates
+ * one, subscribes React to its store, and holds the interaction refs the tool
+ * controllers still read directly.
+ */
 export function useSketchEngine(
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>,
   interactionCavasRef: RefObject<HTMLCanvasElement | null>,
-  canvasMode: "light" | "dark" = "light",
+  canvasMode: CanvasTheme = "light",
   onChange?: () => void,
 ) {
+  // Read through a ref so a new `onChange` identity never rebuilds the editor.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const [editor] = useState<SketchEditor>(() =>
+    createSketchEditor({
+      surface: {
+        scene: () => sceneCanvasRef.current,
+        interaction: () => interactionCavasRef.current,
+      },
+      theme: canvasMode,
+      onChange: () => onChangeRef.current?.(),
+    }),
+  );
+
+  const appState = useStore(editor.store);
+  const {
+    activeTool: tool,
+    selectedTool,
+    currentItemStyle,
+    zoomDisplay: zoomLevel,
+    panOffsetDisplay,
+    canUndo,
+    canRedo,
+    isBeautifying,
+    isScribblePending: scribblePending,
+    scribbleEnabled,
+    recognitionBackend,
+    recognitionApiKey,
+  } = appState;
   const {
     strokeColor,
     fillColor,
@@ -112,46 +137,17 @@ export function useSketchEngine(
     fontWeight,
     textAlign,
     textVerticalAlign,
-    scribbleEnabled,
-    recognitionBackend,
-    recognitionApiKey,
-    setStrokeColor,
-    setFillColor,
-    setFillStyle,
-    setStrokeWidth,
-    setFontFamily,
-    setFontSize,
-    setFontWeight,
-    setTextAlign,
-    setTextVerticalAlign,
-    setScribbleEnabled,
-    setRecognitionBackend,
-    setRecognitionApiKey,
-  } = useCanvasUI();
+  } = currentItemStyle;
 
-  const [tool, setTool] = useState<ActiveTool>("rectangle");
-  const [historyStatus, setHistoryStatus] = useState({
-    canUndo: false,
-    canRedo: false,
-  });
-  const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(100);
-  const [scribblePending, setScribblePending] = useState(false);
-  const [isBeautifying, setIsBeautifying] = useState(false);
-  const recognitionConfigRef = useRef<RecognitionConfig>({
-    backend: "tesseract",
-  });
-  const [panOffsetDisplay, setPanOffsetDisplay] = useState<Point>({
-    x: 0,
-    y: 0,
-  });
+  useEffect(() => {
+    editor.setTheme(canvasMode);
+  }, [editor, canvasMode]);
 
-  const selectedIds = useRef<Set<string>>(new Set());
+  // Frame state the tool controllers still reach into directly. These move onto
+  // the editor with the controllers themselves.
   const selectionMarquee = useRef<SelectionMarquee | null>(null);
   const selectInteraction = useRef<SelectInteraction>({ type: "idle" });
   const canvasInteraction = useRef<CanvasInteraction>({ type: "idle" });
-  const elements = useRef<SketchElement[]>([]);
-  const scene = useRef(createScene());
   const currentElement = useRef<SketchElement | null>(null);
   const isPanning = useRef(false);
   const zoom = useRef(1);
@@ -159,7 +155,6 @@ export function useSketchEngine(
   const pointerScreenPosition = useRef<Point | null>(null);
   const rafId = useRef<number>(0);
   const viewportRafId = useRef<number>(0);
-  const history = useRef(createHistory());
   const hoveredAnchor = useRef<{
     shape: SketchElement;
     anchor: AnchorSide;
@@ -167,10 +162,38 @@ export function useSketchEngine(
   const pendingScribbleIds = useRef<string[]>([]);
   const scribbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  recognitionConfigRef.current = {
-    backend: recognitionBackend,
-    apiKey: recognitionApiKey,
-  };
+  /**
+   * Ref-shaped views onto editor state, so the controllers keep working while
+   * they still take a hand-built context. Reads and whole-value writes only;
+   * nothing mutates these in place.
+   */
+  const elements = useRef({
+    get current() {
+      return editor.getElements();
+    },
+    set current(next: SketchElement[]) {
+      editor.setSceneElements(next);
+    },
+  }).current as unknown as RefObject<SketchElement[]>;
+
+  const selectedIds = useRef({
+    get current() {
+      return editor.getState().selectedElementIds as Set<string>;
+    },
+    set current(next: Set<string>) {
+      editor.setAppState({ selectedElementIds: next });
+    },
+  }).current as unknown as RefObject<Set<string>>;
+
+  const recognitionConfigRef = useRef({
+    get current(): RecognitionConfig {
+      const state = editor.getState();
+      return {
+        backend: state.recognitionBackend,
+        apiKey: state.recognitionApiKey,
+      };
+    },
+  }).current as unknown as RefObject<RecognitionConfig>;
 
   function screenToCanvas(point: Point): Point {
     return screenToCanvasMath(point, zoom.current, panOffset.current);
@@ -181,7 +204,7 @@ export function useSketchEngine(
   }
 
   function getViewportBounds(): CanvasViewportBounds | null {
-    const canvas = interactionCavasRef.current;
+    const canvas = editor.surface.interaction();
     if (!canvas) return null;
 
     const { width, height } = canvas.getBoundingClientRect();
@@ -218,7 +241,7 @@ export function useSketchEngine(
     panOffset,
     interactionRafId: rafId,
     viewportRafId,
-    setPanOffsetDisplay,
+    setPanOffsetDisplay: editor.setPanOffsetDisplay,
   });
   const {
     renderScene,
@@ -231,66 +254,8 @@ export function useSketchEngine(
     scheduleViewportRender,
   } = renderers;
 
-  const setCurrentItemStyle = (style: {
-    strokeColor: string;
-    fillColor: string;
-    fillStyle: FillStyle;
-    strokeWidth: number;
-    fontFamily: string;
-    fontSize: number;
-    fontWeight: "normal" | "bold";
-    textAlign: "left" | "center" | "right";
-    textVerticalAlign: "top" | "middle" | "bottom";
-  }) => {
-    setStrokeColor(style.strokeColor);
-    setFillColor(style.fillColor);
-    setFillStyle(style.fillStyle);
-    setStrokeWidth(style.strokeWidth);
-    setFontFamily(style.fontFamily);
-    setFontSize(style.fontSize);
-    setFontWeight(style.fontWeight);
-    setTextAlign(style.textAlign);
-    setTextVerticalAlign(style.textVerticalAlign);
-  };
-
-  const editor = createEditorController({
-    elements,
-    scene,
-    history,
-    selectedIds,
-    activeTool: tool,
-    selectedTool,
-    zoom,
-    zoomLevel,
-    panOffset,
-    canvasMode,
-    isPanning,
-    isBeautifying,
-    scribblePending,
-    currentItemStyle: {
-      strokeColor,
-      fillColor,
-      fillStyle,
-      strokeWidth,
-      fontFamily,
-      fontSize,
-      fontWeight,
-      textAlign,
-      textVerticalAlign,
-    },
-    setActiveTool: setTool,
-    setSelectedTool,
-    setHistoryStatus,
-    setCurrentItemStyle,
-    setZoomLevel,
-    setPanOffsetDisplay,
-    setIsBeautifying,
-    setScribblePending,
-    onChange,
-  });
-
   function selectedElementsList() {
-    return getSelectedElements(elements.current, selectedIds.current);
+    return getSelectedElements(editor.getElements(), selectedIds.current);
   }
 
   function updateSelectedElements(updates: Partial<SketchElement>) {
@@ -298,11 +263,13 @@ export function useSketchEngine(
     renderSceneAndSelection();
   }
 
+  function applyStyle(style: Partial<CurrentItemStyle>) {
+    if (!editor.setStyle(style)) return;
+    renderSceneAndSelection();
+  }
+
   function syncToolbarStyleFromElement(element: SketchElement) {
-    syncControllerToolbarStyleFromElement(
-      toolStyleControllerContext(),
-      element,
-    );
+    syncControllerToolbarStyleFromElement(editor, element);
   }
 
   function saveSelectedElementEdit(element: SketchElement) {
@@ -323,7 +290,7 @@ export function useSketchEngine(
   }
 
   function textEditorStyle() {
-    return getTextEditorStyle(toolStyleControllerContext());
+    return getTextEditorStyle(editor, zoom.current);
   }
 
   function commitSelectedElements() {
@@ -334,30 +301,8 @@ export function useSketchEngine(
   const clearSelection = editor.clearSelection;
   const setSelectedElements = editor.setSelectedElements;
   const pushHistorySnapshot = editor.pushHistorySnapshot;
-
-  function toolStyleControllerContext(): ToolStyleControllerContext {
-    return {
-      tool,
-      canvasMode,
-      strokeColor,
-      fontFamily,
-      fontSize,
-      fontWeight,
-      zoom: zoom.current,
-      setTool,
-      setStrokeColor,
-      setFillColor,
-      setFillStyle,
-      setStrokeWidth,
-      setFontFamily,
-      setFontSize,
-      setFontWeight,
-      setTextAlign,
-      setTextVerticalAlign,
-      updateSelectedElements,
-      commitSelectedElements,
-    };
-  }
+  const setSelectedTool = (next: Tool | null) =>
+    editor.setAppState({ selectedTool: next });
 
   function textControllerContext(): TextControllerContext {
     return {
@@ -393,7 +338,7 @@ export function useSketchEngine(
       element: el,
       handle,
       to,
-      allElements: [...elements.current],
+      allElements: [...editor.getElements()],
       zoom: zoom.current,
       fontFamily,
       fontSize,
@@ -407,14 +352,14 @@ export function useSketchEngine(
   ): { shape: SketchElement; anchor: AnchorSide } | null {
     return geometry.findBindableShape(
       point,
-      [...elements.current],
+      [...editor.getElements()],
       zoom.current,
       exclude,
     );
   }
 
   function syncBoundArrows(shapeIds: Set<string>, list: SketchElement[]) {
-    return geometry.syncBoundArrows(shapeIds, list, [...elements.current]);
+    return geometry.syncBoundArrows(shapeIds, list, [...editor.getElements()]);
   }
 
   function commitSelectedElementSnapshot({ render = false } = {}) {
@@ -459,7 +404,7 @@ export function useSketchEngine(
       strokeColor,
       fontFamily,
       fontWeight,
-      setScribblePending,
+      setScribblePending: editor.setScribblePending,
       pushHistorySnapshot,
       renderScene,
     };
@@ -502,23 +447,15 @@ export function useSketchEngine(
       isPanning,
       selectedElementsList,
       screenToCanvas,
-      setZoomLevel,
+      setZoomLevel: editor.setZoomDisplay,
       scheduleViewportRender,
     };
   }
 
   function canvasCommandsContext(): CanvasCommandsContext {
     return {
-      elements,
-      selectedIds,
-      history,
-      setSceneElements: editor.setSceneElements,
-      getAppState: editor.getAppState,
-      applyAppState: editor.applyAppState,
-      onChange,
+      editor,
       screenToCanvas,
-      setHistoryStatus,
-      clearSelection,
       renderScene,
       renderSceneAndSelection,
     };
@@ -529,8 +466,9 @@ export function useSketchEngine(
       elements,
       recognitionConfig: recognitionConfigRef,
       selectedElementsList,
-      setStrokeColor,
-      setIsBeautifying,
+      setStrokeColor: (color: string) =>
+        editor.setToolbarStyle({ strokeColor: color }),
+      setIsBeautifying: editor.setIsBeautifying,
       syncBoundArrows,
       pushHistorySnapshot,
       renderSceneAndSelection,
@@ -685,39 +623,34 @@ export function useSketchEngine(
   }
 
   return {
+    editor,
     elements,
     setElements,
     tool,
 
-    setTool: editor.applyActiveTool,
+    setTool: editor.setActiveTool,
     strokeColor,
-    setStrokeColor: (color: string) =>
-      applyControllerStrokeColor(toolStyleControllerContext(), color),
+    setStrokeColor: (color: string) => applyStyle({ strokeColor: color }),
     fillColor,
-    setFillColor: (color: string) =>
-      applyControllerFillColor(toolStyleControllerContext(), color),
+    setFillColor: (color: string) => applyStyle({ fillColor: color }),
     fillStyle,
-    setFillStyle: (style: FillStyle) =>
-      applyControllerFillStyle(toolStyleControllerContext(), style),
+    setFillStyle: (style: FillStyle) => applyStyle({ fillStyle: style }),
     strokeWidth,
-    setStrokeWidth: (width: number) =>
-      applyControllerStrokeWidth(toolStyleControllerContext(), width),
+    setStrokeWidth: (width: number) => applyStyle({ strokeWidth: width }),
     selectedTool,
     fontFamily,
-    setFontFamily: (font: string) =>
-      applyControllerFontFamily(toolStyleControllerContext(), font),
+    setFontFamily: (font: string) => applyStyle({ fontFamily: font }),
     fontSize,
-    setFontSize: (size: number) =>
-      applyControllerFontSize(toolStyleControllerContext(), size),
+    setFontSize: (size: number) => applyStyle({ fontSize: size }),
     fontWeight,
     setFontWeight: (weight: "normal" | "bold") =>
-      applyControllerFontWeight(toolStyleControllerContext(), weight),
+      applyStyle({ fontWeight: weight }),
     textAlign,
     setTextAlign: (align: "left" | "center" | "right") =>
-      applyControllerTextAlign(toolStyleControllerContext(), align),
+      applyStyle({ textAlign: align }),
     textVerticalAlign,
     setTextVerticalAlign: (align: "top" | "middle" | "bottom") =>
-      applyControllerTextVerticalAlign(toolStyleControllerContext(), align),
+      applyStyle({ textVerticalAlign: align }),
     applyThemeColors: (
       isDark: boolean,
       options?: { recordHistory?: boolean },
@@ -734,8 +667,8 @@ export function useSketchEngine(
     stopPanning,
     undo,
     redo,
-    canUndo: historyStatus.canUndo,
-    canRedo: historyStatus.canRedo,
+    canUndo,
+    canRedo,
     getClipboardElements,
     getPointerPosition,
     clearPointerPosition,
@@ -753,11 +686,11 @@ export function useSketchEngine(
     renderSelection,
     onPan,
     scribbleEnabled,
-    setScribbleEnabled,
+    setScribbleEnabled: editor.setScribbleEnabled,
     scribblePending,
     recognitionBackend,
-    setRecognitionBackend,
+    setRecognitionBackend: editor.setRecognitionBackend,
     recognitionApiKey,
-    setRecognitionApiKey,
+    setRecognitionApiKey: editor.setRecognitionApiKey,
   };
 }

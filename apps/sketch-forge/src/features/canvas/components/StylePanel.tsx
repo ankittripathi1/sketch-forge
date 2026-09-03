@@ -9,7 +9,7 @@ import {
   TextAlign,
   TextVerticalAlign,
 } from "@repo/element/types";
-import { useCanvasUI } from "@repo/canvas-engine";
+import { useEditorState } from "@repo/canvas-engine";
 
 /**
  * Colors ordered for a light canvas — dark anchors first, light last.
@@ -209,7 +209,7 @@ export function StylePanel({
     fontWeight,
     textAlign,
     textVerticalAlign,
-  } = useCanvasUI();
+  } = useEditorState((state) => state.currentItemStyle);
   const COLORS = canvasMode === "dark" ? COLORS_DARK : COLORS_LIGHT;
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
