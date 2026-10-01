@@ -13,7 +13,6 @@ import {
   deletePage,
   getDashboardData,
   getFolderDetail,
-  getNotebookData,
   searchPages,
   updateFolder,
   updatePage,
@@ -24,7 +23,6 @@ import type {
   CreatePageInput,
   DashboardData,
   FolderDetail,
-  NotebookData,
   UpdateFolderInput,
   UpdatePageInput,
 } from "./types";
@@ -32,7 +30,6 @@ import type {
 function invalidateLibrary(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.notebook }),
     queryClient.invalidateQueries({ queryKey: ["folder"] }),
   ]);
 }
@@ -45,14 +42,6 @@ export function useDashboardData(initialData?: DashboardData) {
     initialDataUpdatedAt: initialData ? 0 : undefined,
     staleTime: 5 * 60_000,
     placeholderData: (previous) => previous,
-  });
-}
-
-export function useNotebookDataQuery(initialData?: NotebookData) {
-  return useQuery({
-    queryKey: queryKeys.notebook,
-    queryFn: getNotebookData,
-    initialData,
   });
 }
 

@@ -1,9 +1,7 @@
 import { PUBLIC_API_URL } from "./config";
 
-export type EntityType = "pages" | "canvases";
-
-export async function fetchEntity(type: EntityType, id: string) {
-  const res = await fetch(`${PUBLIC_API_URL}/${type}/${id}`, {
+export async function fetchPage(id: string) {
+  const res = await fetch(`${PUBLIC_API_URL}/pages/${id}`, {
     credentials: "include",
   });
   if (!res.ok) {
@@ -12,11 +10,8 @@ export async function fetchEntity(type: EntityType, id: string) {
   return res.json();
 }
 
-export async function createEntity(
-  type: EntityType,
-  body: Record<string, unknown>,
-) {
-  const res = await fetch(`${PUBLIC_API_URL}/${type}`, {
+export async function createPageRecord(body: Record<string, unknown>) {
+  const res = await fetch(`${PUBLIC_API_URL}/pages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -26,12 +21,11 @@ export async function createEntity(
   return res.json();
 }
 
-export async function updateEntity(
-  type: EntityType,
+export async function updatePageRecord(
   id: string,
   body: Record<string, unknown>,
 ) {
-  const res = await fetch(`${PUBLIC_API_URL}/${type}/${id}`, {
+  const res = await fetch(`${PUBLIC_API_URL}/pages/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

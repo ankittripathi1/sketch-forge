@@ -6,7 +6,7 @@ import type { ReadonlyElement, SketchEditor } from "@repo/canvas-engine";
 import type { PageViewMode } from "@repo/schema";
 import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createEntity, fetchEntity, updateEntity } from "@/api/canvas";
+import { createPageRecord, fetchPage, updatePageRecord } from "@/api/canvas";
 
 interface UseCanvasSyncProps {
   /** Loaded pages go into it with `loadScene`; saves read `getElements`. */
@@ -37,12 +37,7 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const typeParam = searchParams.get("type");
-  const routePageId = searchParams.get("pageId");
-  const routeId = searchParams.get("id");
-  const pageIdFromUrl = routePageId || (typeParam === "page" ? routeId : null);
-  const canvasIdFromUrl = typeParam === "canvas" ? routeId : pageIdFromUrl;
-  const entityType = typeParam === "canvas" ? "canvases" : "pages";
+  const pageIdFromUrl = searchParams.get("pageId");
   const requestedFolderId = searchParams.get("folderId");
   // "New note" / "New canvas" creation flows pass ?mode=doc|canvas so a freshly
   // created page opens in the view its entry point implied.
@@ -66,11 +61,11 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
 
   const queryClient = useQueryClient();
 
-  const queryKey = [entityType, canvasIdFromUrl] as const;
+  const queryKey = ["pages", pageIdFromUrl] as const;
   const loadQuery = useQuery({
     queryKey,
-    queryFn: () => fetchEntity(entityType, canvasIdFromUrl!),
-    enabled: !!canvasIdFromUrl,
+    queryFn: () => fetchPage(pageIdFromUrl!),
+    enabled: !!pageIdFromUrl,
   });
 
   const appliedIdRef = useRef<string | null>(null);
@@ -84,50 +79,39 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
     currentTitleRef.current = loadQuery.data.title || "Untitled";
     setIsDirty(false);
     setLoadVersion((version) => version + 1);
-    if (entityType === "pages") {
-      setFolderId(loadQuery.data.folderId ?? null);
-      const loadedMode: PageViewMode =
-        loadQuery.data.viewMode === "doc" ? "doc" : "canvas";
-      setViewModeState(loadedMode);
-      currentViewModeRef.current = loadedMode;
-      // The MVP kept notes in localStorage; migrate any leftover local note
-      // into the page record on first load, then clear the local key.
-      let nextNote = loadQuery.data.note ?? "";
-      const legacyKey = `sketch-forge:notes:${loadQuery.data.id}`;
-      const legacyNote = localStorage.getItem(legacyKey);
-      if (legacyNote && !nextNote) {
-        nextNote = legacyNote;
-        localStorage.removeItem(legacyKey);
-        migratedNoteRef.current = true;
-      }
-      setNoteState(nextNote);
-      currentNoteRef.current = nextNote;
+    setFolderId(loadQuery.data.folderId ?? null);
+    const loadedMode: PageViewMode =
+      loadQuery.data.viewMode === "doc" ? "doc" : "canvas";
+    setViewModeState(loadedMode);
+    currentViewModeRef.current = loadedMode;
+    // The MVP kept notes in localStorage; migrate any leftover local note
+    // into the page record on first load, then clear the local key.
+    let nextNote = loadQuery.data.note ?? "";
+    const legacyKey = `sketch-forge:notes:${loadQuery.data.id}`;
+    const legacyNote = localStorage.getItem(legacyKey);
+    if (legacyNote && !nextNote) {
+      nextNote = legacyNote;
+      localStorage.removeItem(legacyKey);
+      migratedNoteRef.current = true;
     }
-  }, [loadQuery.data, entityType, editor]);
+    setNoteState(nextNote);
+    currentNoteRef.current = nextNote;
+  }, [loadQuery.data, editor]);
 
   const createMutation = useMutation({
     mutationFn: () =>
-      createEntity(entityType, {
+      createPageRecord({
         title: "Untitled",
         elements: [],
-        ...(entityType === "pages" ? { viewMode: requestedMode } : {}),
-        ...(entityType === "pages" && requestedFolderId
-          ? { folderId: requestedFolderId }
-          : {}),
+        viewMode: requestedMode,
+        ...(requestedFolderId ? { folderId: requestedFolderId } : {}),
       }),
     onSuccess: (data) => {
       const params = new URLSearchParams(searchParams);
-      if (entityType === "pages") {
-        params.set("pageId", data.id);
-        params.delete("id");
-        params.delete("type");
-        const nextFolderId = data.folderId ?? requestedFolderId;
-        if (nextFolderId) params.set("folderId", nextFolderId);
-        else params.delete("folderId");
-      } else {
-        params.set("id", data.id);
-        params.set("type", "canvas");
-      }
+      params.set("pageId", data.id);
+      const nextFolderId = data.folderId ?? requestedFolderId;
+      if (nextFolderId) params.set("folderId", nextFolderId);
+      else params.delete("folderId");
       router.replace(`${pathname}?${params.toString()}`);
     },
   });
@@ -135,14 +119,14 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
   const hasTriggeredCreateRef = useRef(false);
   useEffect(() => {
     if (hasTriggeredCreateRef.current) return;
-    const shouldCreate = !canvasIdFromUrl || loadQuery.isError;
+    const shouldCreate = !pageIdFromUrl || loadQuery.isError;
     if (shouldCreate && !createMutation.isPending) {
       hasTriggeredCreateRef.current = true;
       createMutation.mutate();
     }
-  }, [canvasIdFromUrl, loadQuery.isError, createMutation]);
+  }, [pageIdFromUrl, loadQuery.isError, createMutation]);
 
-  const canvasId = loadQuery.data?.id ?? createMutation.data?.id ?? null;
+  const pageId = loadQuery.data?.id ?? createMutation.data?.id ?? null;
 
   const saveMutation = useMutation({
     mutationFn: async (vars: {
@@ -152,16 +136,12 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
       thumbnailLight?: string | null;
       thumbnailDark?: string | null;
     }) => {
-      if (!canvasId) throw new Error("No canvas id yet");
-      return updateEntity(entityType, canvasId, {
+      if (!pageId) throw new Error("No page id yet");
+      return updatePageRecord(pageId, {
         elements: vars.elements,
         title: vars.title,
-        ...(entityType === "pages"
-          ? {
-              note: currentNoteRef.current,
-              viewMode: currentViewModeRef.current,
-            }
-          : {}),
+        note: currentNoteRef.current,
+        viewMode: currentViewModeRef.current,
         ...(vars.thumbnail ? { thumbnail: vars.thumbnail } : {}),
         ...(vars.thumbnailLight ? { thumbnailLight: vars.thumbnailLight } : {}),
         ...(vars.thumbnailDark ? { thumbnailDark: vars.thumbnailDark } : {}),
@@ -180,16 +160,13 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
 
   const moveMutation = useMutation({
     mutationFn: (nextFolderId: string | null) => {
-      if (!canvasId || entityType !== "pages")
-        throw new Error("Not a movable page");
-      return updateEntity("pages", canvasId, { folderId: nextFolderId });
+      if (!pageId) throw new Error("No page id yet");
+      return updatePageRecord(pageId, { folderId: nextFolderId });
     },
     onSuccess: (_data, nextFolderId) => {
       setFolderId(nextFolderId);
       const params = new URLSearchParams(searchParams);
-      params.set("pageId", canvasId!);
-      params.delete("id");
-      params.delete("type");
+      params.set("pageId", pageId!);
       if (nextFolderId) params.set("folderId", nextFolderId);
       else params.delete("folderId");
       router.replace(`${pathname}?${params.toString()}`);
@@ -267,10 +244,7 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
       }
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(async () => {
-        const thumbnails =
-          entityType === "pages"
-            ? await generateThemeThumbnails(editor.getElements())
-            : { light: null, dark: null };
+        const thumbnails = await generateThemeThumbnails(editor.getElements());
         saveMutation.mutate({
           elements: editor.getElements(),
           title: currentTitleRef.current,
@@ -280,7 +254,7 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
         });
       }, 2000);
     },
-    [entityType, editor, generateThemeThumbnails, saveMutation],
+    [editor, generateThemeThumbnails, saveMutation],
   );
 
   const updateTitle = useCallback(
@@ -324,11 +298,11 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
 
   // Persist a note migrated from localStorage once the page id is known.
   useEffect(() => {
-    if (migratedNoteRef.current && canvasId) {
+    if (migratedNoteRef.current && pageId) {
       migratedNoteRef.current = false;
       triggerSave();
     }
-  }, [canvasId, loadVersion, triggerSave]);
+  }, [pageId, loadVersion, triggerSave]);
 
   const saveNow = useCallback(
     async (newTitle?: string) => {
@@ -337,10 +311,7 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
         setTitle(newTitle);
         currentTitleRef.current = newTitle;
       }
-      const thumbnails =
-        entityType === "pages"
-          ? await generateThemeThumbnails(editor.getElements())
-          : { light: null, dark: null };
+      const thumbnails = await generateThemeThumbnails(editor.getElements());
 
       await saveMutation.mutateAsync({
         elements: editor.getElements(),
@@ -350,12 +321,11 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
         thumbnailDark: thumbnails.dark,
       });
     },
-    [entityType, editor, generateThemeThumbnails, saveMutation],
+    [editor, generateThemeThumbnails, saveMutation],
   );
 
   return {
-    canvasId,
-    entityType,
+    pageId,
     folderId,
     isSaving: saveMutation.isPending,
     isDirty,
