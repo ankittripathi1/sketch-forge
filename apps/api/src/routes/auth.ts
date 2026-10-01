@@ -8,14 +8,14 @@ import { and, eq, gt } from "drizzle-orm";
 import { loginSchema } from "@repo/schema";
 import { deleteExpiredMagicLinkTokens, sendMagicLink } from "../lib/email.js";
 import { createHash } from "crypto";
-import { createSessionToken, verifySessionToken } from "../lib/jwt.js";
+import { createSessionToken } from "../lib/jwt.js";
 import { resolveGoogleUser } from "../lib/googleAccount.js";
 import { env } from "../lib/env.js";
+import { authMiddleware, type AuthVariables } from "../middleware/auth.js";
 import {
   LOGIN_NEXT_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE,
-  SESSION_COOKIE,
   clearAuthCookies,
   clearCookie,
   setSessionCookie,
@@ -27,7 +27,7 @@ import {
   type RateLimitOptions,
 } from "../lib/rateLimit.js";
 
-const auth = new Hono();
+const auth = new Hono<{ Variables: AuthVariables }>();
 
 const LOGIN_ADDRESS_LIMIT: RateLimitOptions = {
   scope: "login",
@@ -232,18 +232,8 @@ auth.post("/logout", (c) => {
   return c.json({ message: "Logged out" });
 });
 
-auth.get("/me", async (c) => {
-  const token = getCookie(c, SESSION_COOKIE);
-
-  if (!token) {
-    return c.json({ error: "Not authenticated" }, 401);
-  }
-
-  const userId = await verifySessionToken(token);
-
-  if (!userId) {
-    return c.json({ error: "Invalid token" }, 401);
-  }
+auth.get("/me", authMiddleware, async (c) => {
+  const userId = c.get("userId");
 
   const user = await db.query.userTable.findFirst({
     where: eq(userTable.id, userId),
