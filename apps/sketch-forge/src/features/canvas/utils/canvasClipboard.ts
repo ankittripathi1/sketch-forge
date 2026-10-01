@@ -1,3 +1,4 @@
+import type { ReadonlyElement } from "@repo/canvas-engine";
 import type { SketchElement } from "@repo/element";
 import { SketchForgeClipboardSchema } from "@repo/schema/canvas";
 
@@ -11,7 +12,7 @@ type ClipboardReadResult = {
 
 export function writeCanvasClipboard(
   clipboardData: DataTransfer | null,
-  elements: SketchElement[],
+  elements: readonly ReadonlyElement[],
 ): boolean {
   if (!clipboardData || elements.length === 0) {
     return false;

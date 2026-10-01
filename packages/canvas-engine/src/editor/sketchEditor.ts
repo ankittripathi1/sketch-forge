@@ -1,4 +1,3 @@
-import type { StoreApi } from "zustand/vanilla";
 import type { ActiveTool, Point, SketchElement } from "@repo/element/types";
 import { cloneElementsForPaste } from "@repo/element";
 import { createHistory } from "@repo/element/history";
@@ -61,6 +60,33 @@ const DEFAULT_FILL_COLOR = "#5a8ae8";
 
 export type PointerButtons = { button: number; shiftKey: boolean };
 
+/**
+ * `T` with every property, array and set made read-only, all the way down.
+ * The editor hands out its live data under this type, so callers can read it
+ * without copying but can't change it behind the editor's back.
+ */
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends ReadonlySet<infer U>
+    ? ReadonlySet<DeepReadonly<U>>
+    : T extends readonly (infer U)[]
+      ? readonly DeepReadonly<U>[]
+      : T extends object
+        ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+        : T;
+
+export type ReadonlyElement = DeepReadonly<SketchElement>;
+export type ReadonlyAppState = DeepReadonly<CanvasAppState>;
+
+/** The read side of the editor's store: enough for `useStore`, no writes. */
+export type ReadonlyEditorStore = {
+  getState: () => ReadonlyAppState;
+  getInitialState: () => ReadonlyAppState;
+  subscribe: (
+    listener: (state: ReadonlyAppState, prev: ReadonlyAppState) => void,
+  ) => () => void;
+};
+
 export type RecognitionSettings = Pick<
   CanvasAppState,
   "scribbleEnabled" | "recognitionBackend" | "recognitionApiKey"
@@ -89,6 +115,13 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
   const internals = createEditorInternals(options);
   const { frame } = internals;
 
+  // A real wrapper, not a cast: `setState` doesn't exist on what callers get.
+  const store: ReadonlyEditorStore = {
+    getState: internals.store.getState,
+    getInitialState: internals.store.getInitialState,
+    subscribe: internals.store.subscribe,
+  };
+
   /** Inserts an image so its top-left corner sits at `canvasPoint`. */
   async function insertImage(file: File, canvasPoint: Point) {
     const src = await readImageFile(file);
@@ -100,8 +133,8 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
   }
 
   /** Where pasted elements should move to, by the shared placement rule. */
-  function pasteTranslation(elements: SketchElement[]): Point {
-    return getContextualPasteTranslation(elements, {
+  function pasteTranslation(elements: readonly ReadonlyElement[]): Point {
+    return getContextualPasteTranslation(elements as SketchElement[], {
       selectedElements: internals.selectedElementsList(),
       pointer: internals.getPointerPosition(),
       viewport: internals.getViewportBounds(),
@@ -162,13 +195,12 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
 
   return {
     /** View state, read-only. Subscribe with `useEditorState`. */
-    store: internals.store as Pick<
-      StoreApi<CanvasAppState>,
-      "getState" | "getInitialState" | "subscribe"
-    >,
-    getState: internals.getState,
-    getElements: internals.getElements,
-    getSelectedElements: internals.selectedElementsList,
+    store,
+    getState: (): ReadonlyAppState => internals.getState(),
+    /** The live scene. Read-only: change it through the editor's methods. */
+    getElements: (): readonly ReadonlyElement[] => internals.getElements(),
+    getSelectedElements: (): readonly ReadonlyElement[] =>
+      internals.selectedElementsList(),
     /** The CSS cursor for a pointer at `screenPoint`. */
     getCursorForPoint: (screenPoint: Point) =>
       getCursorForPoint(internals, screenPoint),
@@ -178,10 +210,13 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
      * walk back past what was loaded. Loading isn't an edit, so it doesn't
      * fire `onChange`.
      */
-    loadScene(elements: SketchElement[]) {
-      frame.history = createHistory(elements);
+    loadScene(elements: readonly ReadonlyElement[]) {
+      // Own a copy, so a caller changing its input later can't reach the scene
+      // or the undo snapshot it starts from.
+      const owned = structuredClone(elements) as SketchElement[];
+      frame.history = createHistory(owned);
       internals.dispatch(actionReplaceScene, {
-        elements,
+        elements: owned,
         captureUpdate: "none",
       });
       internals.publishHistoryStatus();
@@ -245,9 +280,12 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
      * pointer, else in the middle of the viewport. Returns false when there was
      * nothing to paste.
      */
-    paste(elements: SketchElement[]) {
+    paste(elements: readonly ReadonlyElement[]) {
       if (elements.length === 0) return false;
-      const pasted = cloneElementsForPaste(elements, pasteTranslation(elements));
+      const pasted = cloneElementsForPaste(
+        elements as SketchElement[],
+        pasteTranslation(elements),
+      );
       if (!internals.dispatch(actionInsertElements, { elements: pasted }))
         return false;
       internals.renderSceneAndSelection();

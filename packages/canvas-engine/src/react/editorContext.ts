@@ -7,8 +7,10 @@ import {
   type ReactNode,
 } from "react";
 import { useStore } from "zustand";
-import type { CanvasAppState } from "../appState";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type {
+  ReadonlyAppState,
+  SketchEditor,
+} from "../editor/sketchEditor";
 
 const EditorContext = createContext<SketchEditor | null>(null);
 
@@ -46,6 +48,8 @@ export function useSketchEditor(): SketchEditor {
  * selected value changes, so `useEditorState((s) => s.activeTool)` costs far
  * less than reading the whole state.
  */
-export function useEditorState<T>(selector: (state: CanvasAppState) => T): T {
+export function useEditorState<T>(
+  selector: (state: ReadonlyAppState) => T,
+): T {
   return useStore(useSketchEditor().store, selector);
 }

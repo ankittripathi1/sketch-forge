@@ -1,7 +1,11 @@
 export { useSketchEngine } from "./useSketchEngine";
 export {
   createSketchEditor,
+  type DeepReadonly,
   type PointerButtons,
+  type ReadonlyAppState,
+  type ReadonlyEditorStore,
+  type ReadonlyElement,
   type RecognitionSettings,
   type SketchEditor,
   type SketchEditorOptions,

@@ -1,4 +1,4 @@
-import type { SketchElement } from "@repo/element";
+import type { ReadonlyElement } from "@repo/canvas-engine";
 import {
   readCanvasClipboard,
   writeCanvasClipboard,
@@ -7,7 +7,7 @@ import {
 export class CanvasClipboardService {
   write(
     clipboardData: DataTransfer | null,
-    elements: SketchElement[],
+    elements: readonly ReadonlyElement[],
   ): boolean {
     return writeCanvasClipboard(clipboardData, elements);
   }
