@@ -27,10 +27,20 @@ import type {
   UpdatePageInput,
 } from "./types";
 
-function invalidateLibrary(queryClient: QueryClient) {
+/**
+ * Marks the page and folder lists stale. By default active lists refetch now;
+ * `refetchType: "none"` waits until they are next mounted.
+ */
+export function invalidateLibrary(
+  queryClient: QueryClient,
+  refetchType: "active" | "none" = "active",
+) {
   return Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
-    queryClient.invalidateQueries({ queryKey: ["folder"] }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.dashboard,
+      refetchType,
+    }),
+    queryClient.invalidateQueries({ queryKey: ["folder"], refetchType }),
   ]);
 }
 

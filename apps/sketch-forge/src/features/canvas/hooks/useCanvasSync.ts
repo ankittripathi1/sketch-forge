@@ -7,6 +7,7 @@ import type { PageViewMode } from "@repo/schema";
 import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPageRecord, fetchPage, updatePageRecord } from "@/api/canvas";
+import { invalidateLibrary } from "@/api/hooks";
 
 interface UseCanvasSyncProps {
   /** Loaded pages go into it with `loadScene`; saves read `getElements`. */
@@ -107,6 +108,7 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
         ...(requestedFolderId ? { folderId: requestedFolderId } : {}),
       }),
     onSuccess: (data) => {
+      void invalidateLibrary(queryClient);
       const params = new URLSearchParams(searchParams);
       params.set("pageId", data.id);
       const nextFolderId = data.folderId ?? requestedFolderId;
@@ -155,6 +157,8 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
       setIsDirty(false);
       setLastSavedAt(new Date());
       queryClient.setQueryData(queryKey, data);
+      // Autosave runs often, so lists refetch on their next mount, not now.
+      void invalidateLibrary(queryClient, "none");
     },
   });
 
@@ -164,6 +168,7 @@ export function useCanvasSync({ editor }: UseCanvasSyncProps) {
       return updatePageRecord(pageId, { folderId: nextFolderId });
     },
     onSuccess: (_data, nextFolderId) => {
+      void invalidateLibrary(queryClient);
       setFolderId(nextFolderId);
       const params = new URLSearchParams(searchParams);
       params.set("pageId", pageId!);
