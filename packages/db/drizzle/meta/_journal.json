@@ -8,6 +8,13 @@
       "when": 1787750472696,
       "tag": "0000_yummy_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790840324004,
+      "tag": "0001_wise_supernaut",
+      "breakpoints": true
     }
   ]
 }

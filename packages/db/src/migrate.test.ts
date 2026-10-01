@@ -86,7 +86,6 @@ describe.skipIf(!canRun)("baseline migration", () => {
       "magic_link_tokens",
       "oauth_accounts",
       "pages",
-      "refresh_tokens",
       "review_logs",
       "users",
     ]);

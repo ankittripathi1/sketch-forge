@@ -29,7 +29,6 @@ export const userTable = pgTable("users", {
 
 export const userRelations = relations(userTable, ({ many }) => ({
   oauthAccounts: many(oauthAccounts),
-  refreshTokens: many(refreshTokens),
   canvases: many(canvases),
   magicLinkTokens: many(magicLinkTokens),
   folders: many(folders),
@@ -59,23 +58,6 @@ export const oauthAccounts = pgTable(
 export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
   user: one(userTable, {
     fields: [oauthAccounts.userId],
-    references: [userTable.id],
-  }),
-}));
-
-export const refreshTokens = pgTable("refresh_tokens", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => userTable.id, {
-    onDelete: "cascade",
-  }),
-  tokenHash: text("token_hash").notNull(),
-  expiresAt: timestamp("expiresAt").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
-  user: one(userTable, {
-    fields: [refreshTokens.userId],
     references: [userTable.id],
   }),
 }));
