@@ -24,7 +24,12 @@ pagesRouter.get("/search", async (c) => {
     return c.json([]);
   }
 
-  const tsQuery = query.trim().split(/\s+/).join(" & ");
+  // `websearch_to_tsquery` parses raw user input without throwing, unlike
+  // `to_tsquery`, which errors on stray operators like `:`, `!`, or `c++`.
+  const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
+
+  // Escape LIKE wildcards so `%` and `_` typed by the user match literally.
+  const titlePattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
 
   // Alternative with snippets using select syntax
   const rawResults = await db
@@ -35,10 +40,10 @@ pagesRouter.get("/search", async (c) => {
       thumbnailLight: pages.thumbnailLight,
       thumbnailDark: pages.thumbnailDark,
       folderId: pages.folderId,
-      snippet: sql<string>`ts_headline('english', ${pages.searchableText}, to_tsquery('english', ${tsQuery}), 'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15')`,
+      snippet: sql<string>`ts_headline('english', ${pages.searchableText}, ${tsQuery}, 'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15')`,
       // True when the page note itself matches — the client deep-links into
       // the notes drawer for these results.
-      noteMatch: sql<boolean>`to_tsvector('english', coalesce(${pages.note}, '')) @@ to_tsquery('english', ${tsQuery})`,
+      noteMatch: sql<boolean>`to_tsvector('english', coalesce(${pages.note}, '')) @@ ${tsQuery}`,
     })
     .from(pages)
     .where(
@@ -46,8 +51,8 @@ pagesRouter.get("/search", async (c) => {
         eq(pages.userId, userId),
         folderId ? eq(pages.folderId, folderId) : undefined,
         or(
-          like(pages.title, `%${query}%`),
-          sql`to_tsvector('english', ${pages.searchableText}) @@ to_tsquery('english', ${tsQuery})`,
+          like(pages.title, titlePattern),
+          sql`to_tsvector('english', ${pages.searchableText}) @@ ${tsQuery}`,
         ),
       ),
     )
