@@ -2,32 +2,15 @@ import {
   defineEditorCommand,
   type EditorCommandManager,
   type EditorCommand,
+  type SketchEditor,
 } from "@repo/canvas-engine";
-import type { ReadonlyElement } from "@repo/canvas-engine";
-import type { ActiveTool, SketchElement } from "@repo/element";
-import type { CanvasClipboardService } from "./CanvasClipboardService";
+import type { ActiveTool } from "@repo/element";
+import type { CanvasClipboard } from "../utils/canvasClipboard";
 
-type BooleanRef = { current: boolean };
-
+/** What every canvas command runs against. */
 export type CanvasEditorCommandContext = {
-  tool: ActiveTool;
-  canUndo: boolean;
-  canRedo: boolean;
-  clipboard: CanvasClipboardService;
-  getSelectedElements: () => readonly ReadonlyElement[];
-  /** Pastes copies of `elements`; the editor decides where they land. */
-  pasteElements: (elements: SketchElement[]) => boolean;
-  pasteImage: (clipboardData: DataTransfer | null) => boolean;
-  deleteSelected: () => void;
-  duplicateSelected: () => void;
-  deselect: () => void;
-  editSelected: () => void;
-  undo: () => void;
-  redo: () => void;
-  setTool: (tool: ActiveTool) => void;
-  isPanningRef: BooleanRef;
-  setIsPanningMode: (isPanning: boolean) => void;
-  stopPanning: () => void;
+  editor: SketchEditor;
+  clipboard: CanvasClipboard;
 };
 
 export type ClipboardCommandPayload = {
@@ -41,16 +24,16 @@ export type SetToolCommandPayload = {
 const handled = { handled: true } as const;
 const unhandled = { handled: false } as const;
 
+const hasSelection = ({ editor }: CanvasEditorCommandContext) =>
+  editor.getSelectedElements().length > 0;
+
 export const commandCopy = defineEditorCommand<
   CanvasEditorCommandContext,
   ClipboardCommandPayload
 >({
   id: "clipboard.copy",
-  perform: (context, { clipboardData }) => ({
-    handled: context.clipboard.write(
-      clipboardData,
-      context.getSelectedElements(),
-    ),
+  perform: ({ editor, clipboard }, { clipboardData }) => ({
+    handled: clipboard.write(clipboardData, editor.getSelectedElements()),
   }),
 });
 
@@ -59,14 +42,11 @@ export const commandCut = defineEditorCommand<
   ClipboardCommandPayload
 >({
   id: "clipboard.cut",
-  perform: (context, { clipboardData }) => {
-    const didWrite = context.clipboard.write(
-      clipboardData,
-      context.getSelectedElements(),
-    );
-
-    if (!didWrite) return unhandled;
-    context.deleteSelected();
+  perform: ({ editor, clipboard }, { clipboardData }) => {
+    if (!clipboard.write(clipboardData, editor.getSelectedElements())) {
+      return unhandled;
+    }
+    editor.deleteSelected();
     return handled;
   },
 });
@@ -76,34 +56,30 @@ export const commandPaste = defineEditorCommand<
   ClipboardCommandPayload
 >({
   id: "clipboard.paste",
-  perform: (context, { clipboardData }) => {
-    const clipboard = context.clipboard.read(clipboardData);
-    if (clipboard) {
-      return { handled: context.pasteElements(clipboard.elements) };
-    }
+  perform: ({ editor, clipboard }, { clipboardData }) => {
+    const payload = clipboard.read(clipboardData);
+    if (payload) return { handled: editor.paste(payload.elements) };
 
-    // No internal element payload — fall back to a clipboard image
-    // (e.g. a pasted screenshot), inserting it onto the canvas.
-    if (context.pasteImage(clipboardData)) return handled;
-
-    return unhandled;
+    // No internal element payload, so fall back to a clipboard image
+    // (e.g. a pasted screenshot).
+    return editor.pasteImage(clipboardData) ? handled : unhandled;
   },
 });
 
 export const commandUndo = defineEditorCommand<CanvasEditorCommandContext>({
   id: "history.undo",
-  isEnabled: (context) => context.canUndo,
-  perform: (context) => {
-    context.undo();
+  isEnabled: ({ editor }) => editor.getState().canUndo,
+  perform: ({ editor }) => {
+    editor.undo();
     return handled;
   },
 });
 
 export const commandRedo = defineEditorCommand<CanvasEditorCommandContext>({
   id: "history.redo",
-  isEnabled: (context) => context.canRedo,
-  perform: (context) => {
-    context.redo();
+  isEnabled: ({ editor }) => editor.getState().canRedo,
+  perform: ({ editor }) => {
+    editor.redo();
     return handled;
   },
 });
@@ -111,9 +87,9 @@ export const commandRedo = defineEditorCommand<CanvasEditorCommandContext>({
 export const commandDeleteSelected =
   defineEditorCommand<CanvasEditorCommandContext>({
     id: "selection.delete",
-    isEnabled: (context) => context.getSelectedElements().length > 0,
-    perform: (context) => {
-      context.deleteSelected();
+    isEnabled: hasSelection,
+    perform: ({ editor }) => {
+      editor.deleteSelected();
       return handled;
     },
   });
@@ -121,18 +97,18 @@ export const commandDeleteSelected =
 export const commandDuplicateSelected =
   defineEditorCommand<CanvasEditorCommandContext>({
     id: "selection.duplicate",
-    isEnabled: (context) => context.getSelectedElements().length > 0,
-    perform: (context) => {
-      context.duplicateSelected();
+    isEnabled: hasSelection,
+    perform: ({ editor }) => {
+      editor.duplicateSelected();
       return handled;
     },
   });
 
 export const commandDeselect = defineEditorCommand<CanvasEditorCommandContext>({
   id: "selection.deselect",
-  isEnabled: (context) => context.getSelectedElements().length > 0,
-  perform: (context) => {
-    context.deselect();
+  isEnabled: hasSelection,
+  perform: ({ editor }) => {
+    editor.deselect();
     return handled;
   },
 });
@@ -140,10 +116,11 @@ export const commandDeselect = defineEditorCommand<CanvasEditorCommandContext>({
 export const commandEditSelected =
   defineEditorCommand<CanvasEditorCommandContext>({
     id: "selection.edit",
-    isEnabled: (context) =>
-      context.tool === "select" && context.getSelectedElements().length === 1,
-    perform: (context) => {
-      context.editSelected();
+    isEnabled: ({ editor }) =>
+      editor.getState().activeTool === "select" &&
+      editor.getSelectedElements().length === 1,
+    perform: ({ editor }) => {
+      editor.editSelected();
       return handled;
     },
   });
@@ -153,8 +130,8 @@ export const commandSetTool = defineEditorCommand<
   SetToolCommandPayload
 >({
   id: "tool.set",
-  perform: (context, { tool }) => {
-    context.setTool(tool);
+  perform: ({ editor }, { tool }) => {
+    editor.setTool(tool);
     return handled;
   },
 });
@@ -162,9 +139,8 @@ export const commandSetTool = defineEditorCommand<
 export const commandStartPanning =
   defineEditorCommand<CanvasEditorCommandContext>({
     id: "viewport.pan.start",
-    perform: (context) => {
-      context.isPanningRef.current = true;
-      context.setIsPanningMode(true);
+    perform: ({ editor }) => {
+      editor.setPanMode(true);
       return handled;
     },
   });
@@ -172,11 +148,9 @@ export const commandStartPanning =
 export const commandStopPanning =
   defineEditorCommand<CanvasEditorCommandContext>({
     id: "viewport.pan.stop",
-    isEnabled: (context) => context.isPanningRef.current,
-    perform: (context) => {
-      context.isPanningRef.current = false;
-      context.setIsPanningMode(false);
-      context.stopPanning();
+    isEnabled: ({ editor }) => editor.getState().panMode,
+    perform: ({ editor }) => {
+      editor.setPanMode(false);
       return handled;
     },
   });
