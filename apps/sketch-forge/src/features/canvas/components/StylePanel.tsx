@@ -2,14 +2,8 @@
 
 import { ChevronDown, Pipette, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  Tool,
-  ActiveTool,
-  FillStyle,
-  TextAlign,
-  TextVerticalAlign,
-} from "@repo/element/types";
-import { useEditorState } from "@repo/canvas-engine";
+import { FillStyle, TextAlign, TextVerticalAlign } from "@repo/element/types";
+import { useEditorState, useSketchEditor } from "@repo/canvas-engine";
 
 /**
  * Colors ordered for a light canvas — dark anchors first, light last.
@@ -169,36 +163,18 @@ function isHexColor(value: string) {
 
 interface StylePanelProps {
   embedded?: boolean;
-  tool: ActiveTool;
-  selectedTool: Tool | null;
-  onStrokeColor: (c: string) => void;
-  onFillColor: (c: string) => void;
-  onFillStyle: (s: FillStyle) => void;
-  onStrokeWidth: (w: number) => void;
-  onFontFamily: (v: string) => void;
-  onFontSize: (v: number) => void;
-  onFontWeight: (v: "normal" | "bold") => void;
-  onTextAlign: (v: TextAlign) => void;
-  onTextVerticalAlign: (v: TextVerticalAlign) => void;
   /** Drives which color palette is shown: dark canvas → light-first colors */
   canvasMode?: "light" | "dark";
 }
 
+/** Style controls for the active tool or the selection. Reads and writes the editor directly. */
 export function StylePanel({
   embedded = false,
-  tool,
-  selectedTool,
-  onStrokeColor,
-  onFillColor,
-  onFillStyle,
-  onStrokeWidth,
-  onFontFamily,
-  onFontSize,
-  onFontWeight,
-  onTextAlign,
-  onTextVerticalAlign,
   canvasMode = "light",
 }: StylePanelProps) {
+  const editor = useSketchEditor();
+  const tool = useEditorState((state) => state.activeTool);
+  const selectedTool = useEditorState((state) => state.selectedTool);
   const {
     strokeColor,
     fillColor,
@@ -243,12 +219,12 @@ export function StylePanel({
 
   function handleStrokeColor(color: string) {
     rememberCustomColor(color);
-    onStrokeColor(color);
+    editor.setStyle({ strokeColor: color });
   }
 
   function handleFillColor(color: string) {
     rememberCustomColor(color);
-    onFillColor(color);
+    editor.setStyle({ fillColor: color });
   }
 
   const styleUnavailable =
@@ -331,7 +307,9 @@ export function StylePanel({
             <Section label="Font">
               <select
                 value={fontFamily}
-                onChange={(e) => onFontFamily(e.target.value)}
+                onChange={(e) =>
+                  editor.setStyle({ fontFamily: e.target.value })
+                }
                 style={{ fontFamily }}
                 className="h-8 w-full rounded-lg border border-[oklch(1_0_0/0.08)] bg-surface-raised px-2 text-[12px] font-medium text-text-body outline-none transition-colors hover:bg-surface-overlay focus:border-accent"
               >
@@ -354,7 +332,9 @@ export function StylePanel({
             <Section label="Size & Weight">
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => onFontSize(Math.max(8, fontSize - 2))}
+                  onClick={() =>
+                    editor.setStyle({ fontSize: Math.max(8, fontSize - 2) })
+                  }
                   className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-text-secondary transition-all hover:bg-surface-hover hover:text-text-body sm:h-6 sm:w-6"
                 >
                   -
@@ -363,14 +343,18 @@ export function StylePanel({
                   {fontSize}
                 </span>
                 <button
-                  onClick={() => onFontSize(Math.min(200, fontSize + 2))}
+                  onClick={() =>
+                    editor.setStyle({ fontSize: Math.min(200, fontSize + 2) })
+                  }
                   className="flex h-9 w-9 items-center justify-center rounded-md text-sm text-text-secondary transition-all hover:bg-surface-hover hover:text-text-body sm:h-6 sm:w-6"
                 >
                   +
                 </button>
                 <button
                   onClick={() =>
-                    onFontWeight(fontWeight === "bold" ? "normal" : "bold")
+                    editor.setStyle({
+                      fontWeight: fontWeight === "bold" ? "normal" : "bold",
+                    })
                   }
                   className={[
                     "h-9 w-10 rounded-md text-[12px] font-bold transition-all sm:h-6 sm:w-7",
@@ -391,10 +375,9 @@ export function StylePanel({
                   <AlignGrid
                     h={textAlign}
                     v={textVerticalAlign}
-                    onChange={(h, v) => {
-                      onTextAlign(h);
-                      onTextVerticalAlign(v);
-                    }}
+                    onChange={(h, v) =>
+                      editor.setStyle({ textAlign: h, textVerticalAlign: v })
+                    }
                   />
                 </Section>
               </>
@@ -409,7 +392,7 @@ export function StylePanel({
             colors={COLORS}
             recentColors={recentColors}
             selected={strokeColor}
-            onSelect={onStrokeColor}
+            onSelect={(color) => editor.setStyle({ strokeColor: color })}
             onCustomColor={handleStrokeColor}
           />
         </Section>
@@ -423,7 +406,7 @@ export function StylePanel({
                   <button
                     key={fs.value}
                     title={fs.label}
-                    onClick={() => onFillStyle(fs.value)}
+                    onClick={() => editor.setStyle({ fillStyle: fs.value })}
                     className={[
                       "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
                       fillStyle === fs.value
@@ -445,7 +428,7 @@ export function StylePanel({
                     colors={COLORS}
                     recentColors={recentColors}
                     selected={fillColor}
-                    onSelect={onFillColor}
+                    onSelect={(color) => editor.setStyle({ fillColor: color })}
                     onCustomColor={handleFillColor}
                   />
                 </Section>
@@ -465,7 +448,7 @@ export function StylePanel({
                     <button
                       key={w.value}
                       title={w.label}
-                      onClick={() => onStrokeWidth(w.value)}
+                      onClick={() => editor.setStyle({ strokeWidth: w.value })}
                       className={[
                         "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-150 sm:h-7 sm:w-8",
                         active

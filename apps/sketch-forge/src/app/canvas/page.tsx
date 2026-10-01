@@ -23,7 +23,11 @@ import {
   getBackgroundStyle,
 } from "@/features/canvas";
 import { isColorDark } from "@repo/common";
-import { useSketchEngine, CanvasEditorProvider } from "@repo/canvas-engine";
+import {
+  CanvasEditorProvider,
+  useEditorSelector,
+  useSketchEngine,
+} from "@repo/canvas-engine";
 import {
   Book,
   CheckCircle2,
@@ -46,15 +50,14 @@ import { useAppTheme } from "@/theme/ThemeProvider";
  *      grid/dot `colour`) — kept here rather than in the engine because the
  *      background is rendered via CSS on the container div, not on the canvas.
  *
- *   2. Bridging the `useSketchEngine` hook with the UI panels (Toolbar, StylePanel,
- *      BackgroundPicker).  The hook exposes a stable API; this component wires
- *      the right handlers to the right panels.
+ *   2. Creating the editor (`useSketchEngine`) and handing it to the panels.
+ *      The canvas, the style panel and the keyboard commands call the editor
+ *      directly; this component only reads the few view-state flags it renders.
  *
- *   3. Registering global keyboard shortcuts (undo, redo, tool hotkeys, space
- *      to pan, delete, escape) via a single window-level listener.
+ *   3. Wiring keyboard shortcuts and clipboard events to the editor through
+ *      `useCanvasEditorRuntime`.
  *
- *   4. Deriving lightweight UI state (canvasMode, hasElements, hasApiKey) from
- *      hook values so UI panels don't need direct access to the hook.
+ *   4. Deriving lightweight UI state (doc mode, hasApiKey) for the top bar.
  */
 export default function CanvasPage() {
   return (
@@ -120,50 +123,23 @@ function CanvasContent() {
     triggerSaveRef.current();
   }, []);
 
-  const {
-    editor,
-    elements,
-    setElements,
-    tool,
-    setStrokeColor,
-    setFillColor,
-    setFillStyle,
-    setStrokeWidth,
-    selectedTool,
-    setFontFamily,
-    setFontSize,
-    setFontWeight,
-    setTextAlign,
-    setTextVerticalAlign,
-    applyThemeColors,
-    beautifyLayout,
-    isBeautifying,
-    hasElements,
-    zoomLevel,
-    panOffsetDisplay,
-    onPointerDown,
-    onPointerMove,
-    finalizeElement,
-    handleZoom,
-    canUndo,
-    canRedo,
-    clearPointerPosition,
-    getCursorForPoint,
-    handleDrop,
-    onDoubleClick,
-    renderScene,
-    renderSelection,
-    onPan,
-    setScribbleEnabled,
-    scribblePending,
-    setRecognitionBackend,
-    recognitionApiKey,
-    setRecognitionApiKey,
-  } = useSketchEngine(
+  const { editor } = useSketchEngine(
     sceneCanvasRef,
     interactiveCanvasRef,
     canvasMode,
     onEngineChange,
+  );
+  const tool = useEditorSelector(editor, (s) => s.activeTool);
+  const canUndo = useEditorSelector(editor, (s) => s.canUndo);
+  const canRedo = useEditorSelector(editor, (s) => s.canRedo);
+  const hasElements = useEditorSelector(editor, (s) => s.hasElements);
+  const isBeautifying = useEditorSelector(editor, (s) => s.isBeautifying);
+  const zoomLevel = useEditorSelector(editor, (s) => s.zoomDisplay);
+  const panOffsetDisplay = useEditorSelector(editor, (s) => s.panOffsetDisplay);
+  const scribblePending = useEditorSelector(editor, (s) => s.isScribblePending);
+  const recognitionApiKey = useEditorSelector(
+    editor,
+    (s) => s.recognitionApiKey,
   );
 
   const {
@@ -180,10 +156,7 @@ function CanvasContent() {
     saveNow,
     lastSavedAt,
     loadVersion,
-  } = useCanvasSync({
-    elementsRef: elements,
-    setElements,
-  });
+  } = useCanvasSync({ editor });
 
   useEffect(() => {
     triggerSaveRef.current = triggerSave;
@@ -197,7 +170,7 @@ function CanvasContent() {
     if (appThemeSyncKeyRef.current === syncKey) return;
     appThemeSyncKeyRef.current = syncKey;
     if (nextMode === canvasMode) {
-      applyThemeColors(nextMode === "dark", { recordHistory: false });
+      editor.applyThemeColors(nextMode === "dark", { recordHistory: false });
       return;
     }
 
@@ -206,9 +179,9 @@ function CanvasContent() {
     setGridColor(defaults.patternColor);
     setDotColor(defaults.patternColor);
     setCanvasMode(nextMode);
-    applyThemeColors(nextMode === "dark");
+    editor.applyThemeColors(nextMode === "dark");
   }, [
-    applyThemeColors,
+    editor,
     canvasMode,
     hasLoadedPrefs,
     resolvedTheme,
@@ -224,13 +197,13 @@ function CanvasContent() {
     const syncKey = `${loadVersion}:${canvasMode}`;
     if (loadedThemeSyncKeyRef.current === syncKey) return;
     loadedThemeSyncKeyRef.current = syncKey;
-    const changed = applyThemeColors(canvasMode === "dark", {
+    const changed = editor.applyThemeColors(canvasMode === "dark", {
       recordHistory: false,
     });
     if (changed) {
       triggerSave();
     }
-  }, [applyThemeColors, canvasMode, hasLoadedPrefs, loadVersion, triggerSave]);
+  }, [editor, canvasMode, hasLoadedPrefs, loadVersion, triggerSave]);
 
   useEffect(() => {
     const flushPendingSave = () => {
@@ -256,16 +229,16 @@ function CanvasContent() {
   // them here so drawing-time handwriting recognition uses the saved values.
   useEffect(() => {
     const backend = localStorage.getItem("sketch-forge:recognition-backend");
-    if (backend === "gemini" || backend === "tesseract") {
-      setRecognitionBackend(backend);
-    }
-    setRecognitionApiKey(
-      localStorage.getItem("sketch-forge:recognition-api-key") ?? "",
-    );
-    setScribbleEnabled(
-      localStorage.getItem("sketch-forge:scribble-enabled") === "true",
-    );
-  }, [setRecognitionBackend, setRecognitionApiKey, setScribbleEnabled]);
+    editor.setRecognitionSettings({
+      ...(backend === "gemini" || backend === "tesseract"
+        ? { recognitionBackend: backend }
+        : {}),
+      recognitionApiKey:
+        localStorage.getItem("sketch-forge:recognition-api-key") ?? "",
+      scribbleEnabled:
+        localStorage.getItem("sketch-forge:scribble-enabled") === "true",
+    });
+  }, [editor]);
 
   async function handleBack() {
     const dest = folderId ? `/dashboard/folder/${folderId}` : "/dashboard";
@@ -295,7 +268,7 @@ function CanvasContent() {
   /**
    * Triggered by the ✨ Beautify toolbar button.
    *
-   * Wraps beautifyLayout() (from useSketchEngine) in a try/catch because it
+   * Wraps editor.beautify() in a try/catch because it
    * is an async function that can throw for two reasons:
    *   - No Gemini API key configured.
    *   - Network or JSON parsing error from getAILayout.
@@ -304,7 +277,7 @@ function CanvasContent() {
    */
   async function handleBeautify() {
     try {
-      await beautifyLayout();
+      await editor.beautify();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Beautify failed";
       console.error("[beautify]", msg);
@@ -328,7 +301,7 @@ function CanvasContent() {
     const nextMode = isDark ? "dark" : "light";
     setCanvasMode(nextMode);
     setTheme(nextMode);
-    applyThemeColors(isDark);
+    editor.applyThemeColors(isDark);
   }
 
   /**
@@ -387,22 +360,9 @@ function CanvasContent() {
         )}
 
         <SketchCanvas
+          editor={editor}
           sceneCanvasRef={sceneCanvasRef}
           interactionCanvasRef={interactiveCanvasRef}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={() => {
-            finalizeElement();
-            triggerSave();
-          }}
-          onPointerLeave={clearPointerPosition}
-          onZoom={handleZoom}
-          onPan={onPan}
-          getCursorForPoint={getCursorForPoint}
-          onDrop={handleDrop}
-          onDoubleClick={onDoubleClick}
-          renderScene={renderScene}
-          renderSelection={renderSelection}
         />
         {!hasElements && !isDocMode && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-6">
@@ -425,20 +385,7 @@ function CanvasContent() {
           <CanvasInspector
             activePanel={inspectorPanel}
             onPanelChange={setInspectorPanel}
-            style={{
-              tool,
-              selectedTool,
-              onStrokeColor: setStrokeColor,
-              onFillColor: setFillColor,
-              onFillStyle: setFillStyle,
-              onStrokeWidth: setStrokeWidth,
-              onFontFamily: setFontFamily,
-              onFontSize: setFontSize,
-              onFontWeight: setFontWeight,
-              onTextAlign: setTextAlign,
-              onTextVerticalAlign: setTextVerticalAlign,
-              canvasMode,
-            }}
+            style={{ canvasMode }}
             canvas={{
               background,
               backgroundColor,

@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import type { ReadonlyElement } from "@repo/canvas-engine";
+import type { ReadonlyElement, SketchEditor } from "@repo/canvas-engine";
 import type { PageViewMode } from "@repo/schema";
 import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createEntity, fetchEntity, updateEntity } from "@/api/canvas";
 
 interface UseCanvasSyncProps {
-  elementsRef: { readonly current: readonly ReadonlyElement[] };
-  setElements: (elements: readonly ReadonlyElement[]) => void;
+  /** Loaded pages go into it with `loadScene`; saves read `getElements`. */
+  editor: SketchEditor;
 }
 
 type ThemeThumbnails = {
@@ -33,10 +33,7 @@ function elementsForThumbnailMode(
   );
 }
 
-export function useCanvasSync({
-  elementsRef,
-  setElements,
-}: UseCanvasSyncProps) {
+export function useCanvasSync({ editor }: UseCanvasSyncProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -49,8 +46,7 @@ export function useCanvasSync({
   const requestedFolderId = searchParams.get("folderId");
   // "New note" / "New canvas" creation flows pass ?mode=doc|canvas so a freshly
   // created page opens in the view its entry point implied.
-  const requestedMode =
-    searchParams.get("mode") === "doc" ? "doc" : "canvas";
+  const requestedMode = searchParams.get("mode") === "doc" ? "doc" : "canvas";
 
   const [title, setTitle] = useState("Untitled");
   const [note, setNoteState] = useState("");
@@ -77,18 +73,13 @@ export function useCanvasSync({
     enabled: !!canvasIdFromUrl,
   });
 
-  const setElementsRef = useRef(setElements);
-  useEffect(() => {
-    setElementsRef.current = setElements;
-  }, [setElements]);
-
   const appliedIdRef = useRef<string | null>(null);
   const migratedNoteRef = useRef(false);
   useEffect(() => {
     if (!loadQuery.data) return;
     if (appliedIdRef.current === loadQuery.data.id) return;
     appliedIdRef.current = loadQuery.data.id;
-    setElementsRef.current(loadQuery.data.elements || []);
+    editor.loadScene(loadQuery.data.elements || []);
     setTitle(loadQuery.data.title || "Untitled");
     currentTitleRef.current = loadQuery.data.title || "Untitled";
     setIsDirty(false);
@@ -112,7 +103,7 @@ export function useCanvasSync({
       setNoteState(nextNote);
       currentNoteRef.current = nextNote;
     }
-  }, [loadQuery.data, entityType]);
+  }, [loadQuery.data, entityType, editor]);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -278,10 +269,10 @@ export function useCanvasSync({
       saveTimeoutRef.current = setTimeout(async () => {
         const thumbnails =
           entityType === "pages"
-            ? await generateThemeThumbnails(elementsRef.current)
+            ? await generateThemeThumbnails(editor.getElements())
             : { light: null, dark: null };
         saveMutation.mutate({
-          elements: elementsRef.current,
+          elements: editor.getElements(),
           title: currentTitleRef.current,
           thumbnail: thumbnails.light,
           thumbnailLight: thumbnails.light,
@@ -289,7 +280,7 @@ export function useCanvasSync({
         });
       }, 2000);
     },
-    [entityType, elementsRef, generateThemeThumbnails, saveMutation],
+    [entityType, editor, generateThemeThumbnails, saveMutation],
   );
 
   const updateTitle = useCallback(
@@ -348,18 +339,18 @@ export function useCanvasSync({
       }
       const thumbnails =
         entityType === "pages"
-          ? await generateThemeThumbnails(elementsRef.current)
+          ? await generateThemeThumbnails(editor.getElements())
           : { light: null, dark: null };
 
       await saveMutation.mutateAsync({
-        elements: elementsRef.current,
+        elements: editor.getElements(),
         title: newTitle ?? currentTitleRef.current,
         thumbnail: thumbnails.light,
         thumbnailLight: thumbnails.light,
         thumbnailDark: thumbnails.dark,
       });
     },
-    [entityType, elementsRef, generateThemeThumbnails, saveMutation],
+    [entityType, editor, generateThemeThumbnails, saveMutation],
   );
 
   return {

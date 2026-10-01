@@ -1,7 +1,11 @@
 import type { ActiveTool, Point, SketchElement } from "@repo/element/types";
 import { cloneElementsForPaste } from "@repo/element";
 import { createHistory } from "@repo/element/history";
-import type { CanvasAppState, CanvasTheme, CurrentItemStyle } from "../appState";
+import type {
+  CanvasAppState,
+  CanvasTheme,
+  CurrentItemStyle,
+} from "../appState";
 import {
   createEditorInternals,
   type SketchEditorOptions,
@@ -141,7 +145,10 @@ export function createSketchEditor(options: SketchEditorOptions = {}) {
     });
   }
 
-  function pointerDown(screenPoint: Point, { button, shiftKey }: PointerButtons) {
+  function pointerDown(
+    screenPoint: Point,
+    { button, shiftKey }: PointerButtons,
+  ) {
     frame.pointerScreenPosition = screenPoint;
     const tool = internals.getState().activeTool;
     if (tool === "select" && button === 2) return;
