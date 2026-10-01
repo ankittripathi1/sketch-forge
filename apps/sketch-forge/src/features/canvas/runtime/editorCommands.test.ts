@@ -1,7 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import type { ReadonlyElement } from "@repo/canvas-engine";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  createSketchEditor,
+  type ReadonlyElement,
+  type SketchEditor,
+} from "@repo/canvas-engine";
 import type { SketchElement } from "@repo/element";
-import type { CanvasClipboardService } from "./CanvasClipboardService";
+import type { CanvasClipboard } from "../utils/canvasClipboard";
 import {
   commandCopy,
   commandCut,
@@ -13,169 +17,139 @@ import {
   type CanvasEditorCommandContext,
 } from "./editorCommands";
 
-function makeElement(overrides: Partial<SketchElement> = {}): SketchElement {
+// The editor schedules paints; nothing paints here, so run them right away.
+globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+  cb(0);
+  return 0;
+}) as typeof requestAnimationFrame;
+globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+
+function rect(id: string, x: number): SketchElement {
   return {
-    id: "element",
+    id,
     tool: "rectangle",
-    x1: 0,
+    x1: x,
     y1: 0,
-    x2: 10,
-    y2: 10,
+    x2: x + 50,
+    y2: 50,
     seed: 1,
     strokeColor: "#000",
     fillColor: "none",
     fillStyle: "none",
     strokeWidth: 2,
-    ...overrides,
   };
 }
 
-function createContext(
-  overrides: Partial<CanvasEditorCommandContext> = {},
-): CanvasEditorCommandContext {
-  return {
-    tool: "select",
-    canUndo: false,
-    canRedo: false,
-    clipboard: {
-      write: () => false,
-      read: () => null,
-    } as CanvasClipboardService,
-    getSelectedElements: () => [],
-    pasteElements: () => false,
-    pasteImage: () => false,
-    deleteSelected: () => {},
-    duplicateSelected: () => {},
-    deselect: () => {},
-    editSelected: () => {},
-    undo: () => {},
-    redo: () => {},
-    setTool: () => {},
-    isPanningRef: { current: false },
-    setIsPanningMode: () => {},
-    stopPanning: () => {},
-    ...overrides,
+/** A clipboard that records writes and returns `payload` on read. */
+function fakeClipboard({
+  canWrite = true,
+  payload = null as SketchElement[] | null,
+} = {}) {
+  const written: (readonly ReadonlyElement[])[] = [];
+  const clipboard: CanvasClipboard = {
+    write: (_data, elements) => {
+      if (!canWrite) return false;
+      written.push(elements);
+      return true;
+    },
+    read: () => (payload ? { elements: payload, fingerprint: "x" } : null),
   };
+  return { clipboard, written };
 }
 
-describe("clipboard editor commands", () => {
-  test("copy reports whether the clipboard write succeeded", () => {
-    const selected = [makeElement()];
-    let received: readonly ReadonlyElement[] = [];
-    const context = createContext({
-      getSelectedElements: () => selected,
-      clipboard: {
-        write(_clipboardData, elements) {
-          received = elements;
-          return true;
-        },
-        read: () => null,
-      } as CanvasClipboardService,
-    });
+/** An editor with two shapes loaded and the first one selected. */
+function editorWithSelection(): SketchEditor {
+  const editor = createSketchEditor();
+  editor.loadScene([rect("a", 0), rect("b", 100)]);
+  editor.setTool("select");
+  editor.pointerDown({ x: 25, y: 25 }, { button: 0, shiftKey: false });
+  editor.pointerUp();
+  return editor;
+}
+
+describe("clipboard commands", () => {
+  let editor: SketchEditor;
+  beforeEach(() => {
+    editor = editorWithSelection();
+  });
+
+  test("copy writes the selection and reports success", () => {
+    const { clipboard, written } = fakeClipboard();
+    const context: CanvasEditorCommandContext = { editor, clipboard };
 
     expect(commandCopy.perform(context, { clipboardData: null })).toEqual({
       handled: true,
     });
-    expect(received).toEqual(selected);
+    expect(written[0]!.map((el) => el.id)).toEqual(["a"]);
   });
 
   test("cut deletes only after a successful clipboard write", () => {
-    let deleteCount = 0;
-    const context = createContext({
-      deleteSelected: () => deleteCount++,
-      clipboard: {
-        write: () => false,
-        read: () => null,
-      } as CanvasClipboardService,
-    });
+    const failing = fakeClipboard({ canWrite: false });
+    expect(
+      commandCut.perform(
+        { editor, clipboard: failing.clipboard },
+        { clipboardData: null },
+      ),
+    ).toEqual({ handled: false });
+    expect(editor.getElements()).toHaveLength(2);
 
-    expect(commandCut.perform(context, { clipboardData: null })).toEqual({
-      handled: false,
-    });
-    expect(deleteCount).toBe(0);
-
-    context.clipboard = {
-      write: () => true,
-      read: () => null,
-    } as CanvasClipboardService;
-    expect(commandCut.perform(context, { clipboardData: null })).toEqual({
-      handled: true,
-    });
-    expect(deleteCount).toBe(1);
+    const working = fakeClipboard();
+    commandCut.perform(
+      { editor, clipboard: working.clipboard },
+      { clipboardData: null },
+    );
+    expect(editor.getElements().map((el) => el.id)).toEqual(["b"]);
   });
 
-  test("pastes internal elements from the clipboard", () => {
-    const copied = [makeElement({ id: "copied" })];
-    let received: SketchElement[] = [];
-    const context = createContext({
-      clipboard: {
-        write: () => false,
-        read: () => ({ elements: copied, fingerprint: "payload" }),
-      } as CanvasClipboardService,
-      pasteElements(elements) {
-        received = elements;
-        return true;
-      },
-    });
+  test("paste inserts copies of the clipboard elements", () => {
+    const { clipboard } = fakeClipboard({ payload: [rect("copied", 0)] });
 
-    expect(commandPaste.perform(context, { clipboardData: null })).toEqual({
-      handled: true,
-    });
-    expect(received).toEqual(copied);
+    expect(
+      commandPaste.perform({ editor, clipboard }, { clipboardData: null }),
+    ).toEqual({ handled: true });
+    expect(editor.getElements()).toHaveLength(3);
   });
 
-  test("falls back to image paste when no internal payload exists", () => {
-    let imagePasteCount = 0;
-    const context = createContext({
-      pasteImage() {
-        imagePasteCount++;
-        return true;
-      },
-    });
+  test("paste with nothing on the clipboard is unhandled", () => {
+    const { clipboard } = fakeClipboard();
 
-    expect(commandPaste.perform(context, { clipboardData: null })).toEqual({
-      handled: true,
-    });
-    expect(imagePasteCount).toBe(1);
+    expect(
+      commandPaste.perform({ editor, clipboard }, { clipboardData: null }),
+    ).toEqual({ handled: false });
+    expect(editor.getElements()).toHaveLength(2);
   });
 });
 
-describe("history and viewport editor commands", () => {
-  test("enables undo and redo from current history state", () => {
-    const disabled = createContext();
-    expect(commandUndo.isEnabled?.(disabled)).toBe(false);
-    expect(commandRedo.isEnabled?.(disabled)).toBe(false);
+describe("history and viewport commands", () => {
+  test("undo and redo are enabled from the editor's history", () => {
+    const editor = createSketchEditor();
+    const context = { editor, clipboard: fakeClipboard().clipboard };
+    expect(commandUndo.isEnabled?.(context)).toBe(false);
 
-    let undoCount = 0;
-    let redoCount = 0;
-    const enabled = createContext({
-      canUndo: true,
-      canRedo: true,
-      undo: () => undoCount++,
-      redo: () => redoCount++,
-    });
-    commandUndo.perform(enabled, undefined);
-    commandRedo.perform(enabled, undefined);
+    editor.setTool("rectangle");
+    editor.pointerDown({ x: 0, y: 0 }, { button: 0, shiftKey: false });
+    editor.pointerMove({ x: 40, y: 40 });
+    editor.pointerUp();
+    expect(commandUndo.isEnabled?.(context)).toBe(true);
 
-    expect(undoCount).toBe(1);
-    expect(redoCount).toBe(1);
+    commandUndo.perform(context, undefined);
+    expect(editor.getElements()).toHaveLength(0);
+    expect(commandRedo.isEnabled?.(context)).toBe(true);
+
+    commandRedo.perform(context, undefined);
+    expect(editor.getElements()).toHaveLength(1);
   });
 
-  test("starts and stops panning consistently", () => {
-    const modes: boolean[] = [];
-    let stopCount = 0;
-    const context = createContext({
-      setIsPanningMode: (value) => modes.push(value),
-      stopPanning: () => stopCount++,
-    });
+  test("starts and stops panning", () => {
+    const editor = createSketchEditor();
+    const context = { editor, clipboard: fakeClipboard().clipboard };
+    expect(commandStopPanning.isEnabled?.(context)).toBe(false);
 
     commandStartPanning.perform(context, undefined);
-    expect(context.isPanningRef.current).toBe(true);
+    expect(editor.getState().panMode).toBe(true);
     expect(commandStopPanning.isEnabled?.(context)).toBe(true);
 
     commandStopPanning.perform(context, undefined);
-    expect(context.isPanningRef.current).toBe(false);
-    expect(modes).toEqual([true, false]);
-    expect(stopCount).toBe(1);
+    expect(editor.getState().panMode).toBe(false);
   });
 });

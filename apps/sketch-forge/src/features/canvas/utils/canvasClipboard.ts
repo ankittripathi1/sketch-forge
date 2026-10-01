@@ -57,3 +57,14 @@ export function readCanvasClipboard(
     return null;
   }
 }
+
+/** The clipboard the canvas commands use. A seam so tests can fake it. */
+export type CanvasClipboard = {
+  write: typeof writeCanvasClipboard;
+  read: typeof readCanvasClipboard;
+};
+
+export const canvasClipboard: CanvasClipboard = {
+  write: writeCanvasClipboard,
+  read: readCanvasClipboard,
+};

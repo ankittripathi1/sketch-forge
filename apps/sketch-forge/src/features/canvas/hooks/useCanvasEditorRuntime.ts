@@ -1,43 +1,35 @@
-import { useEffect, useRef } from "react";
-import { EditorCommandManager } from "@repo/canvas-engine";
+import { useEffect, useState } from "react";
+import { EditorCommandManager, type SketchEditor } from "@repo/canvas-engine";
 import { EditorEventManager } from "../controllers/EditorEventManager";
-import { CanvasClipboardService } from "../runtime/CanvasClipboardService";
+import { canvasClipboard } from "../utils/canvasClipboard";
 import {
   registerCanvasEditorCommands,
   type CanvasEditorCommandContext,
 } from "../runtime/editorCommands";
 import type { CanvasShortcutRegistry } from "../runtime/shortcutRegistry";
 
-type CanvasEditorRuntimeApi = Omit<CanvasEditorCommandContext, "clipboard">;
-
+/**
+ * Builds the canvas command manager for `editor` and wires it to keyboard and
+ * clipboard events for as long as the component is mounted.
+ */
 export function useCanvasEditorRuntime(
-  api: CanvasEditorRuntimeApi,
+  editor: SketchEditor,
   shortcuts: CanvasShortcutRegistry,
 ) {
-  const apiRef = useRef(api);
-  apiRef.current = api;
-
-  const clipboardRef = useRef<CanvasClipboardService | null>(null);
-  if (!clipboardRef.current) {
-    clipboardRef.current = new CanvasClipboardService();
-  }
-
-  const managerRef =
-    useRef<EditorCommandManager<CanvasEditorCommandContext> | null>(null);
-
-  if (!managerRef.current) {
-    managerRef.current = new EditorCommandManager(() => ({
-      ...apiRef.current,
-      clipboard: clipboardRef.current!,
+  const [manager] = useState(() => {
+    const next = new EditorCommandManager<CanvasEditorCommandContext>(() => ({
+      editor,
+      clipboard: canvasClipboard,
     }));
-    registerCanvasEditorCommands(managerRef.current);
-  }
+    registerCanvasEditorCommands(next);
+    return next;
+  });
 
   useEffect(() => {
-    const events = new EditorEventManager(managerRef.current!, shortcuts);
+    const events = new EditorEventManager(manager, shortcuts);
     events.attach();
     return () => events.detach();
-  }, [shortcuts]);
+  }, [manager, shortcuts]);
 
-  return managerRef.current;
+  return manager;
 }

@@ -106,9 +106,6 @@ function CanvasContent() {
     initialMode: resolvedTheme === "dark" ? "dark" : "light",
   });
 
-  // setIsPanningMode is intentionally not read — it exists solely to trigger
-  // a re-render that updates the cursor when the user holds Space.
-  const [, setIsPanningMode] = useState(false);
   const [inspectorPanel, setInspectorPanel] =
     useState<CanvasInspectorPanel | null>(null);
 
@@ -128,7 +125,6 @@ function CanvasContent() {
     elements,
     setElements,
     tool,
-    setTool,
     setStrokeColor,
     setFillColor,
     setFillStyle,
@@ -149,23 +145,12 @@ function CanvasContent() {
     onPointerMove,
     finalizeElement,
     handleZoom,
-    isPanningRef,
-    stopPanning,
-    undo,
-    redo,
     canUndo,
     canRedo,
-    getClipboardElements,
     clearPointerPosition,
-    pasteClipboardElements,
-    pasteClipboardImage,
-    deleteSelected,
-    duplicateSelected,
-    deselect,
     getCursorForPoint,
     handleDrop,
     onDoubleClick,
-    editSelected,
     renderScene,
     renderSelection,
     onPan,
@@ -363,24 +348,7 @@ function CanvasContent() {
 
   const shortcutSettings = useCanvasShortcutRegistry();
   const editorCommands = useCanvasEditorRuntime(
-    {
-      tool,
-      canUndo,
-      canRedo,
-      getSelectedElements: getClipboardElements,
-      pasteElements: pasteClipboardElements,
-      pasteImage: pasteClipboardImage,
-      deleteSelected,
-      duplicateSelected,
-      deselect,
-      editSelected,
-      undo,
-      redo,
-      setTool,
-      isPanningRef,
-      setIsPanningMode,
-      stopPanning,
-    },
+    editor,
     shortcutSettings.registry,
   );
 
