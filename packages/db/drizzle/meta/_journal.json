@@ -15,6 +15,13 @@
       "when": 1790840324004,
       "tag": "0001_wise_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790891120104,
+      "tag": "0002_absent_darkstar",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,6 @@ import { env } from "./lib/env.js";
 import { requestLogger } from "./lib/logging.js";
 import { originGuard } from "./middleware/originGuard.js";
 import auth from "./routes/auth.js";
-import canvases from "./routes/canvases.js";
 import folders from "./routes/folders.js";
 import pages from "./routes/pages.js";
 import stats from "./routes/stats.js";
@@ -28,7 +27,6 @@ app.use(
 app.use(originGuard);
 
 app.route("/auth", auth);
-app.route("/canvases", canvases);
 app.route("/folders", folders);
 app.route("/pages", pages);
 app.route("/stats", stats);
