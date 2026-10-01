@@ -1,38 +1,29 @@
 "use client";
 
 import { RefObject, useEffect } from "react";
+import type { SketchEditor } from "@repo/canvas-engine";
 import { Point } from "@repo/element/types";
 
 interface SketchCanvasProps {
+  editor: SketchEditor;
   sceneCanvasRef: RefObject<HTMLCanvasElement | null>;
   interactionCanvasRef: RefObject<HTMLCanvasElement | null>;
-  onPointerDown: (p: Point, e: React.PointerEvent) => void;
-  onPointerMove: (p: Point) => void;
-  onPointerUp: () => void;
-  onPointerLeave?: () => void;
-  onZoom: (delta: number, p: Point) => void;
-  onPan: (dx: number, dy: number) => void;
-  getCursorForPoint: (p: Point) => string;
-  onDrop: (e: DragEvent, p: Point) => void;
-  onDoubleClick: (p: Point) => void;
-  renderScene: () => void;
-  renderSelection: () => void;
 }
 
+/** The point of a pointer event relative to the canvas's top-left corner. */
+function localPoint(e: React.MouseEvent<HTMLElement>): Point {
+  const rect = e.currentTarget.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+/**
+ * The two stacked canvases the editor draws on, plus the input surface that
+ * feeds pointer, wheel and drop events straight to the editor.
+ */
 export function SketchCanvas({
+  editor,
   sceneCanvasRef,
   interactionCanvasRef,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-  onPointerLeave,
-  onZoom,
-  onPan,
-  getCursorForPoint,
-  onDrop,
-  onDoubleClick,
-  renderScene,
-  renderSelection,
 }: SketchCanvasProps) {
   useEffect(() => {
     const resize = () => {
@@ -45,57 +36,42 @@ export function SketchCanvas({
           canvas.height = height * dpr;
         }
       });
-      renderScene();
-      renderSelection();
+      editor.redraw();
     };
 
     window.addEventListener("resize", resize);
     resize();
     return () => window.removeEventListener("resize", resize);
-  }, [sceneCanvasRef, interactionCanvasRef, renderScene, renderSelection]);
+  }, [editor, sceneCanvasRef, interactionCanvasRef]);
 
   return (
     <div
       className="absolute inset-0 w-full h-full touch-none"
-      onPointerDown={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        onPointerDown({ x: e.clientX - rect.left, y: e.clientY - rect.top }, e);
-      }}
+      onPointerDown={(e) =>
+        editor.pointerDown(localPoint(e), {
+          button: e.button,
+          shiftKey: e.shiftKey,
+        })
+      }
       onPointerMove={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        onPointerMove(p);
-        e.currentTarget.style.cursor = getCursorForPoint(p);
+        const p = localPoint(e);
+        editor.pointerMove(p);
+        e.currentTarget.style.cursor = editor.getCursorForPoint(p);
       }}
-      onPointerUp={onPointerUp}
-      onPointerLeave={() => {
-        onPointerUp();
-        onPointerLeave?.();
-      }}
+      onPointerUp={() => editor.pointerUp()}
+      onPointerLeave={() => editor.pointerLeave()}
       onWheel={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        const delta = e.deltaY * -0.001;
         if (e.ctrlKey || e.metaKey) {
-          onZoom(delta, p);
+          editor.zoomAt(e.deltaY * -0.001, localPoint(e));
         } else if (e.shiftKey) {
-          onPan(e.deltaX, 0);
+          editor.panBy(e.deltaX, 0);
         } else {
-          onPan(0, e.deltaY);
+          editor.panBy(0, e.deltaY);
         }
       }}
       onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        onDrop(e.nativeEvent, {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
-        });
-      }}
-      onDoubleClick={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        onDoubleClick({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-      }}
+      onDrop={(e) => editor.dropFiles(e.dataTransfer, localPoint(e))}
+      onDoubleClick={(e) => editor.doubleClick(localPoint(e))}
     >
       <canvas
         ref={sceneCanvasRef}

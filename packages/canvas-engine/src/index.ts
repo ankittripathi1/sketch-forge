@@ -13,14 +13,11 @@ export {
 export { createNullSurface, type Surface } from "./editor/surface";
 export {
   CanvasEditorProvider,
+  useEditorSelector,
   useEditorState,
   useSketchEditor,
 } from "./react/editorContext";
-export type {
-  CanvasAppState,
-  CanvasTheme,
-  CurrentItemStyle,
-} from "./appState";
+export type { CanvasAppState, CanvasTheme, CurrentItemStyle } from "./appState";
 export {
   defineEditorCommand,
   EditorCommandManager,

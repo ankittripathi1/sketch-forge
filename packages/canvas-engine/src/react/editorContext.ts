@@ -7,10 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useStore } from "zustand";
-import type {
-  ReadonlyAppState,
-  SketchEditor,
-} from "../editor/sketchEditor";
+import type { ReadonlyAppState, SketchEditor } from "../editor/sketchEditor";
 
 const EditorContext = createContext<SketchEditor | null>(null);
 
@@ -42,14 +39,21 @@ export function useSketchEditor(): SketchEditor {
 }
 
 /**
- * Subscribes to one slice of the editor's view state.
+ * Subscribes to one slice of `editor`'s view state.
  *
  * Pass the narrowest selector you can: the component re-renders only when the
- * selected value changes, so `useEditorState((s) => s.activeTool)` costs far
- * less than reading the whole state.
+ * selected value changes, so `(s) => s.activeTool` costs far less than reading
+ * the whole state. Use this where the editor is in hand; below a
+ * `CanvasEditorProvider`, use `useEditorState`.
  */
-export function useEditorState<T>(
+export function useEditorSelector<T>(
+  editor: SketchEditor,
   selector: (state: ReadonlyAppState) => T,
 ): T {
-  return useStore(useSketchEditor().store, selector);
+  return useStore(editor.store, selector);
+}
+
+/** {@link useEditorSelector} for the editor from the nearest provider. */
+export function useEditorState<T>(selector: (state: ReadonlyAppState) => T): T {
+  return useEditorSelector(useSketchEditor(), selector);
 }

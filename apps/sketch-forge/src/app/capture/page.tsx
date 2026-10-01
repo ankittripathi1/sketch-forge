@@ -1,7 +1,11 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { useSketchEngine, type ReadonlyElement } from "@repo/canvas-engine";
+import {
+  useEditorSelector,
+  useSketchEngine,
+  type ReadonlyElement,
+} from "@repo/canvas-engine";
 import { SketchCanvas } from "@/features/canvas";
 import { CaptureToolbar, FolderPicker } from "@/features/capture";
 import { useRouter } from "next/navigation";
@@ -16,27 +20,13 @@ export default function QuickCapturePage() {
   const [isSaving, setIsSaving] = useState(false);
   const workerRef = useRef<Worker | null>(null);
 
-  const {
-    elements,
-    tool,
-    setTool,
-    strokeColor,
-    setStrokeColor,
-    strokeWidth,
-    setStrokeWidth,
-    undo,
-    canUndo,
-    onPointerDown,
-    onPointerMove,
-    finalizeElement,
-    handleZoom,
-    onPan,
-    getCursorForPoint,
-    handleDrop,
-    onDoubleClick,
-    renderScene,
-    renderSelection,
-  } = useSketchEngine(sceneCanvasRef, interactiveCanvasRef);
+  const { editor } = useSketchEngine(sceneCanvasRef, interactiveCanvasRef);
+  const tool = useEditorSelector(editor, (s) => s.activeTool);
+  const canUndo = useEditorSelector(editor, (s) => s.canUndo);
+  const { strokeColor, strokeWidth } = useEditorSelector(
+    editor,
+    (s) => s.currentItemStyle,
+  );
 
   // Initialize Worker for thumbnail generation
   useEffect(() => {
@@ -86,7 +76,7 @@ export default function QuickCapturePage() {
     setIsSaving(true);
 
     try {
-      const thumbnail = await generateThumbnail(elements.current);
+      const thumbnail = await generateThumbnail(editor.getElements());
 
       const response = await fetch(`${PUBLIC_API_URL}/pages`, {
         method: "POST",
@@ -95,7 +85,7 @@ export default function QuickCapturePage() {
         },
         body: JSON.stringify({
           title: `Quick Capture ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-          elements: elements.current,
+          elements: editor.getElements(),
           folderId,
           thumbnail,
         }),
@@ -124,28 +114,19 @@ export default function QuickCapturePage() {
       </div>
 
       <SketchCanvas
+        editor={editor}
         sceneCanvasRef={sceneCanvasRef}
         interactionCanvasRef={interactiveCanvasRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={finalizeElement}
-        onZoom={handleZoom}
-        onPan={onPan}
-        getCursorForPoint={getCursorForPoint}
-        onDrop={handleDrop}
-        onDoubleClick={onDoubleClick}
-        renderScene={renderScene}
-        renderSelection={renderSelection}
       />
 
       <CaptureToolbar
         tool={tool}
-        setTool={setTool}
+        setTool={editor.setTool}
         strokeColor={strokeColor}
-        setStrokeColor={setStrokeColor}
+        setStrokeColor={(color) => editor.setStyle({ strokeColor: color })}
         strokeWidth={strokeWidth}
-        setStrokeWidth={setStrokeWidth}
-        onUndo={undo}
+        setStrokeWidth={(width) => editor.setStyle({ strokeWidth: width })}
+        onUndo={editor.undo}
         canUndo={canUndo}
         onDone={() => setIsFolderPickerOpen(true)}
       />
