@@ -7,6 +7,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import postgres from "postgres";
 import { applyMigrations } from "./migrate.js";
+import journal from "../drizzle/meta/_journal.json";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const canRun =
@@ -81,7 +82,6 @@ describe.skipIf(!canRun)("baseline migration", () => {
     `;
 
     expect(tables.map((row) => row.table_name)).toEqual([
-      "canvases",
       "folders",
       "magic_link_tokens",
       "oauth_accounts",
@@ -145,7 +145,7 @@ describe.skipIf(!canRun)("baseline migration", () => {
     ]);
   });
 
-  test("migrate is recorded once and is a no-op the second time", async () => {
+  test("each migration is recorded once and a second run is a no-op", async () => {
     await resetPublicSchema();
     await applyMigrations(testDatabaseUrl!);
     await applyMigrations(testDatabaseUrl!);
@@ -153,7 +153,7 @@ describe.skipIf(!canRun)("baseline migration", () => {
     const rows = await sql!<{ count: string }[]>`
       SELECT COUNT(*)::text AS count FROM drizzle.__drizzle_migrations
     `;
-    expect(rows[0]?.count).toBe("1");
+    expect(rows[0]?.count).toBe(String(journal.entries.length));
   });
 
   test("a production-shaped fixture survives a second migrate", async () => {
@@ -191,21 +191,19 @@ describe.skipIf(!canRun)("baseline migration", () => {
     `;
 
     await sql!`
-      INSERT INTO canvases (user_id, title)
-      VALUES (${userId}, 'Scratch')
-    `;
-    await sql!`
       INSERT INTO review_logs (user_id, page_id, quality)
       VALUES (${userId}, ${page!.id}, 4)
     `;
 
     await applyMigrations(testDatabaseUrl!);
 
-    const [roundTrip] = await sql!<{
-      note: string;
-      view_mode: string;
-      thumbnail_light: string;
-    }[]>`
+    const [roundTrip] = await sql!<
+      {
+        note: string;
+        view_mode: string;
+        thumbnail_light: string;
+      }[]
+    >`
       SELECT note, view_mode, thumbnail_light FROM pages WHERE id = ${page!.id}
     `;
     expect(roundTrip).toEqual({

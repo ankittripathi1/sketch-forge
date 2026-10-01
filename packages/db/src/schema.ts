@@ -29,7 +29,6 @@ export const userTable = pgTable("users", {
 
 export const userRelations = relations(userTable, ({ many }) => ({
   oauthAccounts: many(oauthAccounts),
-  canvases: many(canvases),
   magicLinkTokens: many(magicLinkTokens),
   folders: many(folders),
   pages: many(pages),
@@ -58,26 +57,6 @@ export const oauthAccounts = pgTable(
 export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
   user: one(userTable, {
     fields: [oauthAccounts.userId],
-    references: [userTable.id],
-  }),
-}));
-
-export const canvases = pgTable("canvases", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => userTable.id, {
-    onDelete: "cascade",
-  }),
-  title: text("title").default("Untitled").notNull(),
-  elements: jsonb("elements"),
-  thumbnail: text("thumbnail"),
-  organizedSummary: text("organized_summary"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt"),
-});
-
-export const canvasesRelations = relations(canvases, ({ one }) => ({
-  user: one(userTable, {
-    fields: [canvases.userId],
     references: [userTable.id],
   }),
 }));
