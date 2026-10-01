@@ -41,6 +41,10 @@ export type CanvasAppState = {
   theme: CanvasTheme;
   canUndo: boolean;
   canRedo: boolean;
+  /** Whether the scene has any elements, for empty states and Beautify. */
+  hasElements: boolean;
+  /** Space is held: a drag pans instead of using the active tool. */
+  panMode: boolean;
   isBeautifying: boolean;
   isScribblePending: boolean;
   /**
@@ -75,6 +79,8 @@ export function createInitialAppState(
     theme,
     canUndo: false,
     canRedo: false,
+    hasElements: false,
+    panMode: false,
     isBeautifying: false,
     isScribblePending: false,
     scribbleEnabled: false,

@@ -36,7 +36,6 @@ export type CanvasFrameState = {
   selectInteraction: SelectInteraction;
   canvasInteraction: CanvasInteraction;
   hoveredAnchor: BindableShape | null;
-  isPanning: boolean;
   pointerScreenPosition: Point | null;
 
   /** Handwriting strokes waiting to be recognised. */
@@ -60,7 +59,6 @@ export function createFrameState(): CanvasFrameState {
     selectInteraction: { type: "idle" },
     canvasInteraction: { type: "idle" },
     hoveredAnchor: null,
-    isPanning: false,
     pointerScreenPosition: null,
     pendingScribbleIds: [],
     scribbleTimer: null,

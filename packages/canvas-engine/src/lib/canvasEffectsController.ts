@@ -1,9 +1,9 @@
 import { getAILayout } from "@repo/canvas-core/lib/layoutAI";
 import { applyLayoutUpdates } from "./beautify";
 import { recolorByTheme } from "@repo/element/recolor";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 
-export async function beautifyLayout(editor: SketchEditor) {
+export async function beautifyLayout(editor: EditorInternals) {
   const apiKey = editor.getState().recognitionApiKey?.trim();
   if (!apiKey) {
     throw new Error("A Gemini API key is required. Add it in Settings.");
@@ -35,7 +35,7 @@ export async function beautifyLayout(editor: SketchEditor) {
 }
 
 export function applyThemeColors(
-  editor: SketchEditor,
+  editor: EditorInternals,
   isDark: boolean,
   options: { recordHistory?: boolean } = {},
 ) {

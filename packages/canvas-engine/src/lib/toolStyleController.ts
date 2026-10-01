@@ -1,7 +1,7 @@
 import type { SketchElement } from "@repo/element/types";
 import { getToolbarStyleFromElement } from "./toolStyle";
 import type { TextEditorStyle } from "../tools/text";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 
 /**
  * Points the toolbar at an element's style, without writing back to it.
@@ -10,7 +10,7 @@ import type { SketchEditor } from "../editor/sketchEditor";
  * selected element actually looks like.
  */
 export function syncToolbarStyleFromElement(
-  editor: SketchEditor,
+  editor: EditorInternals,
   element: SketchElement,
 ) {
   const style = getToolbarStyleFromElement(element);
@@ -34,7 +34,7 @@ export function syncToolbarStyleFromElement(
  * that is frame state, not view state, so it is not on the editor's store.
  */
 export function getTextEditorStyle(
-  editor: SketchEditor,
+  editor: EditorInternals,
   zoom: number,
 ): TextEditorStyle {
   const style = editor.getState().currentItemStyle;

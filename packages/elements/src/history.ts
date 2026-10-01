@@ -9,8 +9,9 @@ export type HistoryState = {
   canRedo: () => boolean;
 };
 
-export function createHistory(): HistoryState {
-  const snapshots: SketchElement[][] = [[]];
+/** A linear undo stack. `initial` is the state undo can't go past. */
+export function createHistory(initial: SketchElement[] = []): HistoryState {
+  const snapshots: SketchElement[][] = [[...initial]];
   let pointer = 0;
 
   return {

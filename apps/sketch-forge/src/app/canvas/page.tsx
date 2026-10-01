@@ -22,7 +22,6 @@ import {
   getCanvasPrefsKey,
   getBackgroundStyle,
 } from "@/features/canvas";
-import type { FillStyle } from "@repo/element/types";
 import { isColorDark } from "@repo/common";
 import { useSketchEngine, CanvasEditorProvider } from "@repo/canvas-engine";
 import {
@@ -143,6 +142,7 @@ function CanvasContent() {
     applyThemeColors,
     beautifyLayout,
     isBeautifying,
+    hasElements,
     zoomLevel,
     panOffsetDisplay,
     onPointerDown,
@@ -156,9 +156,7 @@ function CanvasContent() {
     canUndo,
     canRedo,
     getClipboardElements,
-    getPointerPosition,
     clearPointerPosition,
-    getViewportBounds,
     pasteClipboardElements,
     pasteClipboardImage,
     deleteSelected,
@@ -295,16 +293,6 @@ function CanvasContent() {
   // ─── Derived UI flags ──────────────────────────────────────────────────────
 
   /**
-   * Whether there is anything on the canvas to work with.
-   *
-   * Elements live inside refs in the hook and don't trigger re-renders, so we
-   * can’t read elements.length directly here.  canUndo/canRedo become true the
-   * moment the first element is pushed to history, making them a reliable proxy.
-   * This drives the disabled state of the Beautify button.
-   */
-  const hasElements = canUndo || canRedo;
-
-  /**
    * Whether the user has configured a Gemini API key.
    * Used to style the Beautify button: amber (ready) vs grey (needs key).
    */
@@ -373,23 +361,6 @@ function CanvasContent() {
     setTheme(nextMode);
   }
 
-  /**
-   * Intercepts fill-style changes to ensure a sensible default fill colour.
-   *
-   * When the user switches from "no fill" to hachure or solid, fillColor is
-   * still "none" (the no-fill sentinel).  We auto-set it to a default blue
-   * so the shape immediately appears filled rather than showing nothing.
-   */
-  function handleFillStyle(style: FillStyle) {
-    setFillStyle(style);
-    if (
-      style !== "none" &&
-      editor.getState().currentItemStyle.fillColor === "none"
-    ) {
-      setFillColor("#5a8ae8");
-    }
-  }
-
   const shortcutSettings = useCanvasShortcutRegistry();
   const editorCommands = useCanvasEditorRuntime(
     {
@@ -397,8 +368,6 @@ function CanvasContent() {
       canUndo,
       canRedo,
       getSelectedElements: getClipboardElements,
-      getPointerPosition,
-      getViewportBounds,
       pasteElements: pasteClipboardElements,
       pasteImage: pasteClipboardImage,
       deleteSelected,
@@ -493,7 +462,7 @@ function CanvasContent() {
               selectedTool,
               onStrokeColor: setStrokeColor,
               onFillColor: setFillColor,
-              onFillStyle: handleFillStyle,
+              onFillStyle: setFillStyle,
               onStrokeWidth: setStrokeWidth,
               onFontFamily: setFontFamily,
               onFontSize: setFontSize,

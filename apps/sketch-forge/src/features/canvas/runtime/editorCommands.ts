@@ -2,12 +2,8 @@ import {
   defineEditorCommand,
   type EditorCommandManager,
   type EditorCommand,
-} from "@repo/canvas-engine/editor/commandManager";
-import {
-  getContextualPasteTranslation,
-  type CanvasViewportBounds,
-} from "@repo/canvas-engine/lib/pastePlacement";
-import type { ActiveTool, Point, SketchElement } from "@repo/element";
+} from "@repo/canvas-engine";
+import type { ActiveTool, SketchElement } from "@repo/element";
 import type { CanvasClipboardService } from "./CanvasClipboardService";
 
 type BooleanRef = { current: boolean };
@@ -18,9 +14,8 @@ export type CanvasEditorCommandContext = {
   canRedo: boolean;
   clipboard: CanvasClipboardService;
   getSelectedElements: () => SketchElement[];
-  getPointerPosition: () => Point | null;
-  getViewportBounds: () => CanvasViewportBounds | null;
-  pasteElements: (elements: SketchElement[], offset: Point) => boolean;
+  /** Pastes copies of `elements`; the editor decides where they land. */
+  pasteElements: (elements: SketchElement[]) => boolean;
   pasteImage: (clipboardData: DataTransfer | null) => boolean;
   deleteSelected: () => void;
   duplicateSelected: () => void;
@@ -83,15 +78,7 @@ export const commandPaste = defineEditorCommand<
   perform: (context, { clipboardData }) => {
     const clipboard = context.clipboard.read(clipboardData);
     if (clipboard) {
-      const translation = getContextualPasteTranslation(clipboard.elements, {
-        selectedElements: context.getSelectedElements(),
-        pointer: context.getPointerPosition(),
-        viewport: context.getViewportBounds(),
-      });
-
-      return {
-        handled: context.pasteElements(clipboard.elements, translation),
-      };
+      return { handled: context.pasteElements(clipboard.elements) };
     }
 
     // No internal element payload — fall back to a clipboard image
