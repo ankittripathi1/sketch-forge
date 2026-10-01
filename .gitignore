@@ -48,6 +48,7 @@ ruvector.db
 .impeccable.md
 
 # Internal planning / docs (kept local, not committed)
+docs/
 AGENTS.md
 ARCHITECTURE.md
 ROADMAP.md
