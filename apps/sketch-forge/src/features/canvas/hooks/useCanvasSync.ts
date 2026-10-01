@@ -176,6 +176,10 @@ export function useCanvasSync({
         ...(vars.thumbnailDark ? { thumbnailDark: vars.thumbnailDark } : {}),
       });
     },
+    // A drawing save is the user's work; ride out a flaky network rather than
+    // dropping it. Backoff caps at 5s so retries stay reasonably prompt.
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
     onSuccess: (data) => {
       setIsDirty(false);
       setLastSavedAt(new Date());
@@ -314,6 +318,18 @@ export function useCanvasSync({
     },
     [triggerSave],
   );
+
+  // Warn before leaving with edits still in the debounce window or mid-save, so
+  // a tab close does not silently drop the last strokes.
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   // Persist a note migrated from localStorage once the page id is known.
   useEffect(() => {
