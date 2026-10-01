@@ -11,11 +11,11 @@ import {
   getSelectPointerMoveAction,
   moveSelectedElements,
 } from "./select";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 import { syncToolbarStyleFromElement } from "../lib/toolStyleController";
 
 export function handleSelectPointerDown(
-  editor: SketchEditor,
+  editor: EditorInternals,
   point: Point,
   shiftKey: boolean,
 ) {
@@ -88,7 +88,7 @@ export function handleSelectPointerDown(
 }
 
 export function handleSelectPointerMove(
-  editor: SketchEditor,
+  editor: EditorInternals,
   screenPoint: Point,
 ) {
   const action = getSelectPointerMoveAction({
@@ -159,7 +159,7 @@ export function handleSelectPointerMove(
   }
 }
 
-export function finalizeSelectInteraction(editor: SketchEditor) {
+export function finalizeSelectInteraction(editor: EditorInternals) {
   const action = getSelectFinalizeAction({
     interaction: editor.frame.selectInteraction,
     selectionMarquee: editor.frame.selectionMarquee,

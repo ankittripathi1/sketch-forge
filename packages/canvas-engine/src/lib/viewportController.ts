@@ -5,16 +5,16 @@ import {
   zoomAroundScreenPoint,
 } from "./viewport";
 import { getSelectCursor } from "../tools/select";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 
-export function beginPanning(editor: SketchEditor, screenPoint: Point) {
+export function beginPanning(editor: EditorInternals, screenPoint: Point) {
   editor.frame.canvasInteraction = {
     type: "panning",
     lastScreenPoint: screenPoint,
   };
 }
 
-export function handlePanningMove(editor: SketchEditor, screenPoint: Point) {
+export function handlePanningMove(editor: EditorInternals, screenPoint: Point) {
   if (editor.frame.canvasInteraction.type !== "panning") return false;
 
   const interaction = editor.frame.canvasInteraction;
@@ -38,7 +38,7 @@ export function zoomViewport({
   minZoom,
   maxZoom,
 }: {
-  editor: SketchEditor;
+  editor: EditorInternals;
   delta: number;
   cursorScreen: Point;
   minZoom: number;
@@ -58,16 +58,16 @@ export function zoomViewport({
   editor.scheduleViewportRender();
 }
 
-export function panViewport(editor: SketchEditor, dx: number, dy: number) {
+export function panViewport(editor: EditorInternals, dx: number, dy: number) {
   editor.frame.panOffset = panByOffset(editor.frame.panOffset, dx, dy);
   editor.scheduleViewportRender();
 }
 
 export function getCursorForPoint(
-  editor: SketchEditor,
+  editor: EditorInternals,
   screenPoint: Point,
 ): string {
-  if (editor.frame.isPanning) return "grab";
+  if (editor.getState().panMode) return "grab";
 
   if (editor.getState().activeTool === "select") {
     const point = editor.screenToCanvas(screenPoint);

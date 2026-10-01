@@ -9,19 +9,19 @@ import {
   isStrokeDraft,
   updateDraftElement,
 } from "./drawing";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 import { queueScribbleStroke } from "../lib/scribbleController";
 
 export type { CanvasInteraction } from "./interactions";
 
 /** The style a new element is drawn with, taken from the toolbar. */
-function draftStyle(editor: SketchEditor) {
+function draftStyle(editor: EditorInternals) {
   const { strokeColor, fillColor, fillStyle, strokeWidth } =
     editor.getState().currentItemStyle;
   return { strokeColor, fillColor, fillStyle, strokeWidth };
 }
 
-export function startDrawing(editor: SketchEditor, point: Point) {
+export function startDrawing(editor: EditorInternals, point: Point) {
   const activeTool = editor.getState().activeTool as Tool;
   editor.frame.canvasInteraction = { type: "drawing" };
   const { startBinding, startPoint } = getDraftStart({
@@ -39,7 +39,7 @@ export function startDrawing(editor: SketchEditor, point: Point) {
   editor.renderActiveElement();
 }
 
-export function updateArrowHover(editor: SketchEditor, point: Point) {
+export function updateArrowHover(editor: EditorInternals, point: Point) {
   const activeTool = editor.getState().activeTool;
   if (
     activeTool !== "arrow" ||
@@ -63,7 +63,7 @@ export function updateArrowHover(editor: SketchEditor, point: Point) {
   return true;
 }
 
-export function handleDrawingPointerMove(editor: SketchEditor, point: Point) {
+export function handleDrawingPointerMove(editor: EditorInternals, point: Point) {
   if (
     editor.frame.canvasInteraction.type !== "drawing" ||
     !editor.frame.currentElement
@@ -85,7 +85,7 @@ export function handleDrawingPointerMove(editor: SketchEditor, point: Point) {
   editor.scheduleActiveElementRender();
 }
 
-export function finalizeDrawingInteraction(editor: SketchEditor) {
+export function finalizeDrawingInteraction(editor: EditorInternals) {
   const activeTool = editor.getState().activeTool as Tool;
   if (
     editor.frame.canvasInteraction.type !== "drawing" ||

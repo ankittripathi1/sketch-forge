@@ -3,15 +3,15 @@ import {
   recognizeHandwriting,
 } from "@repo/canvas-core/lib/recognition";
 import { buildTextFromStrokes } from "./scribble";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 
 /** The recognition settings, in the shape `@repo/canvas-core` expects. */
-function recognitionConfig(editor: SketchEditor) {
+function recognitionConfig(editor: EditorInternals) {
   const state = editor.getState();
   return { backend: state.recognitionBackend, apiKey: state.recognitionApiKey };
 }
 
-export function queueScribbleStroke(editor: SketchEditor, id: string) {
+export function queueScribbleStroke(editor: EditorInternals, id: string) {
   editor.frame.pendingScribbleIds.push(id);
   editor.setScribblePending(true);
   if (editor.frame.scribbleTimer) clearTimeout(editor.frame.scribbleTimer);
@@ -22,7 +22,7 @@ export function queueScribbleStroke(editor: SketchEditor, id: string) {
   }, debounceMs);
 }
 
-export async function flushScribbleBatch(editor: SketchEditor) {
+export async function flushScribbleBatch(editor: EditorInternals) {
   const ids = new Set(editor.frame.pendingScribbleIds);
   editor.frame.pendingScribbleIds = [];
 

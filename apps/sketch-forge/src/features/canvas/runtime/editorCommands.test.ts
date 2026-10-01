@@ -41,8 +41,6 @@ function createContext(
       read: () => null,
     } as CanvasClipboardService,
     getSelectedElements: () => [],
-    getPointerPosition: () => null,
-    getViewportBounds: () => null,
     pasteElements: () => false,
     pasteImage: () => false,
     deleteSelected: () => {},
@@ -105,20 +103,16 @@ describe("clipboard editor commands", () => {
     expect(deleteCount).toBe(1);
   });
 
-  test("pastes internal elements after the current selection", () => {
+  test("pastes internal elements from the clipboard", () => {
     const copied = [makeElement({ id: "copied" })];
-    const selected = [
-      makeElement({ id: "selected", x1: 100, y1: 200, x2: 120, y2: 220 }),
-    ];
-    let translation = { x: 0, y: 0 };
+    let received: SketchElement[] = [];
     const context = createContext({
       clipboard: {
         write: () => false,
         read: () => ({ elements: copied, fingerprint: "payload" }),
       } as CanvasClipboardService,
-      getSelectedElements: () => selected,
-      pasteElements(_elements, offset) {
-        translation = offset;
+      pasteElements(elements) {
+        received = elements;
         return true;
       },
     });
@@ -126,7 +120,7 @@ describe("clipboard editor commands", () => {
     expect(commandPaste.perform(context, { clipboardData: null })).toEqual({
       handled: true,
     });
-    expect(translation).toEqual({ x: 124, y: 224 });
+    expect(received).toEqual(copied);
   });
 
   test("falls back to image paste when no internal payload exists", () => {

@@ -6,11 +6,11 @@ import {
   openTextCreationEditor,
   openTextEditEditor,
 } from "./text";
-import type { SketchEditor } from "../editor/sketchEditor";
+import type { EditorInternals } from "../editor/editorInternals";
 import { getTextEditorStyle } from "../lib/toolStyleController";
 
 export function startTextCreation(
-  editor: SketchEditor,
+  editor: EditorInternals,
   screenPoint: Point,
   point: Point,
 ) {
@@ -27,13 +27,13 @@ export function startTextCreation(
   });
 }
 
-function restoreSelectedElement(editor: SketchEditor, element: SketchElement) {
+function restoreSelectedElement(editor: EditorInternals, element: SketchElement) {
   editor.setSelectedElements([element]);
   editor.setSelectedTool(element.tool);
   editor.renderSelection();
 }
 
-export function editSelectedText(editor: SketchEditor) {
+export function editSelectedText(editor: EditorInternals) {
   const selected = editor.selectedElementsList();
   if (selected.length !== 1) return;
   const element = selected[0]!;
@@ -65,7 +65,7 @@ export function editSelectedText(editor: SketchEditor) {
 }
 
 export function handleTextDoubleClick(
-  editor: SketchEditor,
+  editor: EditorInternals,
   screenPoint: Point,
 ) {
   if (editor.getState().activeTool === "text") {

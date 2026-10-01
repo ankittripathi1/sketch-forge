@@ -1,428 +1,315 @@
-import { createStore, type StoreApi } from "zustand/vanilla";
-import type {
-  ActiveTool,
-  Point,
-  SketchElement,
-  Tool,
-} from "@repo/element/types";
+import type { StoreApi } from "zustand/vanilla";
+import type { ActiveTool, Point, SketchElement } from "@repo/element/types";
+import { cloneElementsForPaste } from "@repo/element";
+import { createHistory } from "@repo/element/history";
+import type { CanvasAppState, CanvasTheme, CurrentItemStyle } from "../appState";
 import {
-  getSelectedElements,
-  mergeElementsById,
-  setSelection,
-} from "@repo/element/selection";
-import * as geometry from "@repo/element/transform";
-import type { AnchorSide } from "@repo/element/types";
-import type { BindableShape } from "../tools/interactions";
+  createEditorInternals,
+  type SketchEditorOptions,
+} from "./editorInternals";
 import {
-  createInitialAppState,
-  type CanvasAppState,
-  type CanvasTheme,
-  type CurrentItemStyle,
-} from "../appState";
-import { updateSceneElements } from "../scene";
-import { createFrameState, type CanvasFrameState } from "./frameState";
-import { createRenderers } from "../lib/rendering";
-import {
-  screenToCanvas as screenToCanvasMath,
-  canvasToScreen as canvasToScreenMath,
-} from "@repo/math";
-import type { CanvasViewportBounds } from "../lib/pastePlacement";
-import {
-  getHistoryStatus,
-  pushHistorySnapshot as pushSnapshotToHistory,
-  redoHistory,
-  undoHistory,
-} from "../lib/historyModel";
-import {
-  applyActionResult,
-  dispatchAction,
-  performAction,
-} from "../actions/manager";
-import { actionUpdateStyle } from "../actions/style";
+  actionDeleteSelected,
+  actionDeselect,
+  actionDuplicateSelected,
+} from "../actions/selection";
 import {
   actionAddElement,
+  actionInsertElements,
   actionReplaceScene,
-  actionUpdateElements,
 } from "../actions/elements";
-import { actionSetActiveTool } from "../actions/tool";
-import type { Action } from "../actions/types";
-import { createNullSurface, type Surface } from "./surface";
+import { getContextualPasteTranslation } from "../lib/pastePlacement";
+import {
+  applyThemeColors,
+  beautifyLayout,
+} from "../lib/canvasEffectsController";
+import {
+  beginPanning,
+  getCursorForPoint,
+  handlePanningMove,
+  panViewport,
+  zoomViewport,
+} from "../lib/viewportController";
+import {
+  editSelectedText,
+  handleTextDoubleClick,
+  startTextCreation,
+} from "../tools/textController";
+import {
+  finalizeSelectInteraction,
+  handleSelectPointerDown,
+  handleSelectPointerMove,
+} from "../tools/selectController";
+import {
+  finalizeDrawingInteraction,
+  handleDrawingPointerMove,
+  startDrawing,
+  updateArrowHover,
+} from "../tools/drawingController";
+import {
+  buildImageElement,
+  getImageFileFromTransfer,
+  readImageFile,
+} from "../tools/image";
 
-export type SketchEditorOptions = {
-  surface?: Surface;
-  theme?: CanvasTheme;
-  /** Seeds the recognition preferences; they are view state after that. */
-  settings?: Partial<
-    Pick<
-      CanvasAppState,
-      "scribbleEnabled" | "recognitionBackend" | "recognitionApiKey"
-    >
-  >;
-  /** Called whenever a change should be persisted. */
-  onChange?: () => void;
-};
+export type { SketchEditorOptions };
 
-export type CommitElementOptions = {
-  select?: boolean;
-  nextTool?: ActiveTool;
-};
+const MIN_ZOOM = 0.05;
+const MAX_ZOOM = 20;
+const DUPLICATE_OFFSET = 24;
+/** The fill a shape gets when its fill style is switched on from "none". */
+const DEFAULT_FILL_COLOR = "#5a8ae8";
+
+export type PointerButtons = { button: number; shiftKey: boolean };
+
+export type RecognitionSettings = Pick<
+  CanvasAppState,
+  "scribbleEnabled" | "recognitionBackend" | "recognitionApiKey"
+>;
 
 /**
  * The canvas editor.
  *
  * Owns the scene, the history and the view state, and is the only thing that
- * writes any of them. Built without React so a test can drive it directly:
+ * writes any of them. Every method that changes what is on screen also draws
+ * it, so callers never render by hand. Points passed in are screen points,
+ * relative to the canvas's top-left corner.
+ *
+ * Built without React so a test can drive it directly:
  *
  *   const editor = createSketchEditor();
- *   editor.setActiveTool("ellipse");
- *   expect(editor.getState().activeTool).toBe("ellipse");
+ *   editor.setTool("rectangle");
+ *   editor.pointerDown({ x: 0, y: 0 }, { button: 0, shiftKey: false });
+ *   editor.pointerMove({ x: 50, y: 50 });
+ *   editor.pointerUp();
+ *   expect(editor.getElements()).toHaveLength(1);
  *
- * See `CanvasAppState` for the rule that decides whether a new field belongs in
- * the store (view state) or in a plain field here (frame state).
+ * React reads view state through `store` (see `useEditorState`).
  */
 export function createSketchEditor(options: SketchEditorOptions = {}) {
-  const surface = options.surface ?? createNullSurface();
-  const store: StoreApi<CanvasAppState> = createStore<CanvasAppState>()(() => ({
-    ...createInitialAppState(options.theme ?? "light"),
-    ...options.settings,
-  }));
+  const internals = createEditorInternals(options);
+  const { frame } = internals;
 
-  // Frame state. Mutated in place, never observed by React.
-  const frame: CanvasFrameState = createFrameState();
-
-  function screenToCanvas(point: Point): Point {
-    return screenToCanvasMath(point, frame.zoom, frame.panOffset);
+  /** Inserts an image so its top-left corner sits at `canvasPoint`. */
+  async function insertImage(file: File, canvasPoint: Point) {
+    const src = await readImageFile(file);
+    internals.dispatch(actionAddElement, {
+      element: buildImageElement(canvasPoint, src),
+      select: false,
+    });
+    internals.renderScene();
   }
 
-  function canvasToScreen(point: Point): Point {
-    return canvasToScreenMath(point, frame.zoom, frame.panOffset);
-  }
-
-  /** The visible canvas-space rectangle, or null before the canvas attaches. */
-  function getViewportBounds(): CanvasViewportBounds | null {
-    const canvas = surface.interaction();
-    if (!canvas) return null;
-
-    const { width, height } = canvas.getBoundingClientRect();
-    const topLeft = screenToCanvas({ x: 0, y: 0 });
-    const bottomRight = screenToCanvas({ x: width, y: height });
-
-    return {
-      x: topLeft.x,
-      y: topLeft.y,
-      width: bottomRight.x - topLeft.x,
-      height: bottomRight.y - topLeft.y,
-    };
-  }
-
-  /** Where the pointer is in canvas space, or null if it has left the canvas. */
-  function getPointerPosition(): Point | null {
-    return frame.pointerScreenPosition
-      ? screenToCanvas(frame.pointerScreenPosition)
-      : null;
-  }
-
-  const renderers = createRenderers({
-    surface,
-    frame,
-    selectedIds: () => store.getState().selectedElementIds,
-    setPanOffsetDisplay: (panOffsetDisplay) =>
-      store.setState({ panOffsetDisplay }),
-  });
-
-  function getState(): CanvasAppState {
-    return store.getState();
-  }
-
-  function setAppState(updates: Partial<CanvasAppState>) {
-    store.setState(updates);
-  }
-
-  function getElements(): SketchElement[] {
-    return frame.elements;
-  }
-
-  function setSceneElements(nextElements: SketchElement[]) {
-    frame.scene = updateSceneElements(frame.scene, nextElements);
-    frame.elements = nextElements;
-  }
-
-  function publishHistoryStatus() {
-    setAppState(getHistoryStatus(frame.history));
-  }
-
-  function captureHistory() {
-    pushSnapshotToHistory(frame.history, [...frame.elements]);
-    publishHistoryStatus();
-    options.onChange?.();
-  }
-
-  /** The five-method surface `actions/manager` dispatches against. */
-  const dispatcher = {
-    getElements,
-    setSceneElements,
-    getAppState: getState,
-    setAppState,
-    captureHistory,
-  };
-
-  function pushHistorySnapshot(snapshot: SketchElement[] = frame.elements) {
-    pushSnapshotToHistory(frame.history, snapshot);
-    publishHistoryStatus();
-    options.onChange?.();
-  }
-
-  function setSelectedElements(next: SketchElement[]) {
-    setSceneElements(mergeElementsById(frame.elements, next));
-    setAppState({ selectedElementIds: setSelection(next.map((el) => el.id)) });
-  }
-
-  function clearSelection() {
-    setAppState({ selectedElementIds: new Set(), selectedTool: null });
-  }
-
-  /** Drops the selection without clearing the active tool's own state. */
-  function commitSelectedElements() {
-    if (getState().selectedElementIds.size === 0) return;
-    setAppState({ selectedElementIds: new Set(), selectedTool: null });
-  }
-
-  function updateSelectedElements(updates: Partial<SketchElement>) {
-    const result = performAction(
-      actionUpdateStyle,
-      { elements: frame.elements, appState: getState() },
-      { appState: updates, elements: updates },
-    );
-    if (!result) return false;
-
-    applyActionResult(dispatcher, result);
-    return true;
-  }
-
-  function commitUpdatedElements(
-    elements: SketchElement[],
-    options: {
-      selectedElementIds?: Iterable<string>;
-      selectedTool?: Tool | null;
-    } = {},
-  ) {
-    return dispatchAction(dispatcher, actionUpdateElements, {
-      elements,
-      selectedElementIds: options.selectedElementIds,
-      selectedTool: options.selectedTool,
+  /** Where pasted elements should move to, by the shared placement rule. */
+  function pasteTranslation(elements: SketchElement[]): Point {
+    return getContextualPasteTranslation(elements, {
+      selectedElements: internals.selectedElementsList(),
+      pointer: internals.getPointerPosition(),
+      viewport: internals.getViewportBounds(),
     });
   }
 
-  function saveSelectedElementEdit(element: SketchElement) {
-    return commitUpdatedElements([element], {
-      selectedElementIds: [element.id],
-      selectedTool: element.tool,
-    });
-  }
-
-  function commitCreatedElement(
-    element: SketchElement,
-    commitOptions: CommitElementOptions = {},
-  ) {
-    const shouldSelect = commitOptions.select ?? true;
-    return dispatchAction(dispatcher, actionAddElement, {
-      element,
-      select: shouldSelect,
-      nextTool: commitOptions.nextTool ?? (shouldSelect ? "select" : undefined),
-    });
-  }
-
-  function commitSceneElements(nextElements: SketchElement[]) {
-    return dispatchAction(dispatcher, actionReplaceScene, {
-      elements: nextElements,
-    });
-  }
-
-  function setActiveTool(nextTool: ActiveTool) {
-    if (getState().activeTool !== nextTool) {
-      commitSelectedElements();
+  function pointerDown(screenPoint: Point, { button, shiftKey }: PointerButtons) {
+    frame.pointerScreenPosition = screenPoint;
+    const tool = internals.getState().activeTool;
+    if (tool === "select" && button === 2) return;
+    if (internals.getState().panMode) {
+      beginPanning(internals, screenPoint);
+      return;
     }
 
-    return dispatchAction(dispatcher, actionSetActiveTool, {
-      tool: nextTool,
-      canvasMode: getState().theme,
-    });
+    const point = internals.screenToCanvas(screenPoint);
+    if (tool === "text") {
+      startTextCreation(internals, screenPoint, point);
+      return;
+    }
+
+    if (tool !== "select" && internals.getState().selectedElementIds.size > 0) {
+      internals.commitSelectedElements();
+      internals.renderSceneAndSelection();
+    }
+
+    if (tool === "select") {
+      handleSelectPointerDown(internals, point, shiftKey);
+      return;
+    }
+    startDrawing(internals, point);
   }
 
-  /**
-   * Applies a style change to the toolbar and, when something is selected, to
-   * the selected elements too. This is what a style control does.
-   */
-  function setStyle(style: Partial<CurrentItemStyle>) {
-    return updateSelectedElements(style as Partial<SketchElement>);
+  function pointerMove(screenPoint: Point) {
+    frame.pointerScreenPosition = screenPoint;
+    if (handlePanningMove(internals, screenPoint)) return;
+    if (
+      internals.getState().activeTool === "select" &&
+      handleSelectPointerMove(internals, screenPoint)
+    )
+      return;
+    const point = internals.screenToCanvas(screenPoint);
+    if (updateArrowHover(internals, point)) return;
+    handleDrawingPointerMove(internals, point);
   }
 
-  /**
-   * Applies a style change to the toolbar only, leaving the selected elements
-   * alone. Used when the toolbar is being synced *from* an element, where
-   * writing back would be a no-op at best and a loop at worst.
-   */
-  function setToolbarStyle(style: Partial<CurrentItemStyle>) {
-    const result = performAction(
-      actionUpdateStyle,
-      { elements: frame.elements, appState: getState() },
-      { appState: style },
-    );
-    if (!result) return false;
-
-    applyActionResult(dispatcher, result);
-    return true;
-  }
-
-  function selectedElementsList(): SketchElement[] {
-    return getSelectedElements(
-      frame.elements,
-      new Set(getState().selectedElementIds),
-    );
-  }
-
-  function normalizeElement(element: SketchElement): SketchElement {
-    return geometry.normalizeElement(element);
-  }
-
-  /** Resizes an element by one handle, re-measuring text so labels still fit. */
-  function applyResize(
-    element: SketchElement,
-    handle: number,
-    to: Point,
-  ): SketchElement {
-    const style = getState().currentItemStyle;
-    return geometry.applyResizeWithTextMeasurement({
-      element,
-      handle,
-      to,
-      allElements: [...frame.elements],
-      zoom: frame.zoom,
-      fontFamily: style.fontFamily,
-      fontSize: style.fontSize,
-      fontWeight: style.fontWeight,
-    });
-  }
-
-  function findBindableShape(
-    point: Point,
-    exclude: Set<string> = new Set(),
-  ): BindableShape | null {
-    return geometry.findBindableShape(
-      point,
-      [...frame.elements],
-      frame.zoom,
-      exclude,
-    );
-  }
-
-  /** Re-points any arrows bound to the given shapes after those shapes moved. */
-  function syncBoundArrows(shapeIds: Set<string>, list: SketchElement[]) {
-    return geometry.syncBoundArrows(shapeIds, list, [...frame.elements]);
-  }
-
-  /**
-   * Commits the current selection as a history entry, normalising each element
-   * first so a shape dragged right-to-left is stored left-to-right.
-   */
-  function commitSelectedElementSnapshot({ render = false } = {}) {
-    const normalized = selectedElementsList().map(normalizeElement);
-    commitUpdatedElements(normalized, {
-      selectedElementIds: normalized.map((element) => element.id),
-    });
-    if (render) renderers.renderSelection();
-  }
-
-  function undo() {
-    const { snapshot } = undoHistory(frame.history);
-    publishHistoryStatus();
-    if (!snapshot) return false;
-
-    dispatchAction(dispatcher, actionReplaceScene, {
-      elements: snapshot,
-      captureUpdate: "none",
-    });
-    options.onChange?.();
-    return true;
-  }
-
-  function redo() {
-    const { snapshot } = redoHistory(frame.history);
-    publishHistoryStatus();
-    if (!snapshot) return false;
-
-    dispatchAction(dispatcher, actionReplaceScene, {
-      elements: snapshot,
-      captureUpdate: "none",
-    });
-    options.onChange?.();
-    return true;
+  function pointerUp() {
+    if (frame.canvasInteraction.type === "panning") {
+      frame.canvasInteraction = { type: "idle" };
+      return;
+    }
+    if (internals.getState().activeTool === "select") {
+      finalizeSelectInteraction(internals);
+      return;
+    }
+    finalizeDrawingInteraction(internals);
   }
 
   return {
-    surface,
-    store,
-    frame,
-    getState,
-    setAppState,
-    ...renderers,
-    screenToCanvas,
-    canvasToScreen,
-    getViewportBounds,
-    getPointerPosition,
-    clearPointerPosition() {
-      frame.pointerScreenPosition = null;
-    },
+    /** View state, read-only. Subscribe with `useEditorState`. */
+    store: internals.store as Pick<
+      StoreApi<CanvasAppState>,
+      "getState" | "getInitialState" | "subscribe"
+    >,
+    getState: internals.getState,
+    getElements: internals.getElements,
+    getSelectedElements: internals.selectedElementsList,
+    /** The CSS cursor for a pointer at `screenPoint`. */
+    getCursorForPoint: (screenPoint: Point) =>
+      getCursorForPoint(internals, screenPoint),
 
     /**
-     * Runs an action against the editor. Internal to the engine: the tool
-     * controllers use it, callers outside the package use the named methods.
+     * Replaces the whole scene and starts a fresh history at it, so undo can't
+     * walk back past what was loaded. Loading isn't an edit, so it doesn't
+     * fire `onChange`.
      */
-    dispatch<TPayload>(action: Action<TPayload>, payload: TPayload) {
-      return dispatchAction(dispatcher, action, payload);
+    loadScene(elements: SketchElement[]) {
+      frame.history = createHistory(elements);
+      internals.dispatch(actionReplaceScene, {
+        elements,
+        captureUpdate: "none",
+      });
+      internals.publishHistoryStatus();
+      internals.renderSceneAndSelection();
     },
 
-    getElements,
-    setSceneElements,
-    setTheme: (theme: CanvasTheme) => setAppState({ theme }),
-    setZoomDisplay: (zoomDisplay: number) => setAppState({ zoomDisplay }),
-    setPanOffsetDisplay: (panOffsetDisplay: Point) =>
-      setAppState({ panOffsetDisplay }),
-    setIsBeautifying: (isBeautifying: boolean) =>
-      setAppState({ isBeautifying }),
-    setScribblePending: (isScribblePending: boolean) =>
-      setAppState({ isScribblePending }),
-    setScribbleEnabled: (scribbleEnabled: boolean) =>
-      setAppState({ scribbleEnabled }),
-    setRecognitionBackend: (recognitionBackend: "tesseract" | "gemini") =>
-      setAppState({ recognitionBackend }),
-    setRecognitionApiKey: (recognitionApiKey: string) =>
-      setAppState({ recognitionApiKey }),
+    pointerDown,
+    pointerMove,
+    pointerUp,
+    /** Ends any gesture and forgets the pointer, so paste falls back to the viewport. */
+    pointerLeave() {
+      pointerUp();
+      frame.pointerScreenPosition = null;
+    },
+    doubleClick: (screenPoint: Point) =>
+      handleTextDoubleClick(internals, screenPoint),
+    zoomAt: (delta: number, screenPoint: Point) =>
+      zoomViewport({
+        editor: internals,
+        cursorScreen: screenPoint,
+        delta,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+      }),
+    panBy: (dx: number, dy: number) => panViewport(internals, dx, dy),
+    /** Drops the first image in `data` with its top-left at `screenPoint`. */
+    dropFiles(data: DataTransfer | null, screenPoint: Point) {
+      const file = getImageFileFromTransfer(data);
+      if (!file) return;
+      void insertImage(file, internals.screenToCanvas(screenPoint));
+    },
 
-    pushHistorySnapshot,
-    publishHistoryStatus,
-    setSelectedElements,
-    clearSelection,
-    commitSelectedElements,
-    updateSelectedElements,
-    commitUpdatedElements,
-    saveSelectedElementEdit,
-    commitCreatedElement,
-    commitSceneElements,
-    setActiveTool,
-    setStyle,
-    setToolbarStyle,
-    setSelectedTool: (selectedTool: Tool | null) =>
-      setAppState({ selectedTool }),
-    selectedElementsList,
-    normalizeElement,
-    applyResize,
-    findBindableShape,
-    syncBoundArrows,
-    commitSelectedElementSnapshot,
-    undo,
-    redo,
-    notifyChange: () => options.onChange?.(),
+    undo() {
+      if (!internals.undo()) return false;
+      internals.renderSceneAndSelection();
+      return true;
+    },
+    redo() {
+      if (!internals.redo()) return false;
+      internals.renderSceneAndSelection();
+      return true;
+    },
+    deleteSelected() {
+      if (!internals.dispatch(actionDeleteSelected, undefined)) return;
+      internals.renderSceneAndSelection();
+    },
+    duplicateSelected() {
+      const result = internals.dispatch(actionDuplicateSelected, {
+        offset: DUPLICATE_OFFSET,
+      });
+      if (!result) return;
+      internals.renderSceneAndSelection();
+    },
+    deselect() {
+      if (!internals.dispatch(actionDeselect, undefined)) return;
+      internals.renderSceneAndSelection();
+    },
+    editSelected: () => editSelectedText(internals),
+    /**
+     * Pastes copies of `elements`: next to the selection, else under the
+     * pointer, else in the middle of the viewport. Returns false when there was
+     * nothing to paste.
+     */
+    paste(elements: SketchElement[]) {
+      if (elements.length === 0) return false;
+      const pasted = cloneElementsForPaste(elements, pasteTranslation(elements));
+      if (!internals.dispatch(actionInsertElements, { elements: pasted }))
+        return false;
+      internals.renderSceneAndSelection();
+      return true;
+    },
+    /**
+     * Pastes the first image in `data`, placed by the same rule as `paste`.
+     * Returns true when an image was found, so the caller can consume the event.
+     */
+    pasteImage(data: DataTransfer | null) {
+      const file = getImageFileFromTransfer(data);
+      if (!file) return false;
+      // Place a stand-in of the image's size, then insert the real one there.
+      const offset = pasteTranslation([buildImageElement({ x: 0, y: 0 }, "")]);
+      void insertImage(file, offset);
+      return true;
+    },
+
+    setTool(tool: ActiveTool) {
+      internals.setActiveTool(tool);
+      internals.renderSelection();
+    },
+    /**
+     * Applies a style to the toolbar and to the selected elements. Switching
+     * the fill on from "none" also picks a default fill colour, so the shape
+     * does not stay empty.
+     */
+    setStyle(style: Partial<CurrentItemStyle>) {
+      const next = { ...style };
+      if (
+        next.fillStyle &&
+        next.fillStyle !== "none" &&
+        next.fillColor === undefined &&
+        internals.getState().currentItemStyle.fillColor === "none"
+      ) {
+        next.fillColor = DEFAULT_FILL_COLOR;
+      }
+      if (!internals.setStyle(next)) return;
+      internals.renderSceneAndSelection();
+    },
+    /** Space held: a drag pans. Releasing it also ends a pan in progress. */
+    setPanMode(panMode: boolean) {
+      internals.setAppState({ panMode });
+      if (!panMode && frame.canvasInteraction.type === "panning") {
+        frame.canvasInteraction = { type: "idle" };
+      }
+    },
+    setTheme: (theme: CanvasTheme) => internals.setTheme(theme),
+    /**
+     * Swaps elements still using the other theme's default stroke to this
+     * theme's. Returns whether anything changed.
+     */
+    applyThemeColors: (isDark: boolean, opts?: { recordHistory?: boolean }) =>
+      applyThemeColors(internals, isDark, opts),
+    setRecognitionSettings: (settings: Partial<RecognitionSettings>) =>
+      internals.setAppState(settings),
+
+    /** Rearranges the scene with Gemini. Throws when no API key is set. */
+    beautify: () => beautifyLayout(internals),
+
+    /** Redraws both canvases, e.g. after they were resized. */
+    redraw: internals.renderSceneAndSelection,
   };
 }
 
