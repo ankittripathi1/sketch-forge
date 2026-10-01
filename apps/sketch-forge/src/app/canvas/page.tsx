@@ -70,15 +70,11 @@ export default function CanvasPage() {
 function CanvasContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const typeParam = searchParams.get("type");
-  const pageId =
-    searchParams.get("pageId") ||
-    (typeParam === "page" ? searchParams.get("id") : null);
-  const isPage = typeParam !== "canvas";
+  const pageId = searchParams.get("pageId");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   // Search deep-links land with ?notes=1 when the match came from the note.
   const [isNotesOpen, setIsNotesOpen] = useState(
-    isPage && searchParams.get("notes") === "1",
+    searchParams.get("notes") === "1",
   );
   const { width: notesWidth, persistWidth: setNotesWidth } =
     useNotesDrawerWidth();
@@ -258,10 +254,9 @@ function CanvasContent() {
 
   /**
    * Doc view mode (PRD §7): the note becomes the primary full-width surface and
-   * the canvas hides behind the top-bar mode toggle. Only pages have modes;
-   * standalone canvases are always canvas-mode.
+   * the canvas hides behind the top-bar mode toggle.
    */
-  const isDocMode = isPage && viewMode === "doc";
+  const isDocMode = viewMode === "doc";
 
   // ─── Event handlers ────────────────────────────────────────────────────────
 
@@ -406,7 +401,7 @@ function CanvasContent() {
           onClose={() => setIsSidebarOpen(false)}
         />
 
-        {isPage && !isDocMode && (
+        {!isDocMode && (
           <NotesDrawer
             isOpen={isNotesOpen}
             width={notesWidth}
@@ -450,18 +445,16 @@ function CanvasContent() {
 
         <div className="pointer-events-none absolute left-3 right-[calc(0.75rem+var(--notes-w,0px))] top-3 z-20 hidden items-start justify-between gap-4 sm:flex sm:left-4 sm:right-[calc(1rem+var(--notes-w,0px))] sm:top-4">
           <div className="pointer-events-auto flex max-w-[min(34rem,52vw)] select-none items-center gap-1.5 overflow-hidden rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
-            {isPage && (
-              <button
-                onClick={handleBack}
-                className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-text-secondary transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-primary active:translate-y-0"
-                title={folderId ? "Back to folder" : "Back to dashboard"}
-              >
-                <ChevronLeft size={14} />
-                <span className="hidden 2xl:inline">
-                  {folderId ? "Folder" : "Dashboard"}
-                </span>
-              </button>
-            )}
+            <button
+              onClick={handleBack}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-text-secondary transition-all hover:-translate-y-0.5 hover:bg-surface-hover hover:text-text-primary active:translate-y-0"
+              title={folderId ? "Back to folder" : "Back to dashboard"}
+            >
+              <ChevronLeft size={14} />
+              <span className="hidden 2xl:inline">
+                {folderId ? "Folder" : "Dashboard"}
+              </span>
+            </button>
             <button
               onClick={() => {
                 // The two drawers are mutually exclusive (PRD §6).
@@ -507,40 +500,38 @@ function CanvasContent() {
             </span>
           </div>
           <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-border-default bg-surface-raised/92 p-1.5 shadow-elev-3 backdrop-blur-xl">
-            {isPage && (
-              <div
-                className="flex items-center rounded-lg bg-surface-sunken p-0.5"
-                role="group"
-                aria-label="View mode"
+            <div
+              className="flex items-center rounded-lg bg-surface-sunken p-0.5"
+              role="group"
+              aria-label="View mode"
+            >
+              <button
+                onClick={() => setViewMode("doc")}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold transition-all ${
+                  isDocMode
+                    ? "bg-surface-raised text-accent shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+                title="Document view"
+                aria-pressed={isDocMode}
               >
-                <button
-                  onClick={() => setViewMode("doc")}
-                  className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold transition-all ${
-                    isDocMode
-                      ? "bg-surface-raised text-accent shadow-sm"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
-                  title="Document view"
-                  aria-pressed={isDocMode}
-                >
-                  <FileText size={13} />
-                  <span className="hidden 2xl:inline">Doc</span>
-                </button>
-                <button
-                  onClick={() => setViewMode("canvas")}
-                  className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold transition-all ${
-                    !isDocMode
-                      ? "bg-surface-raised text-accent shadow-sm"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
-                  title="Canvas view"
-                  aria-pressed={!isDocMode}
-                >
-                  <Frame size={13} />
-                  <span className="hidden 2xl:inline">Canvas</span>
-                </button>
-              </div>
-            )}
+                <FileText size={13} />
+                <span className="hidden 2xl:inline">Doc</span>
+              </button>
+              <button
+                onClick={() => setViewMode("canvas")}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold transition-all ${
+                  !isDocMode
+                    ? "bg-surface-raised text-accent shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+                title="Canvas view"
+                aria-pressed={!isDocMode}
+              >
+                <Frame size={13} />
+                <span className="hidden 2xl:inline">Canvas</span>
+              </button>
+            </div>
             {!isDocMode && (
               <>
                 <CanvasActions
@@ -555,23 +546,21 @@ function CanvasContent() {
                     )
                   }
                 />
-                {isPage && (
-                  <button
-                    onClick={() => {
-                      if (!isNotesOpen) setIsSidebarOpen(false);
-                      setIsNotesOpen(!isNotesOpen);
-                    }}
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:-translate-y-0.5 active:translate-y-0 ${
-                      isNotesOpen
-                        ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
-                        : "text-text-secondary hover:bg-surface-hover hover:text-accent"
-                    }`}
-                    title="Toggle page notes"
-                    aria-label="Toggle page notes"
-                  >
-                    <PenLine size={16} strokeWidth={2} />
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    if (!isNotesOpen) setIsSidebarOpen(false);
+                    setIsNotesOpen(!isNotesOpen);
+                  }}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:-translate-y-0.5 active:translate-y-0 ${
+                    isNotesOpen
+                      ? "bg-accent-subtle text-accent ring-1 ring-accent/30"
+                      : "text-text-secondary hover:bg-surface-hover hover:text-accent"
+                  }`}
+                  title="Toggle page notes"
+                  aria-label="Toggle page notes"
+                >
+                  <PenLine size={16} strokeWidth={2} />
+                </button>
               </>
             )}
           </div>

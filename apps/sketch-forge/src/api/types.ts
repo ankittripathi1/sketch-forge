@@ -27,13 +27,6 @@ export interface FolderDetail extends Folder {
   children: Folder[];
 }
 
-export interface CanvasSummary {
-  id: string;
-  title: string;
-  thumbnail: string | null;
-  updatedAt: string;
-}
-
 export interface SearchResult {
   id: string;
   title: string;
@@ -49,10 +42,6 @@ export interface SearchResult {
 export interface DashboardData {
   pages: Page[];
   folders: Folder[];
-}
-
-export interface NotebookData extends DashboardData {
-  canvases: CanvasSummary[];
 }
 
 export interface CreatePageInput {

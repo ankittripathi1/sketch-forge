@@ -127,10 +127,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         label: r.title,
         snippet: r.snippet,
         noteMatch: r.noteMatch,
-        run: () =>
-          go(
-            `/canvas?pageId=${r.id}&type=page${r.noteMatch ? "&notes=1" : ""}`,
-          ),
+        run: () => go(`/canvas?pageId=${r.id}${r.noteMatch ? "&notes=1" : ""}`),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [results],

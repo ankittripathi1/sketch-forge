@@ -11,7 +11,6 @@ import {
   X,
   PlusCircle,
   FolderPlus,
-  PenLine,
 } from "lucide-react";
 import { useNotebookData } from "../hooks/useNotebookData";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -22,8 +21,7 @@ interface NotebookSidebarProps {
 }
 
 export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
-  const { folders, pages, canvases, createFolder, createPage } =
-    useNotebookData();
+  const { folders, pages, createFolder, createPage } = useNotebookData();
 
   const [expandedFolders, setExpandedFolders] = useState<
     Record<string, boolean>
@@ -35,10 +33,7 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
   const [draftName, setDraftName] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentId =
-    searchParams.get("pageId") ||
-    (searchParams.get("type") === "page" ? searchParams.get("id") : null);
-  const currentType = searchParams.get("type");
+  const currentId = searchParams.get("pageId");
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => ({
@@ -51,13 +46,6 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
     const params = new URLSearchParams();
     params.set("pageId", page.id);
     if (page.folderId) params.set("folderId", page.folderId);
-    router.push(`/canvas?${params.toString()}`);
-  };
-
-  const handleSelectCanvas = (id: string) => {
-    const params = new URLSearchParams();
-    params.set("id", id);
-    params.set("type", "canvas");
     router.push(`/canvas?${params.toString()}`);
   };
 
@@ -248,32 +236,6 @@ export function NotebookSidebar({ isOpen, onClose }: NotebookSidebarProps) {
               ))}
           </div>
         </div>
-
-        {canvases.length > 0 && (
-          <div className="mt-4">
-            <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              <span>Scratch Canvases</span>
-            </div>
-            <div className="mt-1 space-y-0.5">
-              {canvases.map((canvas) => (
-                <button
-                  key={canvas.id}
-                  onClick={() => handleSelectCanvas(canvas.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors ${
-                    currentId === canvas.id && currentType !== "page"
-                      ? "bg-accent-subtle text-accent"
-                      : "hover:bg-surface-hover"
-                  }`}
-                >
-                  <PenLine size={12} />
-                  <span className="flex-1 text-left truncate">
-                    {canvas.title}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

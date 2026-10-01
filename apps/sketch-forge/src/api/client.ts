@@ -1,11 +1,9 @@
 import type {
-  CanvasSummary,
   CreateFolderInput,
   CreatePageInput,
   DashboardData,
   Folder,
   FolderDetail,
-  NotebookData,
   Page,
   SearchResult,
   UpdateFolderInput,
@@ -48,15 +46,6 @@ export async function getDashboardData(): Promise<DashboardData> {
   ]);
 
   return { pages, folders };
-}
-
-export async function getNotebookData(): Promise<NotebookData> {
-  const [dashboard, canvases] = await Promise.all([
-    getDashboardData(),
-    request<CanvasSummary[]>("/canvases"),
-  ]);
-
-  return { ...dashboard, canvases };
 }
 
 export function getFolderDetail(id: string) {
