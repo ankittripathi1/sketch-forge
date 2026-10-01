@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ReadonlyElement } from "@repo/canvas-engine";
 import type { SketchElement } from "@repo/element";
 import type { CanvasClipboardService } from "./CanvasClipboardService";
 import {
@@ -60,7 +61,7 @@ function createContext(
 describe("clipboard editor commands", () => {
   test("copy reports whether the clipboard write succeeded", () => {
     const selected = [makeElement()];
-    let received: SketchElement[] = [];
+    let received: readonly ReadonlyElement[] = [];
     const context = createContext({
       getSelectedElements: () => selected,
       clipboard: {

@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { SketchElement } from "@repo/element/types";
+import type { ReadonlyElement } from "@repo/canvas-engine";
 import type { PageViewMode } from "@repo/schema";
 import { DEFAULT_DARK_STROKE, DEFAULT_LIGHT_STROKE } from "@repo/common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createEntity, fetchEntity, updateEntity } from "@/api/canvas";
 
 interface UseCanvasSyncProps {
-  elementsRef: React.MutableRefObject<SketchElement[]>;
-  setElements: (elements: SketchElement[]) => void;
+  elementsRef: { readonly current: readonly ReadonlyElement[] };
+  setElements: (elements: readonly ReadonlyElement[]) => void;
 }
 
 type ThemeThumbnails = {
@@ -19,7 +19,7 @@ type ThemeThumbnails = {
 };
 
 function elementsForThumbnailMode(
-  elements: SketchElement[],
+  elements: readonly ReadonlyElement[],
   mode: "light" | "dark",
 ) {
   const fromColor =
@@ -155,7 +155,7 @@ export function useCanvasSync({
 
   const saveMutation = useMutation({
     mutationFn: async (vars: {
-      elements: SketchElement[];
+      elements: readonly ReadonlyElement[];
       title: string;
       thumbnail?: string | null;
       thumbnailLight?: string | null;
@@ -217,7 +217,7 @@ export function useCanvasSync({
 
   const generateThumbnail = useCallback(
     (
-      elements: SketchElement[],
+      elements: readonly ReadonlyElement[],
       options?: { backgroundColor?: string },
     ): Promise<string | null> => {
       return new Promise((resolve) => {
@@ -249,7 +249,7 @@ export function useCanvasSync({
   );
 
   const generateThemeThumbnails = useCallback(
-    async (elements: SketchElement[]): Promise<ThemeThumbnails> => {
+    async (elements: readonly ReadonlyElement[]): Promise<ThemeThumbnails> => {
       const light = await generateThumbnail(
         elementsForThumbnailMode(elements, "light"),
         {

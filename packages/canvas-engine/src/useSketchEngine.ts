@@ -2,8 +2,12 @@
 
 import { RefObject, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { SketchElement, Point, FillStyle } from "@repo/element/types";
-import { createSketchEditor, type SketchEditor } from "./editor/sketchEditor";
+import { Point, FillStyle } from "@repo/element/types";
+import {
+  createSketchEditor,
+  type ReadonlyElement,
+  type SketchEditor,
+} from "./editor/sketchEditor";
 import type { CanvasTheme } from "./appState";
 
 /**
@@ -39,7 +43,7 @@ export function useSketchEngine(
     get current() {
       return editor.getElements();
     },
-  }).current as { readonly current: SketchElement[] };
+  }).current as { readonly current: readonly ReadonlyElement[] };
 
   const isPanningRef = useRef({
     get current() {

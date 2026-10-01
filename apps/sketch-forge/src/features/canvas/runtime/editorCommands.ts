@@ -3,6 +3,7 @@ import {
   type EditorCommandManager,
   type EditorCommand,
 } from "@repo/canvas-engine";
+import type { ReadonlyElement } from "@repo/canvas-engine";
 import type { ActiveTool, SketchElement } from "@repo/element";
 import type { CanvasClipboardService } from "./CanvasClipboardService";
 
@@ -13,7 +14,7 @@ export type CanvasEditorCommandContext = {
   canUndo: boolean;
   canRedo: boolean;
   clipboard: CanvasClipboardService;
-  getSelectedElements: () => SketchElement[];
+  getSelectedElements: () => readonly ReadonlyElement[];
   /** Pastes copies of `elements`; the editor decides where they land. */
   pasteElements: (elements: SketchElement[]) => boolean;
   pasteImage: (clipboardData: DataTransfer | null) => boolean;

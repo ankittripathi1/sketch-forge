@@ -1,11 +1,10 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { useSketchEngine } from "@repo/canvas-engine";
+import { useSketchEngine, type ReadonlyElement } from "@repo/canvas-engine";
 import { SketchCanvas } from "@/features/canvas";
 import { CaptureToolbar, FolderPicker } from "@/features/capture";
 import { useRouter } from "next/navigation";
-import { SketchElement } from "@repo/element/types";
 import { Loader2 } from "lucide-react";
 import { PUBLIC_API_URL } from "@/api/config";
 
@@ -53,7 +52,7 @@ export default function QuickCapturePage() {
   }, []);
 
   const generateThumbnail = useCallback(
-    (elements: SketchElement[]): Promise<string | null> => {
+    (elements: readonly ReadonlyElement[]): Promise<string | null> => {
       return new Promise((resolve) => {
         if (!workerRef.current) return resolve(null);
 
