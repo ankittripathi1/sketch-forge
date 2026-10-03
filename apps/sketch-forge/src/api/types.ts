@@ -1,4 +1,4 @@
-import type { PageStatus, UpdatePage } from "@repo/schema";
+import type { PageStatus, PageViewMode, UpdatePage } from "@repo/schema";
 import type { SketchElement } from "@repo/element/types";
 
 export interface Page {
@@ -11,6 +11,13 @@ export interface Page {
   thumbnailDark: string | null;
   folderId: string | null;
   pageOrder: number;
+}
+
+/** One page as `GET /pages/:id`, `POST /pages` and `PATCH /pages/:id` return it. */
+export interface PageDetail extends Page {
+  elements: SketchElement[] | null;
+  note: string | null;
+  viewMode: PageViewMode;
 }
 
 export interface Folder {
