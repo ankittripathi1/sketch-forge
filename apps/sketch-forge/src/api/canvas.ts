@@ -1,6 +1,8 @@
+import type { CreatePage, UpdatePage } from "@repo/schema";
 import { PUBLIC_API_URL } from "./config";
+import type { PageDetail } from "./types";
 
-export async function fetchPage(id: string) {
+export async function fetchPage(id: string): Promise<PageDetail> {
   const res = await fetch(`${PUBLIC_API_URL}/pages/${id}`, {
     credentials: "include",
   });
@@ -10,7 +12,7 @@ export async function fetchPage(id: string) {
   return res.json();
 }
 
-export async function createPageRecord(body: Record<string, unknown>) {
+export async function createPageRecord(body: CreatePage): Promise<PageDetail> {
   const res = await fetch(`${PUBLIC_API_URL}/pages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -23,8 +25,8 @@ export async function createPageRecord(body: Record<string, unknown>) {
 
 export async function updatePageRecord(
   id: string,
-  body: Record<string, unknown>,
-) {
+  body: UpdatePage,
+): Promise<PageDetail> {
   const res = await fetch(`${PUBLIC_API_URL}/pages/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
