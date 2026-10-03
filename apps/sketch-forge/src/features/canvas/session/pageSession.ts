@@ -17,6 +17,15 @@ export type PageSessionState = {
   /** The last save gave up after its retries. Its edits are still dirty. */
   failed: boolean;
   lastSavedAt: Date | null;
+  /** A page is loading. Edits are dropped, so the editor should block input. */
+  opening: boolean;
+  /** The scene the editor should show. Its version goes up on every load. */
+  scene: LoadedScene;
+};
+
+export type LoadedScene = {
+  version: number;
+  elements: readonly ReadonlyElement[];
 };
 
 export type PageEdit = Partial<
@@ -30,7 +39,10 @@ export type OpenRequest = {
   viewMode: PageViewMode;
 };
 
-export type OpenResult = { page: PageDetail; created: boolean };
+export type OpenResult =
+  | { status: "loaded" | "created"; page: PageDetail }
+  /** The current page's save failed, so it stays open. */
+  | { status: "kept" };
 
 type PageSessionOptions = {
   store: PageStore;
@@ -76,24 +88,26 @@ export function createPageSession({
     saving: false,
     failed: false,
     lastSavedAt: null,
+    opening: false,
+    scene: { version: 0, elements: [] },
   };
   let elements: readonly ReadonlyElement[] = [];
-  // `rev` counts edits; `savedRev` is the last one the store has.
+  // `rev` counts edits; `savedRev` is the last one the store has, and
+  // `thumbnailRev` the last one the stored thumbnails show.
   let rev = 0;
   let savedRev = 0;
+  let thumbnailRev = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let saving: Promise<void> | null = null;
-  // Edits are dropped while a page is being swapped in; they belong to no page.
-  let opening = false;
   let lastOpen: { key: string; promise: Promise<OpenResult | null> } | null =
     null;
   let openQueue: Promise<unknown> = Promise.resolve();
   const listeners = new Set<() => void>();
 
   function set(patch: Partial<PageSessionState>) {
-    const changed = (
-      Object.keys(patch) as (keyof PageSessionState)[]
-    ).some((key) => state[key] !== patch[key]);
+    const changed = (Object.keys(patch) as (keyof PageSessionState)[]).some(
+      (key) => state[key] !== patch[key],
+    );
     if (!changed) return;
     state = { ...state, ...patch };
     listeners.forEach((listener) => listener());
@@ -118,7 +132,8 @@ export function createPageSession({
   }
 
   function edit(patch: PageEdit) {
-    if (opening) return;
+    // While a page loads, edits belong to no page.
+    if (state.opening) return;
     const { elements: nextElements, ...fields } = patch;
     if (nextElements) elements = nextElements;
     rev++;
@@ -128,18 +143,23 @@ export function createPageSession({
 
   async function save(pageId: string, skipThumbnails: boolean) {
     set({ saving: true });
+    // Thumbnails are drawn from the snapshot they're sent with, and retries
+    // resend that same body. Edits made meanwhile go out in a later save.
+    const sentRev = rev;
+    const fields = snapshot();
     const thumbnails = skipThumbnails
       ? null
-      : await renderThumbnails(elements).catch(() => null);
+      : await renderThumbnails(fields.elements).catch(() => null);
+    const body: PageSave = {
+      ...fields,
+      ...(thumbnails?.light ? { thumbnailLight: thumbnails.light } : {}),
+      ...(thumbnails?.dark ? { thumbnailDark: thumbnails.dark } : {}),
+    };
     for (let attempt = 0; ; attempt++) {
-      const sentRev = rev;
       try {
-        const page = await store.update(pageId, {
-          ...snapshot(),
-          ...(thumbnails?.light ? { thumbnailLight: thumbnails.light } : {}),
-          ...(thumbnails?.dark ? { thumbnailDark: thumbnails.dark } : {}),
-        });
+        const page = await store.update(pageId, body);
         savedRev = sentRev;
+        if (!skipThumbnails) thumbnailRev = sentRev;
         set({
           saving: false,
           failed: false,
@@ -162,7 +182,8 @@ export function createPageSession({
   /**
    * Saves pending edits now and waits for the store. Resolves true when the
    * store has every edit. `skipThumbnails` sends the save right away, for when
-   * the tab may close any moment; the next save adds thumbnails back.
+   * the tab may close any moment; the next flush without it adds thumbnails
+   * back, even when there are no new edits.
    */
   async function flush(
     options: { skipThumbnails?: boolean } = {},
@@ -172,30 +193,38 @@ export function createPageSession({
       timer = null;
     }
     while (saving) await saving;
-    if (rev === savedRev) return true;
+    const staleThumbnails =
+      !options.skipThumbnails && thumbnailRev !== savedRev;
+    if (rev === savedRev && !staleThumbnails) return true;
     if (!state.pageId) return false;
-    saving = save(state.pageId, options.skipThumbnails ?? false).finally(
-      () => {
-        saving = null;
-      },
-    );
+    saving = save(state.pageId, options.skipThumbnails ?? false).finally(() => {
+      saving = null;
+    });
     await saving;
     return rev === savedRev;
   }
 
-  function startFresh(folderId: string | null, viewMode: PageViewMode) {
-    elements = [];
-    rev = savedRev = 0;
+  /** Swaps in another page's fields and scene, with nothing left to save. */
+  function replace(
+    fields: Pick<
+      PageSessionState,
+      "pageId" | "folderId" | "title" | "note" | "viewMode"
+    >,
+    nextElements: readonly ReadonlyElement[],
+  ) {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    elements = nextElements;
+    rev = savedRev = thumbnailRev = 0;
     set({
-      pageId: null,
-      folderId,
-      title: "Untitled",
-      note: "",
-      viewMode,
+      ...fields,
       dirty: false,
       saving: false,
       failed: false,
       lastSavedAt: null,
+      scene: { version: state.scene.version + 1, elements: nextElements },
     });
   }
 
@@ -206,48 +235,55 @@ export function createPageSession({
   }: OpenRequest): Promise<OpenResult | null> {
     if (pageId && pageId === state.pageId) return null;
 
-    opening = true;
-    try {
-      // Finish the current page's save before its fields are replaced.
-      await flush();
-      if (pageId) {
-        try {
-          const page = await store.get(pageId);
-          elements = page.elements ?? [];
-          rev = savedRev = 0;
-          set({
+    // Save the current page first. Edits made meanwhile still belong to it,
+    // so keep going until the store has them all. If the save fails, stay.
+    // A page that was never created has nowhere to save, so it's dropped.
+    if (state.pageId) {
+      while (!(await flush())) {
+        if (state.failed) return { status: "kept" };
+      }
+    }
+
+    if (pageId) {
+      set({ opening: true });
+      try {
+        const page = await store.get(pageId);
+        replace(
+          {
             pageId: page.id,
             folderId: page.folderId,
             title: page.title || "Untitled",
             note: page.note ?? "",
             viewMode: page.viewMode === "doc" ? "doc" : "canvas",
-            dirty: false,
-            saving: false,
-            failed: false,
-            lastSavedAt: null,
-          });
-          return { page, created: false };
-        } catch (error) {
-          console.error("Page load failed, starting a new page:", error);
-        }
+          },
+          page.elements ?? [],
+        );
+        return { status: "loaded", page };
+      } catch (error) {
+        console.error("Page load failed, starting a new page:", error);
+      } finally {
+        set({ opening: false });
       }
-      startFresh(folderId, viewMode);
-    } finally {
-      opening = false;
     }
+    replace(
+      { pageId: null, folderId, title: "Untitled", note: "", viewMode },
+      [],
+    );
 
     // Strokes drawn while the create request runs are kept: they bump `rev`,
     // and the debounced save sends them once the page id is known.
     const sentRev = rev;
     try {
       const page = await store.create({ ...snapshot(), folderId });
-      savedRev = sentRev;
+      savedRev = thumbnailRev = sentRev;
       set({
         pageId: page.id,
         folderId: page.folderId ?? folderId,
         dirty: rev !== savedRev,
       });
-      return { page, created: true };
+      // A debounced save may have fired before there was an id to save to.
+      if (rev !== savedRev) schedule();
+      return { status: "created", page };
     } catch (error) {
       console.error("Page create failed:", error);
       set({ failed: true });
@@ -258,8 +294,8 @@ export function createPageSession({
   /**
    * Opens a page, saving the current one first. Calls run in order. Repeating
    * the request still in flight returns its promise, so a double effect
-   * creates one page. Resolves null when the page is already open or couldn't
-   * be created.
+   * creates one page. Resolves `kept` when the current page couldn't be saved,
+   * and null when the page is already open or couldn't be created.
    */
   function open(request: OpenRequest): Promise<OpenResult | null> {
     const key = request.pageId ?? "new";
