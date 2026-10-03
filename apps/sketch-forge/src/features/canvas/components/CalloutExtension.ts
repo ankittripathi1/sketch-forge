@@ -4,7 +4,7 @@ import { Node, mergeAttributes, wrappingInputRule } from "@tiptap/react";
  * Callout / admonition block for the notes editor.
  *
  * Serializes to a Docusaurus-style `:::variant … :::` fenced container so the
- * note round-trips cleanly through the Markdown that `useCanvasSync` persists.
+ * note round-trips cleanly through the Markdown that the page session persists.
  * A Markdown shortcut (`:::tip␣` at the start of a line) wraps the current
  * block, matching the other shortcuts StarterKit provides.
  */

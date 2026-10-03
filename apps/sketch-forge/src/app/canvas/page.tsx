@@ -11,7 +11,7 @@ import {
   NotesDrawer,
   DocView,
   useNotesDrawerWidth,
-  useCanvasSync,
+  usePageSession,
   useCanvasPreferences,
   useCanvasEditorRuntime,
   useCanvasShortcutRegistry,
@@ -27,7 +27,9 @@ import {
   CanvasEditorProvider,
   useEditorSelector,
   useSketchEngine,
+  type ReadonlyElement,
 } from "@repo/canvas-engine";
+import type { PageViewMode } from "@repo/schema";
 import {
   Book,
   CheckCircle2,
@@ -58,6 +60,9 @@ import { useAppTheme } from "@/theme/ThemeProvider";
  *      `useCanvasEditorRuntime`.
  *
  *   4. Deriving lightweight UI state (doc mode, hasApiKey) for the top bar.
+ *
+ *   5. Opening the page through `usePageSession`, which loads it and owns
+ *      autosave. Edits from the editor and panels go to `session.edit`.
  */
 export default function CanvasPage() {
   return (
@@ -114,10 +119,20 @@ function CanvasContent() {
   const sceneCanvasRef = useRef<HTMLCanvasElement>(null);
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const triggerSaveRef = useRef<() => void>(() => {});
-  const onEngineChange = useCallback(() => {
-    triggerSaveRef.current();
-  }, []);
+  const {
+    session,
+    folderId,
+    title,
+    note,
+    viewMode,
+    saving: isSaving,
+    lastSavedAt,
+    scene,
+  } = usePageSession();
+  const onEngineChange = useCallback(
+    (elements: readonly ReadonlyElement[]) => session.edit({ elements }),
+    [session],
+  );
 
   const { editor } = useSketchEngine(
     sceneCanvasRef,
@@ -138,25 +153,22 @@ function CanvasContent() {
     (s) => s.recognitionApiKey,
   );
 
-  const {
-    folderId,
-    title,
-    setTitle,
-    note,
-    setNote,
-    viewMode,
-    setViewMode,
-    triggerSave,
-    isSaving,
-    isDirty,
-    saveNow,
-    lastSavedAt,
-    loadVersion,
-  } = useCanvasSync({ editor });
+  const setTitle = useCallback(
+    (nextTitle: string) => session.edit({ title: nextTitle }),
+    [session],
+  );
+  const setNote = useCallback(
+    (nextNote: string) => session.edit({ note: nextNote }),
+    [session],
+  );
+  const setViewMode = useCallback(
+    (nextMode: PageViewMode) => session.edit({ viewMode: nextMode }),
+    [session],
+  );
 
   useEffect(() => {
-    triggerSaveRef.current = triggerSave;
-  }, [triggerSave]);
+    if (scene.version > 0) editor.loadScene(scene.elements);
+  }, [editor, scene]);
 
   const appThemeSyncKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -188,6 +200,7 @@ function CanvasContent() {
   ]);
 
   const loadedThemeSyncKeyRef = useRef<string | null>(null);
+  const loadVersion = scene.version;
   useEffect(() => {
     if (!hasLoadedPrefs || loadVersion === 0) return;
     const syncKey = `${loadVersion}:${canvasMode}`;
@@ -197,20 +210,9 @@ function CanvasContent() {
       recordHistory: false,
     });
     if (changed) {
-      triggerSave();
+      session.edit({ elements: editor.getElements() });
     }
-  }, [editor, canvasMode, hasLoadedPrefs, loadVersion, triggerSave]);
-
-  useEffect(() => {
-    const flushPendingSave = () => {
-      if (document.visibilityState === "hidden" && isDirty) {
-        void saveNow();
-      }
-    };
-    document.addEventListener("visibilitychange", flushPendingSave);
-    return () =>
-      document.removeEventListener("visibilitychange", flushPendingSave);
-  }, [isDirty, saveNow]);
+  }, [editor, canvasMode, hasLoadedPrefs, loadVersion, session]);
 
   useEffect(() => {
     function closeInspector(event: KeyboardEvent) {
@@ -238,8 +240,9 @@ function CanvasContent() {
 
   async function handleBack() {
     const dest = folderId ? `/dashboard/folder/${folderId}` : "/dashboard";
-    if (isDirty) {
-      await saveNow(title.trim() || "Untitled");
+    if (!(await session.flush())) {
+      showToast("Couldn't save this page. Check your connection and try again.");
+      return;
     }
     router.push(dest);
   }
@@ -418,7 +421,7 @@ function CanvasContent() {
           <DocView
             title={title}
             onTitleChange={setTitle}
-            onTitleCommit={() => triggerSave()}
+            onTitleCommit={() => void session.flush()}
             note={note}
             onNoteChange={setNote}
             isSaving={isSaving}
@@ -479,7 +482,7 @@ function CanvasContent() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => triggerSave()}
+              onBlur={() => void session.flush()}
               className="min-w-0 flex-1 truncate rounded-md bg-transparent px-1.5 py-1 text-[13px] font-semibold text-text-body outline-none transition-colors placeholder:text-text-dim focus:bg-surface-hover focus:text-text-primary"
               placeholder="Untitled"
             />
