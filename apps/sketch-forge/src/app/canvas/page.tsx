@@ -127,8 +127,9 @@ function CanvasContent() {
     viewMode,
     saving: isSaving,
     lastSavedAt,
+    opening,
     scene,
-  } = usePageSession();
+  } = usePageSession(showToast);
   const onEngineChange = useCallback(
     (elements: readonly ReadonlyElement[]) => session.edit({ elements }),
     [session],
@@ -169,6 +170,16 @@ function CanvasContent() {
   useEffect(() => {
     if (scene.version > 0) editor.loadScene(scene.elements);
   }, [editor, scene]);
+
+  // The session drops edits while a page loads, so stop the editor's window
+  // shortcuts too. The shell is `inert` meanwhile, which blocks pointer input.
+  useEffect(() => {
+    if (!opening) return;
+    const block = (e: KeyboardEvent) => e.stopImmediatePropagation();
+    window.addEventListener("keydown", block, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", block, { capture: true });
+  }, [opening]);
 
   const appThemeSyncKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -241,7 +252,9 @@ function CanvasContent() {
   async function handleBack() {
     const dest = folderId ? `/dashboard/folder/${folderId}` : "/dashboard";
     if (!(await session.flush())) {
-      showToast("Couldn't save this page. Check your connection and try again.");
+      showToast(
+        "Couldn't save this page. Check your connection and try again.",
+      );
       return;
     }
     router.push(dest);
@@ -326,7 +339,8 @@ function CanvasContent() {
   return (
     <CanvasEditorProvider editor={editor}>
       <div
-        className="canvas-shell relative h-[100dvh] w-screen overflow-hidden"
+        className={`canvas-shell relative h-[100dvh] w-screen overflow-hidden ${opening ? "cursor-wait" : ""}`}
+        inert={opening}
         style={{
           ...getBackgroundStyle(
             background,

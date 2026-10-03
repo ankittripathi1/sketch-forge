@@ -1,20 +1,13 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReadonlyElement } from "@repo/canvas-engine";
 import { invalidateLibrary } from "@/api/hooks";
 import type { PageDetail } from "@/api/types";
 import { createPageSession, type PageSession } from "../session/pageSession";
 import { httpPageStore } from "../session/pageStore";
 import { createWorkerThumbnails } from "../session/thumbnails";
-
-/** A scene for the editor to load. `version` goes up on every load. */
-export type LoadedScene = {
-  version: number;
-  elements: readonly ReadonlyElement[];
-};
 
 // The MVP kept notes in localStorage; move a leftover local note into the
 // page on first load, then clear the local key.
@@ -32,8 +25,9 @@ function migrateLegacyNote(session: PageSession, page: PageDetail) {
  * in `?pageId=` (or creates one), keeps the URL and the library lists in step,
  * and saves when the tab hides or the page unmounts. Feed edits in with
  * `session.edit` and load `scene` into the editor when its version changes.
+ * Block editor input while `opening`. `onError` shows messages to the user.
  */
-export function usePageSession() {
+export function usePageSession(onError: (message: string) => void) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -53,10 +47,10 @@ export function usePageSession() {
     session.getState,
     session.getState,
   );
-  const [scene, setScene] = useState<LoadedScene>({
-    version: 0,
-    elements: [],
-  });
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     const pageId = searchParams.get("pageId");
@@ -64,32 +58,33 @@ export function usePageSession() {
     // page opens in the view its entry point implied.
     const viewMode = searchParams.get("mode") === "doc" ? "doc" : "canvas";
     const folderId = searchParams.get("folderId");
-    if (!pageId && session.getState().pageId) {
-      // Leaving a page for a new one: clear the editor now, so strokes drawn
-      // while the new page is created land on a blank scene.
-      setScene((prev) => ({ version: prev.version + 1, elements: [] }));
-    }
-    void session
-      .open({ pageId, folderId, viewMode })
-      .then((result) => {
-        // A later open already replaced this page.
-        if (!result || session.getState().pageId !== result.page.id) return;
-        if (result.created) {
-          void invalidateLibrary(queryClient);
-          const params = new URLSearchParams(searchParams);
-          params.set("pageId", result.page.id);
-          const nextFolderId = result.page.folderId ?? folderId;
-          if (nextFolderId) params.set("folderId", nextFolderId);
-          else params.delete("folderId");
-          router.replace(`${pathname}?${params.toString()}`);
-          return;
-        }
-        setScene((prev) => ({
-          version: prev.version + 1,
-          elements: result.page.elements ?? [],
-        }));
-        migrateLegacyNote(session, result.page);
-      });
+    // Points the URL at the page the session has open.
+    const replaceUrl = (nextPageId: string, nextFolderId: string | null) => {
+      const params = new URLSearchParams(searchParams);
+      params.set("pageId", nextPageId);
+      if (nextFolderId) params.set("folderId", nextFolderId);
+      else params.delete("folderId");
+      router.replace(`${pathname}?${params.toString()}`);
+    };
+    void session.open({ pageId, folderId, viewMode }).then((result) => {
+      if (!result) return;
+      if (result.status === "kept") {
+        const current = session.getState();
+        if (current.pageId) replaceUrl(current.pageId, current.folderId);
+        onErrorRef.current(
+          "Couldn't save this page, so it stayed open. Check your connection and try again.",
+        );
+        return;
+      }
+      // A later open already replaced this page.
+      if (session.getState().pageId !== result.page.id) return;
+      if (result.status === "created") {
+        void invalidateLibrary(queryClient);
+        replaceUrl(result.page.id, result.page.folderId ?? folderId);
+        return;
+      }
+      migrateLegacyNote(session, result.page);
+    });
   }, [pathname, queryClient, router, searchParams, session]);
 
   useEffect(() => {
@@ -115,5 +110,5 @@ export function usePageSession() {
     };
   }, [session, thumbnails]);
 
-  return { session, ...state, scene };
+  return { session, ...state };
 }

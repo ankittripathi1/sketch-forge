@@ -204,7 +204,8 @@ describe("createPageSession", () => {
       folderId: null,
       viewMode: "canvas",
     });
-    const firstId = created!.page.id;
+    if (created?.status !== "created") throw new Error("not created");
+    const firstId = created.page.id;
     const other = await memory.store.create({
       title: "Other",
       note: "",
@@ -221,13 +222,149 @@ describe("createPageSession", () => {
     });
 
     expect(memory.pages.get(firstId)?.title).toBe("Unsaved");
-    expect(opened?.page.id).toBe(other.id);
+    expect(opened).toMatchObject({ status: "loaded", page: { id: other.id } });
     expect(session.getState()).toMatchObject({
       pageId: other.id,
       title: "Other",
       viewMode: "doc",
       dirty: false,
     });
+  });
+
+  test("a failed save keeps the current page open", async () => {
+    const { memory, session } = setup();
+    await session.open({ pageId: null, folderId: null, viewMode: "canvas" });
+    const other = await memory.store.create({
+      title: "Other",
+      note: "",
+      viewMode: "canvas",
+      elements: [],
+      folderId: null,
+    });
+    const before = session.getState();
+
+    memory.failNext(3);
+    session.edit({ elements: [element("a")] });
+    const opened = await session.open({
+      pageId: other.id,
+      folderId: null,
+      viewMode: "canvas",
+    });
+
+    expect(opened).toEqual({ status: "kept" });
+    expect(session.getState()).toMatchObject({
+      pageId: before.pageId,
+      dirty: true,
+      failed: true,
+      scene: before.scene,
+    });
+    expect(await session.flush()).toBe(true);
+    expect(
+      memory.pages.get(before.pageId!)?.elements?.map((e) => e.id),
+    ).toEqual(["a"]);
+  });
+
+  test("edits made while the old page saves go to the old page", async () => {
+    const { memory, session } = setup();
+    await session.open({ pageId: null, folderId: null, viewMode: "canvas" });
+    const firstId = session.getState().pageId!;
+    const other = await memory.store.create({
+      title: "Other",
+      note: "",
+      viewMode: "canvas",
+      elements: [],
+      folderId: null,
+    });
+
+    memory.hold();
+    session.edit({ title: "one" });
+    const opened = session.open({
+      pageId: other.id,
+      folderId: null,
+      viewMode: "canvas",
+    });
+    await waitFor(memory.holding);
+    session.edit({ title: "two" });
+    memory.release();
+
+    expect(await opened).toMatchObject({ status: "loaded" });
+    expect(memory.pages.get(firstId)?.title).toBe("two");
+  });
+
+  test("an edit made while the page is created is saved after", async () => {
+    const memory = memoryStore();
+    const create = memory.store.create;
+    const { session } = setup({
+      ...memory,
+      store: {
+        ...memory.store,
+        async create(save) {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          return create(save);
+        },
+      },
+    });
+
+    const opening = session.open({
+      pageId: null,
+      folderId: null,
+      viewMode: "canvas",
+    });
+    // Edit after create starts, and let the debounce fire before it ends.
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    session.edit({ title: "Early" });
+    await opening;
+
+    await waitFor(() => !session.getState().dirty);
+    expect(memory.updates.at(-1)?.title).toBe("Early");
+  });
+
+  test("a later flush adds thumbnails a hidden-tab save skipped", async () => {
+    const memory = memoryStore();
+    let renders = 0;
+    const session = createPageSession({
+      store: memory.store,
+      renderThumbnails: async () => {
+        renders++;
+        return { light: "light.png", dark: "dark.png" };
+      },
+    });
+    await session.open({ pageId: null, folderId: null, viewMode: "canvas" });
+
+    session.edit({ elements: [element("a")] });
+    expect(await session.flush({ skipThumbnails: true })).toBe(true);
+    expect(await session.flush()).toBe(true);
+    expect(renders).toBe(1);
+    expect(memory.updates.at(-1)?.thumbnailLight).toBe("light.png");
+
+    expect(await session.flush()).toBe(true);
+    expect(renders).toBe(1);
+  });
+
+  test("thumbnails go out with the elements they were drawn from", async () => {
+    const memory = memoryStore();
+    let drawn: string[] = [];
+    let finishRender: (() => void) | null = null;
+    const session = createPageSession({
+      store: memory.store,
+      renderThumbnails: async (elements) => {
+        drawn = elements.map((e) => e.id);
+        await new Promise<void>((resolve) => (finishRender = resolve));
+        return { light: drawn.join(","), dark: null };
+      },
+    });
+    await session.open({ pageId: null, folderId: null, viewMode: "canvas" });
+
+    session.edit({ elements: [element("a")] });
+    const first = session.flush();
+    await waitFor(() => finishRender !== null);
+    session.edit({ elements: [element("a"), element("b")] });
+    finishRender!();
+
+    expect(await first).toBe(false);
+    expect(session.getState().dirty).toBe(true);
+    expect(memory.updates.at(-1)).toMatchObject({ thumbnailLight: "a" });
+    expect(memory.updates.at(-1)?.elements.map((e) => e.id)).toEqual(["a"]);
   });
 
   test("a repeated open while creating makes one page", async () => {
